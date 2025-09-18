@@ -6,10 +6,45 @@
   SendInput( 'Henk vanBruggen' )
 }
 
-^+.::BulletCharacter()
+
+; ^ is Ctrl key
+; + is Shift key
+; # is Windows key
+; ! is Alt key
+
+^#+.::BulletCharacter()
 BulletCharacter()
 {
   SendInput( '•' )
+}
+
+^#`::AlmostEqualCharacter()
+AlmostEqualCharacter()
+{
+  SendInput( '≈' )
+}
+
+^#,::DoubleArrowLeftCharacter()
+DoubleArrowLeftCharacter()
+{
+  SendInput( '⇐' )
+}
+^#.::DoubleArrowRightCharacter()
+DoubleArrowRightCharacter()
+{
+  SendInput( '⇒' )
+}
+
+^+,::DoubleLongArrowLeftCharacter()
+DoubleLongArrowLeftCharacter()
+{
+  SendInput( '⟸' )
+}
+
+^+.::DoubleLongArrowRightCharacter()
+DoubleLongArrowRightCharacter()
+{
+  SendInput( '⟹' )
 }
 
 !+1::AppData()
