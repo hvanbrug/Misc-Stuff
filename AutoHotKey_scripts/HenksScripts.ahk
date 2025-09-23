@@ -7,10 +7,10 @@
 }
 
 
-; ^ is Ctrl key
-; + is Shift key
-; # is Windows key
-; ! is Alt key
+; ^ = Ctrl key
+; + = Shift key
+; # = Windows key
+; ! = Alt key
 
 ^#+.::BulletCharacter()
 BulletCharacter()
