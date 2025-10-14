@@ -112,7 +112,7 @@ EXIT /b
 :RemoveLocalPC
 SETLOCAL
 IF "%SpecificDrive%" == "" (
-  ECHO *** Adding Local NPC
+  ECHO *** Removing Local PC
 )
 CALL :DisconnectShare P:
 CALL :DisconnectShare Q:
@@ -124,14 +124,35 @@ EXIT /b
 
 :Start
 
+SET MAC=mac
+SET PC=pc
+SET LGS=lgs
+
+SET SpecificGroup="0"
 SET SpecificDrive=%~2
 IF NOT "%SpecificDrive%" == "" (
+  IF "%SpecificDrive%" == "%MAC%" (
+    SET SpecificGroup=%SpecificDrive%
+    SET SpecificDrive=""
+    GOTO :SkipSpecificDrive
+  )
+  IF "%SpecificDrive%" == "%PC%" (
+    SET SpecificGroup=%SpecificDrive%
+    SET SpecificDrive=
+    GOTO :SkipSpecificDrive
+  )
+  IF "%SpecificDrive%" == "%LGS%" (
+    SET SpecificGroup=%SpecificDrive%
+    SET SpecificDrive=""
+    GOTO :SkipSpecificDrive
+  )
   SET LastChar=%SpecificDrive:~-1%
   IF NOT "%LastChar%" == ":" (
     SET SpecificDrive=%SpecificDrive%:
   )
   ECHO Addressing drive %SpecificDrive% only.
 )
+:SkipSpecificDrive
 
 :: Main logic
 IF /i "%~1"=="up"   GOTO :connect
@@ -141,15 +162,50 @@ ECHO Usage: NetworkShares.cmd up   <drive letter> # to connect
 ECHO.       NetworkShares.cmd down <drive letter> # to disconnect
 GOTO :exit
 
-
 :connect
+echo "connect 1"
+IF NOT "%SpecificGroup%" == "0" (
+  echo "connect 2"
+  IF "%SpecificGroup%" == "%MAC%%" (
+    CALL :AddLocalNAS  192.168.1.30 WORKGROUP\hvanbrug
+    GOTO :exit
+  )
+  IF "%SpecificGroup%" == "%PC%" (
+    echo "connect 3"
+    CALL :AddLocalPC   GEO-WMXL1404988 LGS-Net\VHE
+    GOTO :exit
+  )
+  IF "%SpecificGroup%" == "%LGS%" (
+    CALL :AddLGSShares LGS-Net\VHE
+    GOTO :exit
+  )
+  GOTO :exit
+)
+echo "connect 4"
 CALL :AddLGSShares LGS-Net\VHE
-: CALL :AddLocalNAS  Mac-Pro.local WORKGROUP\hvanbrug
 CALL :AddLocalNAS  192.168.1.30 WORKGROUP\hvanbrug
 CALL :AddLocalPC   GEO-WMXL1404988 LGS-Net\VHE
 GOTO :exit
 
 :disconnect
+echo "disconnect 1"
+IF NOT "%SpecificGroup%" == "0" (
+  echo "disconnect 2 '%SpecificGroup%' == '%PC%'"
+  IF "%SpecificGroup%" == "%MAC%" (
+    CALL :RemoveLocalNAS
+    GOTO :exit
+  )
+  IF "%SpecificGroup%" == "%PC%" (
+    echo "disconnect 3"
+    CALL :RemoveLocalPC
+    GOTO :exit
+  )
+  IF "%SpecificGroup%" == "%LGS%" (
+    CALL :RemoveLGSShares
+    GOTO :exit
+  )
+  GOTO :exit
+)
 CALL :RemoveLGSShares
 CALL :RemoveLocalNAS
 CALL :RemoveLocalPC
