@@ -58,6 +58,8 @@ EXIT /b
 SETLOCAL
 IF "%SpecificDrive%" == "" (
   ECHO *** Adding LGS Shares
+) ELSE (
+  ECHO *** Adding %SpecificDrive%
 )
 CALL :ConnectShare H: \\lgs-net.com\AKEL\AkelData %1
 CALL :ConnectShare X: \\AKELNASFIS01\Share        %1
@@ -68,6 +70,8 @@ EXIT /b
 SETLOCAL
 IF "%SpecificDrive%" == "" (
   ECHO *** Removing LGS Shares
+) ELSE (
+  ECHO *** Removing %SpecificDrive%
 )
 CALL :DisconnectShare H:
 CALL :DisconnectShare X:
@@ -79,6 +83,8 @@ EXIT /b
 SETLOCAL
 IF "%SpecificDrive%" == "" (
   ECHO *** Adding Local NAS
+) ELSE (
+  ECHO *** Adding %SpecificDrive%
 )
 CALL :ConnectShare I: \\%1\NASData %2 %3
 CALL :ConnectShare J: \\%1\Fred    %2 %3
@@ -90,6 +96,8 @@ EXIT /b
 SETLOCAL
 IF "%SpecificDrive%" == "" (
   ECHO *** Removing Local NAS
+) ELSE (
+  ECHO *** Removing %SpecificDrive%
 )
 CALL :DisconnectShare I:
 CALL :DisconnectShare J:
@@ -102,6 +110,8 @@ EXIT /b
 SETLOCAL
 IF "%SpecificDrive%" == "" (
   ECHO *** Adding Local PC
+) ELSE (
+  ECHO *** Adding %SpecificDrive%
 )
 CALL :ConnectShare P: \\%1\c$ %2 %3
 CALL :ConnectShare Q: \\%1\d$ %2 %3
@@ -113,6 +123,8 @@ EXIT /b
 SETLOCAL
 IF "%SpecificDrive%" == "" (
   ECHO *** Removing Local PC
+) ELSE (
+  ECHO *** Removing %SpecificDrive%
 )
 CALL :DisconnectShare P:
 CALL :DisconnectShare Q:
@@ -124,16 +136,17 @@ EXIT /b
 
 :Start
 
-SET MAC=mac
+SET NAS=nas
 SET PC=pc
 SET LGS=lgs
 
-SET SpecificGroup="0"
+SET SpecificGroup=
 SET SpecificDrive=%~2
+
 IF NOT "%SpecificDrive%" == "" (
-  IF "%SpecificDrive%" == "%MAC%" (
+  IF "%SpecificDrive%" == "%NAS%" (
     SET SpecificGroup=%SpecificDrive%
-    SET SpecificDrive=""
+    SET SpecificDrive=
     GOTO :SkipSpecificDrive
   )
   IF "%SpecificDrive%" == "%PC%" (
@@ -143,7 +156,7 @@ IF NOT "%SpecificDrive%" == "" (
   )
   IF "%SpecificDrive%" == "%LGS%" (
     SET SpecificGroup=%SpecificDrive%
-    SET SpecificDrive=""
+    SET SpecificDrive=
     GOTO :SkipSpecificDrive
   )
   SET LastChar=%SpecificDrive:~-1%
@@ -153,6 +166,8 @@ IF NOT "%SpecificDrive%" == "" (
   ECHO Addressing drive %SpecificDrive% only.
 )
 :SkipSpecificDrive
+ECHO SpecificGroup = %SpecificGroup%
+ECHO SpecificDrive = %SpecificDrive%
 
 :: Main logic
 IF /i "%~1"=="up"   GOTO :connect
@@ -163,49 +178,53 @@ ECHO.       NetworkShares.cmd down <drive letter> # to disconnect
 GOTO :exit
 
 :connect
-echo "connect 1"
-IF NOT "%SpecificGroup%" == "0" (
-  echo "connect 2"
-  IF "%SpecificGroup%" == "%MAC%%" (
+IF NOT "%SpecificGroup%" == "" (
+  ECHO "Connecting up '%SpecificGroup%'"
+  IF "%SpecificGroup%" == "%NAS%" (
+    ECHO "Dispatching up '%SpecificGroup%'"
     CALL :AddLocalNAS  192.168.1.30 WORKGROUP\hvanbrug
     GOTO :exit
   )
   IF "%SpecificGroup%" == "%PC%" (
-    echo "connect 3"
+    ECHO "Dispatching up '%SpecificGroup%'"
     CALL :AddLocalPC   GEO-WMXL1404988 LGS-Net\VHE
     GOTO :exit
   )
   IF "%SpecificGroup%" == "%LGS%" (
+    ECHO "Dispatching up '%SpecificGroup%'"
     CALL :AddLGSShares LGS-Net\VHE
     GOTO :exit
   )
   GOTO :exit
 )
-echo "connect 4"
+ECHO "Connecting everything!"
 CALL :AddLGSShares LGS-Net\VHE
 CALL :AddLocalNAS  192.168.1.30 WORKGROUP\hvanbrug
 CALL :AddLocalPC   GEO-WMXL1404988 LGS-Net\VHE
 GOTO :exit
 
 :disconnect
-echo "disconnect 1"
-IF NOT "%SpecificGroup%" == "0" (
-  echo "disconnect 2 '%SpecificGroup%' == '%PC%'"
-  IF "%SpecificGroup%" == "%MAC%" (
+IF NOT "%SpecificGroup%" == "" (
+  ECHO "Disconnecting '%SpecificGroup%'"
+  IF "%SpecificGroup%" == "%NAS%" (
+    ECHO "Dispatching down '%SpecificGroup%'"
     CALL :RemoveLocalNAS
     GOTO :exit
   )
   IF "%SpecificGroup%" == "%PC%" (
-    echo "disconnect 3"
+    ECHO "Dispatching down '%SpecificGroup%'"
     CALL :RemoveLocalPC
     GOTO :exit
   )
   IF "%SpecificGroup%" == "%LGS%" (
+    ECHO "Dispatching down '%SpecificGroup%'"
     CALL :RemoveLGSShares
     GOTO :exit
   )
   GOTO :exit
 )
+
+ECHO "Disconnecting everything!"
 CALL :RemoveLGSShares
 CALL :RemoveLocalNAS
 CALL :RemoveLocalPC
