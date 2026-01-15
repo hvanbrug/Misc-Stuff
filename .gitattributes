@@ -1,0 +1,33 @@
+# Executables
+*.exe filter=lfs diff=lfs merge=lfs -text
+*.dll filter=lfs diff=lfs merge=lfs -text
+*.irx filter=lfs diff=lfs merge=lfs -text
+*.lib filter=lfs diff=lfs merge=lfs -text
+*.jar filter=lfs diff=lfs merge=lfs -text
+*.exp filter=lfs diff=lfs merge=lfs -text
+
+# Images
+*.bmp  filter=lfs diff=lfs merge=lfs -text
+*.jpg  filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.png  filter=lfs diff=lfs merge=lfs -text
+*.tif  filter=lfs diff=lfs merge=lfs -text
+*.tiff filter=lfs diff=lfs merge=lfs -text
+*.ico  filter=lfs diff=lfs merge=lfs -text
+*.xcf  filter=lfs diff=lfs merge=lfs -text
+
+# Database Files
+*.db         filter=lfs diff=lfs merge=lfs -text
+*.sqlite     filter=lfs diff=lfs merge=lfs -text
+*.sqlite-shm filter=lfs diff=lfs merge=lfs -text
+*.sqlite-wal filter=lfs diff=lfs merge=lfs -text
+
+# Misc Binary Files
+*.chm  filter=lfs diff=lfs merge=lfs -text
+*.bin  filter=lfs diff=lfs merge=lfs -text
+*.cuix filter=lfs diff=lfs merge=lfs -text
+*.bos  filter=lfs diff=lfs merge=lfs -text
+
+# Lingobit Translation Projects
+*.loc    filter=lfs diff=lfs merge=lfs -text
+*.loc_tm filter=lfs diff=lfs merge=lfs -text
