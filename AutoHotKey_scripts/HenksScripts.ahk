@@ -79,19 +79,11 @@ PromptBasicTemplate()
              "SETTING:`n`n" )
 }
 
-^+!3::PromptBasicTemplateShift()
-PromptBasicTemplateShift()
-{
-  SendInput( "[S.T.Y.L.E]+`n+`n+`n"
-             "[S.U.B.J.E.C.T]+`n+`n+`n"
-             "[S.E.T.T.I.N.G]+`n+`n" )
-}
-
-^+4::KontextEditCloser()
-KontextEditCloser()
+^+4::EditPromptCloser()
+EditPromptCloser()
 {
   SendInput( "Keep all other aspects of the original image "
-             "exactly the same. Make no other changes." )
+             "unchanged. Make no additional changes." )
 }
 
 ^+5::NegativePromptShort()
@@ -174,10 +166,64 @@ PonyPrompModifier()
              "score_5_up, score_4_up, score_3_up, score_2_up, score_1_up," )
 }
 
+;^+8::Unused()
+;Unused()
+;{
+;  SendInput( "<unused>" )
+;}
+
+;^+9::Unused()
+;Unused()
+;{
+;  SendInput( "<unused>" )
+;}
+
 ^+0::CreationPrefix()
 CreationPrefix()
 {
   SendInput( "https://creator.nightcafe.studio/creation/" )
+}
+
+#!1::Thanks()
+Thanks()
+{
+  SendInput( 'Thanks. 😊' )
+}
+
+#!2::ThankYou()
+ThankYou()
+{
+  SendInput( 'Thank you. 😊' )
+}
+
+#!3::ThankYouVeryMuch()
+ThankYouVeryMuch()
+{
+  SendInput( 'Thank you very much. 🤗' )
+}
+
+#!4::ThankYouSoMuch()
+ThankYouSoMuch()
+{
+  SendInput( 'Thank you so much. 🤗' )
+}
+
+#!5::ThanksIAppreciateIt()
+ThanksIAppreciateIt()
+{
+  SendInput( 'Thanks. I appreciate it. 😁' )
+}
+
+#!6::ThanksImGladYouLikeIt()
+ThanksImGladYouLikeIt()
+{
+  SendInput( "Thanks. I'm glad you like it. 😁" )
+}
+
+#!7::ThanksForTheTip()
+ThanksForTheTip()
+{
+  SendInput( "Thanks for the tip. 🥰" )
 }
 
 ^+s::SREFtoFullPrompt()
