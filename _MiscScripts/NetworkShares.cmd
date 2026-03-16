@@ -62,6 +62,11 @@ IF "%SpecificDrive%" == "" (
   ECHO *** Adding %SpecificDrive%
 )
 CALL :ConnectShare H: \\lgs-net.com\AKEL\AkelData %1
+CALL :ConnectShare M: \\AKELDSKMSIBLD03\c$        %1
+CALL :ConnectShare N: \\AKELDSKMSIBLD03\d$        %1
+CALL :ConnectShare O: \\AKELDSKMSIBLD03\e$        %1
+CALL :ConnectShare T: \\AKELDSKMSIBLD01\c$        %1
+CALL :ConnectShare U: \\AKELDSKMSIBLD02\c$        %1
 CALL :ConnectShare X: \\AKELNASFIS01\Share        %1
 ENDLOCAL
 EXIT /b
