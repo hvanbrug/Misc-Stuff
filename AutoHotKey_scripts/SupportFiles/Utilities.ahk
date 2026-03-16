@@ -5,18 +5,37 @@
 g_HelpActions := []
 g_Symbols     := []
 
+; Global map for tab names
+if !IsSet( g_TabNames )
+{
+  global g_TabNames := Map()
+}
+
 RegisterAction( displayHotkey, desc, action )
 {
   global g_HelpActions
   g_HelpActions.Push( { hotkey: displayHotkey, desc: desc, action: action } )
 }
 
-RegisterSymbol( char, desc, displayHotkey, action, row, col, tab := 1 )
+RegisterSymbol( row, col, tab,
+                char, desc, displayHotkey,
+                action := "" )
 {
   global g_Symbols
-  g_Symbols.Push( { char: char, desc: desc, hotkey: displayHotkey, action: action, row: row, col: col, tab: tab } )
+  g_Symbols.Push( { char: char, desc: desc, hotkey: displayHotkey,
+                    action: (action != "") ? action : () => DoSendText( char ),
+                    row: row, col: col, tab: tab } )
 }
 
+SetTabName( tabIndex, tabName )
+{
+  global g_TabNames
+  if !IsSet( g_TabNames )
+  {
+    g_TabNames := Map()
+  }
+  g_TabNames[tabIndex] := tabName
+}
 
 DoSendText( msg )
 {

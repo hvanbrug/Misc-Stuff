@@ -2,97 +2,138 @@
 ; Ctrl + Shift + / => Show Help Menu with all available hotkeys
 ; ═══════════════════════════════════════════════════════════════
 ^+/::ShowHelpMenu()
-
-; ── Globals for the Help Menu ──
-g_HelpGui        := ""
-g_TipMap         := Map()
-g_LV             := ""
-g_HeaderHotkey   := ""
-g_HeaderDesc     := ""
-
 ShowHelpMenu()
 {
-  global g_HelpGui, g_HelpActions, g_TipMap, g_Symbols, g_LV, g_HeaderHotkey, g_HeaderDesc
+  global g_HelpGui,
+         g_HelpActions,
+         g_TipMap,
+         g_Symbols,
+         g_LV,
+         g_HeaderHotkey,
+         g_HeaderDesc,
+         g_HeaderBg,
+         g_Tabs
+  global g_WINDOW_TITLE,
+         g_FONT_SIZE,
+         g_FONT_SYMBOL_SIZE,
+         g_FONT_NAME,
+         g_COL_HOTKEY_WIDTH,
+         g_COL_DESC_WIDTH,
+         g_RESIZE_H_MARGIN,
+         g_LV_WIDTH,
+         g_LV_ROW_COUNT,
+         g_HEADER_BG_COLOR,
+         g_HEADER_TEXT_COLOR,
+         g_HEADER_HEIGHT,
+         g_SYMBOL_BTN_SIZE_X,
+         g_SYMBOL_BTN_SIZE_Y,
+         g_SYMBOL_BTN_GAP,
+         g_SYMBOL_X_ORIGIN,
+         g_SYMBOL_Y_ORIGIN
 
-  WINDOW_TITLE      := "HenksScripts - Hotkey Reference"
-  FONT_SIZE         := "s10"
-  FONT_SYMBOL_SIZE  := "s14" ; "s18"
-  FONT_NAME         := "Segoe UI"
-  COL_HOTKEY_WIDTH  := 150
-  COL_DESC_WIDTH    := 260
-  RESIZE_H_MARGIN   := 20
-  LV_WIDTH          := COL_HOTKEY_WIDTH + COL_DESC_WIDTH + RESIZE_H_MARGIN
-  LV_ROW_COUNT      := 12
-  HEADER_BG_COLOR   := "4B3621"
-  HEADER_TEXT_COLOR := "FFFFFF"
-  HEADER_HEIGHT     := 24
-  SYMBOL_BTN_SIZE_X := 35
-  SYMBOL_BTN_SIZE_Y := 35
-
-  if WinExist( WINDOW_TITLE )
+  if WinExist( g_WINDOW_TITLE )
   {
     WinActivate
     return
   }
 
   ; ── Create GUI ──
-  g_HelpGui := Gui( "+AlwaysOnTop +Resize", WINDOW_TITLE )
+  g_HelpGui := Gui( "+AlwaysOnTop +Resize", g_WINDOW_TITLE )
 
-  ; ── Symbol Buttons (positioned by row/col from RegisterSymbol data) ──
-  ; Tab stub: when tabs are added, uncomment and use sym.tab to assign buttons to tabs
-  ; tabs := g_HelpGui.Add( "Tab3", "w" LV_WIDTH " h" (MAX_ROWS * (SYMBOL_BTN_SIZE + SYMBOL_BTN_GAP) + 40), ["Symbols"] )
-  ; tabs.UseTab( sym.tab )
-  ; ... after all buttons: tabs.UseTab( 0 )
+  ; ── Determine tab names from registered symbols ──
+  tabNames := Map()
+  global g_TabNames
+  for i, sym in g_Symbols
+  {
+    if !tabNames.Has( sym.tab )
+    {
+      tabNames[sym.tab] := g_TabNames.Has( sym.tab ) ? g_TabNames[sym.tab] : "Symbols " sym.tab
+    }
+  }
+  ; Build ordered tab name array; last tab is always "Hotkeys"
+  tabList  := []
+  tabIndex := 1
+  while tabNames.Has( tabIndex )
+  {
+    tabList.Push( tabNames[tabIndex] )
+    tabIndex++
+  }
+  HOTKEYS_TAB := tabList.Length + 1
+  tabList.Push( "Hotkey Help" )
 
-  g_TipMap := Map()
-  SYMBOL_BTN_GAP  := 3
-  SYMBOL_X_ORIGIN := 10
-  SYMBOL_Y_ORIGIN := 10
-  g_HelpGui.SetFont( FONT_SYMBOL_SIZE, FONT_NAME )
-
+  ; ── Create Tab control ──
+  ; Calculate tab height from max symbol rows
   maxRow := 1
   for i, sym in g_Symbols
   {
-    x := SYMBOL_X_ORIGIN + (sym.col - 1) * (SYMBOL_BTN_SIZE_X + SYMBOL_BTN_GAP)
-    y := SYMBOL_Y_ORIGIN + (sym.row - 1) * (SYMBOL_BTN_SIZE_Y + SYMBOL_BTN_GAP)
-    tip := sym.desc "`n" sym.hotkey
-    btn := g_HelpGui.Add( "Button", "x" x " y" y " w" SYMBOL_BTN_SIZE_X " h" SYMBOL_BTN_SIZE_Y, sym.char )
-    g_TipMap[btn.Hwnd] := tip
-    btn.OnEvent( "Click", HelpMenu_SymbolClick.Bind( sym.action ) )
     if sym.row > maxRow
     {
       maxRow := sym.row
     }
   }
-  g_HelpGui.SetFont( FONT_SIZE " norm", FONT_NAME )
+  TAB_CONTENT_HEIGHT := maxRow * (g_SYMBOL_BTN_SIZE_Y + g_SYMBOL_BTN_GAP) + g_SYMBOL_BTN_GAP + 10
+  ; Use the larger of symbol area or hotkey list area
+  LV_AREA_HEIGHT := g_HEADER_HEIGHT + (g_LV_ROW_COUNT * 20) + 10
+  if LV_AREA_HEIGHT > TAB_CONTENT_HEIGHT
+    TAB_CONTENT_HEIGHT := LV_AREA_HEIGHT
 
-  symbolsBottomY := SYMBOL_Y_ORIGIN + maxRow * (SYMBOL_BTN_SIZE_Y + SYMBOL_BTN_GAP)
+  g_Tabs := g_HelpGui.Add( "Tab3", "x5 y5 w" (g_LV_WIDTH + 10) " h" (TAB_CONTENT_HEIGHT + 30), tabList )
+
+  ; ── Symbol Buttons (on their respective tab) ──
+  g_TipMap := Map()
+  SYMBOL_X_ORIGIN := g_SYMBOL_X_ORIGIN
+  SYMBOL_Y_ORIGIN := g_SYMBOL_Y_ORIGIN
+
+  g_HelpGui.SetFont( g_FONT_SYMBOL_SIZE, g_FONT_NAME )
+
+  for i, sym in g_Symbols
+  {
+    g_Tabs.UseTab( sym.tab )
+    x := SYMBOL_X_ORIGIN + (sym.col - 1) * (g_SYMBOL_BTN_SIZE_X + g_SYMBOL_BTN_GAP)
+    y := SYMBOL_Y_ORIGIN + (sym.row - 1) * (g_SYMBOL_BTN_SIZE_Y + g_SYMBOL_BTN_GAP)
+    tip := (sym.hotkey == "") ? sym.desc : (sym.desc "`n" sym.hotkey)
+    btn := g_HelpGui.Add( "Button", "x" x " y" y " w" g_SYMBOL_BTN_SIZE_X " h" g_SYMBOL_BTN_SIZE_Y, sym.char )
+    btn.SetFont( g_FONT_SYMBOL_SIZE, g_FONT_EMOJI_NAME )
+    g_TipMap[btn.Hwnd] := tip
+    btn.OnEvent( "Click", HelpMenu_SymbolClick.Bind( sym.action ) )
+  }
+  g_HelpGui.SetFont( g_FONT_SIZE " norm", g_FONT_NAME )
 
   SetTimer( HelpMenu_HoverCheck, 100 )
 
-  ; ── Hotkey List ──
-  g_HelpGui.SetFont( FONT_SIZE " bold", FONT_NAME )
+  ; ── Hotkey List (on last tab) ──
+  ;g_Tabs.UseTab( "Hotkeys" )
+  g_Tabs.UseTab( tabList[HOTKEYS_TAB] )
 
+  ; Colored header bar using a Progress control as background
+  HEADER_FULL_WIDTH := g_COL_HOTKEY_WIDTH + g_COL_DESC_WIDTH + g_RESIZE_H_MARGIN
+  g_HeaderBg := g_HelpGui.Add( "Progress", "x15 y35 w" HEADER_FULL_WIDTH " h" g_HEADER_HEIGHT
+               " Background" g_HEADER_BG_COLOR " c" g_HEADER_BG_COLOR, 100 )
+
+  g_HelpGui.SetFont( g_FONT_SIZE " bold", g_FONT_NAME )
   g_HeaderHotkey := g_HelpGui.Add( "Text",
-               "x10 y" symbolsBottomY " w" COL_HOTKEY_WIDTH " h" HEADER_HEIGHT
-               " Background" HEADER_BG_COLOR " c" HEADER_TEXT_COLOR " 0x200 vHeaderHotkey",
+               "x15 y35 w" g_COL_HOTKEY_WIDTH " h" g_HEADER_HEIGHT
+               " BackgroundTrans c" g_HEADER_TEXT_COLOR " +0x200",
                "  Hotkey" )
   g_HeaderDesc := g_HelpGui.Add( "Text",
-               "x+0 yp w" (COL_DESC_WIDTH + RESIZE_H_MARGIN) " h" HEADER_HEIGHT
-               " Background" HEADER_BG_COLOR " c" HEADER_TEXT_COLOR " 0x200 vHeaderDesc",
+               "x+0 yp w" (g_COL_DESC_WIDTH + g_RESIZE_H_MARGIN) " h" g_HEADER_HEIGHT
+               " BackgroundTrans c" g_HEADER_TEXT_COLOR " +0x200",
                "  Description" )
-  g_HelpGui.SetFont( FONT_SIZE " norm", FONT_NAME )
+  g_HelpGui.SetFont( g_FONT_SIZE " norm", g_FONT_NAME )
 
   g_LV := g_HelpGui.Add( "ListView",
-                     "x10 y+0 r" LV_ROW_COUNT " w" LV_WIDTH " Grid -Hdr",
+                     "x15 y+0 r" g_LV_ROW_COUNT " w" g_LV_WIDTH " Grid -Hdr",
                      ["Hotkey", "Description"] )
-  g_LV.ModifyCol( 1, COL_HOTKEY_WIDTH )
-  g_LV.ModifyCol( 2, COL_DESC_WIDTH )
+  g_LV.ModifyCol( 1, g_COL_HOTKEY_WIDTH )
+  g_LV.ModifyCol( 2, g_COL_DESC_WIDTH )
 
   for item in g_HelpActions
   {
     g_LV.Add( , item.hotkey, item.desc )
   }
+
+  ; ── Done with tabbed controls ──
+  g_Tabs.UseTab( 0 )
 
   g_LV.OnEvent( "DoubleClick", HelpMenu_RowAction )
   g_HelpGui.OnEvent( "Escape", (*) => HelpMenu_Close() )
@@ -116,22 +157,24 @@ HelpMenu_Close()
 
 HelpMenu_OnResize( thisGui, minMax, w, h )
 {
-  global g_LV, g_HeaderHotkey, g_HeaderDesc
+  global g_LV, g_HeaderHotkey, g_HeaderDesc, g_HeaderBg, g_Tabs
   if minMax = -1  ; minimized
   {
     return
   }
-  MARGIN := 10
-  lvWidth := w - MARGIN * 2
-  ; Get the current Y position of the ListView so we know the fixed offset
+  MARGIN := 5
+  ; Resize the tab control to fill the window
+  g_Tabs.Move( , , w - MARGIN * 2, h - MARGIN * 2 )
+  ; Resize the ListView within the Hotkeys tab
+  lvWidth := w - MARGIN * 2 - 20
   g_LV.GetPos( , &lvY )
-  lvHeight := h - lvY - MARGIN
+  lvHeight := h - lvY - MARGIN - 10
   if lvHeight < 50
   {
     lvHeight := 50
   }
   g_LV.Move( , , lvWidth, lvHeight )
-  ; Resize headers to match — split proportionally
+  ; Resize description header to match
   g_HeaderHotkey.GetPos( , , &hkW )
   descWidth := lvWidth - hkW
   if descWidth < 50
@@ -139,6 +182,9 @@ HelpMenu_OnResize( thisGui, minMax, w, h )
     descWidth := 50
   }
   g_HeaderDesc.Move( , , descWidth )
+  g_HeaderBg.Move( , , lvWidth )
+  ; Resize the Description column to fill remaining width
+  g_LV.ModifyCol( 2, descWidth )
 }
 
 HelpMenu_HoverCheck()

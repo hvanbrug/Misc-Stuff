@@ -7,186 +7,42 @@
 ; ! = Alt key
 
 ; Ctrl + Wnd + Shift + . => Bullet character
-RegisterSymbol( "•", "Bullet", "Ctrl+Win+Shift+Period", BulletCharacter, 1, 4 )
-^#+.::BulletCharacter()
-BulletCharacter()
-{
-  DoSendText( '•' )
-}
+SPECIAL_TAB := 1
+SetTabName( SPECIAL_TAB, "Special" )
 
-; Ctrl + Wnd + ` => Almost Equal character
-RegisterSymbol( "≈", "Almost Equal", "Ctrl+Win+Backtick", AlmostEqualCharacter, 1, 5 )
-^#`::AlmostEqualCharacter()
-AlmostEqualCharacter()
-{
-  DoSendText( '≈' )
-}
 
-; Ctrl + Wnd + , => Double Left Arrow character
-RegisterSymbol( "⇐", "Double Left Arrow", "Ctrl+Win+Comma", DoubleArrowLeftCharacter, 1, 1 )
-^#,::DoubleArrowLeftCharacter()
-DoubleArrowLeftCharacter()
-{
-  DoSendText( '⇐' )
-}
+RegisterSymbol( 1, 4, SPECIAL_TAB, "•", "Bullet",                  "" )
+RegisterSymbol( 1, 5, SPECIAL_TAB, "≈", "Almost Equal",            "" )
+RegisterSymbol( 1, 1, SPECIAL_TAB, "⇐", "Double Left Arrow",       "" )
+RegisterSymbol( 2, 1, SPECIAL_TAB, "⇒", "Double Right Arrow",      "" )
+RegisterSymbol( 1, 2, SPECIAL_TAB, "⟸", "Double Long Left Arrow",  "" )
+RegisterSymbol( 2, 2, SPECIAL_TAB, "⟹", "Double Long Right Arrow", "" )
+RegisterSymbol( 1, 3, SPECIAL_TAB, "–", "En Dash",                 "" )
+RegisterSymbol( 2, 3, SPECIAL_TAB, "—", "Em Dash",                 "" )
 
-; Ctrl + Wnd + . => Double Right Arrow character
-RegisterSymbol( "⇒", "Double Right Arrow", "Ctrl+Win+Period", DoubleArrowRightCharacter, 2, 1 )
-^#.::DoubleArrowRightCharacter()
-DoubleArrowRightCharacter()
-{
-  DoSendText( '⇒' )
-}
-
-; Ctrl + Shift + , => Double Long Left Arrow character
-RegisterSymbol( "⟸", "Double Long Left Arrow", "Ctrl+Shift+Comma", DoubleLongArrowLeftCharacter, 1, 2 )
-^+,::DoubleLongArrowLeftCharacter()
-DoubleLongArrowLeftCharacter()
-{
-  DoSendText( '⟸' )
-}
-
-; Ctrl + Shift + . => Double Long Right Arrow character
-RegisterSymbol( "⟹", "Double Long Right Arrow", "Ctrl+Shift+Period", DoubleLongArrowRightCharacter, 2, 2 )
-^+.::DoubleLongArrowRightCharacter()
-DoubleLongArrowRightCharacter()
-{
-  DoSendText( '⟹' )
-}
-
-; En Dash character
-RegisterSymbol( "–", "En Dash", "TBD", EnDashCharacter, 1, 3 )
-;^#TBD::EnDashCharacter()
-EnDashCharacter()
-{
-  DoSendText( '–' )
-}
-
-; Em Dash character
-RegisterSymbol( "—", "Em Dash", "TBD", EmDashCharacter, 2, 3 )
-;^#TBD::EmDashCharacter()
-EmDashCharacter()
-{
-  DoSendText( '—' )
-}
-
-; Omega character (uppercase)
-RegisterSymbol( "Ω", "Omega", "TBD", OmegaCharacter, 1, 6 )
-;^#TBD::OmegaCharacter()
-OmegaCharacter()
-{
-  DoSendText( 'Ω' )
-}
-
-; 2, 4, "©"
-RegisterSymbol( "©", "Copyright", "TBD", CopyrightCharacter, 2, 4 )
-;^#TBD::CopyrightCharacter()
-CopyrightCharacter()
-{
-  DoSendText( '©' )
-}
-
-; 2, 5, "±"
-RegisterSymbol( "±", "Plus-Minus", "TBD", PlusMinusCharacter, 2, 5 )
-;^#TBD::PlusMinusCharacter()
-PlusMinusCharacter()
-{
-  DoSendText( '±' )
-}
-
-; 2, 6, "°"
-RegisterSymbol( "°", "Degree", "TBD", DegreeCharacter, 2, 6 )
-;^#TBD::DegreeCharacter()
-DegreeCharacter()
-{
-  DoSendText( '°' )
-}
+RegisterSymbol( 1, 6, SPECIAL_TAB, "Ω", "Omega",      "" )
+RegisterSymbol( 2, 4, SPECIAL_TAB, "©", "Copyright",  "" )
+RegisterSymbol( 2, 5, SPECIAL_TAB, "±", "Plus-Minus", "" )
+RegisterSymbol( 2, 6, SPECIAL_TAB, "°", "Degree",     "" )
 
 ; Row 3: Superscripts
-RegisterSymbol( "⁰", "Superscript 0", "TBD", Superscript0, 3, 1 )
-Superscript0()
-{
-  DoSendText( '⁰' )
-}
-
-RegisterSymbol( "²", "Superscript 2", "TBD", Superscript2, 3, 2 )
-Superscript2()
-{
-  DoSendText( '²' )
-}
-
-RegisterSymbol( "³", "Superscript 3", "TBD", Superscript3, 3, 3 )
-Superscript3()
-{
-  DoSendText( '³' )
-}
-
-RegisterSymbol( "⁴", "Superscript 4", "TBD", Superscript4, 3, 4 )
-Superscript4()
-{
-  DoSendText( '⁴' )
-}
-
-RegisterSymbol( "⁵", "Superscript 5", "TBD", Superscript5, 3, 5 )
-Superscript5()
-{
-  DoSendText( '⁵' )
-}
-
-RegisterSymbol( "⁶", "Superscript 6", "TBD", Superscript6, 3, 6 )
-Superscript6()
-{
-  DoSendText( '⁶' )
-}
-
-RegisterSymbol( "⁷", "Superscript 7", "TBD", Superscript7, 3, 7 )
-Superscript7()
-{
-  DoSendText( '⁷' )
-}
-
-RegisterSymbol( "⁸", "Superscript 8", "TBD", Superscript8, 3, 8 )
-Superscript8()
-{
-  DoSendText( '⁸' )
-}
-
-RegisterSymbol( "⁹", "Superscript 9", "TBD", Superscript9, 3, 9 )
-Superscript9()
-{
-  DoSendText( '⁹' )
-}
-
-RegisterSymbol( "ⁿ", "Superscript n", "TBD", SuperscriptN, 3, 10 )
-SuperscriptN()
-{
-  DoSendText( 'ⁿ' )
-}
+RegisterSymbol( 3, 1,  SPECIAL_TAB, "⁰", "Superscript 0", "" )
+RegisterSymbol( 3, 2,  SPECIAL_TAB, "¹", "Superscript 1", "" )
+RegisterSymbol( 3, 3,  SPECIAL_TAB, "²", "Superscript 2", "" )
+RegisterSymbol( 3, 4,  SPECIAL_TAB, "³", "Superscript 3", "" )
+RegisterSymbol( 3, 5,  SPECIAL_TAB, "⁴", "Superscript 4", "" )
+RegisterSymbol( 3, 6,  SPECIAL_TAB, "⁵", "Superscript 5", "" )
+RegisterSymbol( 3, 7,  SPECIAL_TAB, "⁶", "Superscript 6", "" )
+RegisterSymbol( 3, 8,  SPECIAL_TAB, "⁷", "Superscript 7", "" )
+RegisterSymbol( 3, 9,  SPECIAL_TAB, "⁸", "Superscript 8", "" )
+RegisterSymbol( 3, 10, SPECIAL_TAB, "⁹", "Superscript 9", "" )
+RegisterSymbol( 3, 11, SPECIAL_TAB, "ⁿ", "Superscript n", "" )
 
 ; Row 4: Subscripts
-RegisterSymbol( "ₐ", "Subscript a", "TBD", SubscriptA, 4, 1 )
-SubscriptA()
-{
-  DoSendText( 'ₐ' )
-}
-
-RegisterSymbol( "ₑ", "Subscript e", "TBD", SubscriptE, 4, 2 )
-SubscriptE()
-{
-  DoSendText( 'ₑ' )
-}
-
-RegisterSymbol( "ₒ", "Subscript o", "TBD", SubscriptO, 4, 3 )
-SubscriptO()
-{
-  DoSendText( 'ₒ' )
-}
-
-RegisterSymbol( "ₓ", "Subscript x", "TBD", SubscriptX, 4, 4 )
-SubscriptX()
-{
-  DoSendText( 'ₓ' )
-}
+RegisterSymbol( 4, 1, SPECIAL_TAB, "ₐ", "Subscript a", "" )
+RegisterSymbol( 4, 2, SPECIAL_TAB, "ₑ", "Subscript e", "" )
+RegisterSymbol( 4, 3, SPECIAL_TAB, "ₒ", "Subscript o", "" )
+RegisterSymbol( 4, 4, SPECIAL_TAB, "ₓ", "Subscript x", "" )
 
 ; "àáâãäå"
 ; "èéêë"
