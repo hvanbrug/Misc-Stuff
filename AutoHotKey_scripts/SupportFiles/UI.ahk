@@ -17,14 +17,7 @@ ShowHelpMenu( startTab )
   global g_tabNames
   global g_tabs
   global g_fontSize
-  global g_fontSymSize
   global g_fontName
-  global g_fontEmojiName
-  global g_symOrgX
-  global g_symOrgY
-  global g_symBtnSizeX
-  global g_symBtnSizeY
-  global g_symBtnGap
 
   global g_HelpActions
   global g_RESIZE_H_MARGIN
@@ -48,59 +41,20 @@ ShowHelpMenu( startTab )
     return
   }
 
-  ; ── Create GUI ──
-  ;g_gui := Gui( "+AlwaysOnTop +Resize", windowTitle )
-  g_gui := Gui( "+AlwaysOnTop", windowTitle )
-
-  ; ── Determine tab names from registered symbols ──
-  ;tabNames := Map()
-  ;for i, sym in g_symbols
-  ;{
-  ;  if !tabNames.Has( sym.tab )
-  ;  {
-  ;    tabNames[sym.tab] := g_tabNames.Has( sym.tab )
-  ;                           ? g_tabNames[sym.tab]
-  ;                           : "Symbols " sym.tab
-  ;  }
-  ;}
+  g_gui := Gui( "+AlwaysOnTop -Resize", windowTitle )
 
   tabList := []
   tabContentWidth  := g_LV_WIDTH
   tabContentHeight := 0
-  for tabIndex, tab in g_uiTabs
+  for tab in g_uiTabs
   {
-    ;tabNames[tabIndex] := tab.m_name
     tabList.Push( tab.m_name )
     tabContentWidth  := tab.GetContentWidth(  tabContentWidth  )
     tabContentHeight := tab.GetContentHeight( tabContentHeight )
   }
 
-  ; Build ordered tab name array; last tab is always "Hotkeys"
-  ;tabList  := []
-  ;tabIndex := 1
-  ;while tabNames.Has( tabIndex )
-  ;{
-  ;  tabList.Push( tabNames[tabIndex] )
-  ;  tabIndex++
-  ;}
   HOTKEYS_TAB := tabList.Length + 1
   tabList.Push( "Hotkey Help" )
-
-  ; ── Create Tab control ──
-  ; Calculate tab height from max symbol rows
-  ;maxRow := 1
-  ;for i, sym in g_symbols
-  ;{
-  ;  if sym.row > maxRow
-  ;  {
-  ;    maxRow := sym.row
-  ;  }
-  ;}
-  ;tabContentWidth  := g_LV_WIDTH
-  ;tabContentHeight := maxRow * (g_symBtnSizeY + g_symBtnGap) + g_symBtnGap + 10
-
-  ;tabContentWidth  := emojiTab.GetContentWidth(  tabContentWidth  )
-  ;tabContentHeight := emojiTab.GetContentHeight( tabContentHeight )
 
   ; Use the larger of symbol area or hotkey list area
   LV_AREA_HEIGHT := g_hdrHeight + (g_LV_ROW_COUNT * 20) + 10
@@ -110,58 +64,6 @@ ShowHelpMenu( startTab )
   }
 
   g_tabs := g_gui.Add( "Tab", "x5 y5 w" (tabContentWidth + 10) " h" (tabContentHeight + 30), tabList )
-
-  ; ── Symbol Buttons (on their respective tab) ──
-  g_tipMap := Map()
-  ;symXOrg  := g_symOrgX
-  ;symYOrg  := g_symOrgY
-  ;
-  ;g_gui.SetFont( g_fontSymSize, g_fontName )
-  ;
-  ;for i, sym in g_symbols
-  ;{
-  ;  g_tabs.UseTab( sym.tab )
-  ;  x   := symXOrg + (sym.col - 1) * (g_symBtnSizeX + g_symBtnGap)
-  ;  y   := symYOrg + (sym.row - 1) * (g_symBtnSizeY + g_symBtnGap)
-  ;  w   := g_symBtnSizeX * sym.width + g_symBtnGap * (sym.width - 1)
-  ;  h   := g_symBtnSizeY
-  ;  tip := (sym.hotkey == "") ? sym.desc : (sym.desc "`n" sym.hotkey)
-  ;  opt := "x" x " y" y " w" w " h" h
-  ;  if sym.tab  = COMMENTS_TAB
-  ;  {
-  ;    opt .= " left"
-  ;  }
-  ;  ;hasImageFile := sym.Has( "imageFile" ) && ( sym.imageFile != "" )
-  ;  ;hasImageFile := sym.imageFile != ""
-  ;  ;if hasImageFile
-  ;  ;{
-  ;  ;  imagePath := A_ScriptDir "\\SupportFiles\\twemoji-assets\\" sym.imageFile
-  ;  ;}
-  ;  ;else
-  ;  ;{
-  ;  ;  hasImageFile := false
-  ;  ;}
-  ;  ;if hasImageFile
-  ;  ;{
-  ;  ;  if FileExist( imagePath )
-  ;  ;  {
-  ;  ;    opt .= " +0x200"
-  ;  ;    btn := g_gui.Add( "Button", opt, "" )
-  ;  ;    btn.SetImage( imagePath )
-  ;  ;  }
-  ;  ;  else
-  ;  ;  {
-  ;  ;    btn := g_gui.Add( "Button", opt, sym.char )
-  ;  ;  }
-  ;  ;}
-  ;  ;else
-  ;  {
-  ;    btn := g_gui.Add( "Button", opt, sym.char )
-  ;  }
-  ;  btn.SetFont( g_fontSymSize, g_fontEmojiName )
-  ;  g_tipMap[btn.Hwnd] := tip
-  ;  btn.OnEvent( "Click", HelpMenu_SymbolClick.Bind( sym.action ) )
-  ;}
 
   for tabIndex, tab in g_uiTabs
   {
@@ -205,7 +107,6 @@ ShowHelpMenu( startTab )
   g_LV.OnEvent( "DoubleClick", HelpMenu_RowAction )
   g_gui.OnEvent( "Escape", (*) => HelpMenu_Close() )
   g_gui.OnEvent( "Close",  (*) => HelpMenu_Close() )
-  ;g_gui.OnEvent( "Size", HelpMenu_OnResize )
 
   if( (startTab < 1) ||
       (startTab > tabList.Length) )
@@ -227,38 +128,6 @@ HelpMenu_Close()
     g_gui.Destroy()
   }
   g_gui := ""
-}
-
-HelpMenu_OnResize( thisGui, minMax, w, h )
-{
-  global g_LV, g_HeaderHotkey, g_HeaderDesc, g_HeaderBg, g_tabs
-  if minMax = -1  ; minimized
-  {
-    return
-  }
-  MARGIN := 5
-  ; Resize the tab control to fill the window
-  g_tabs.Move( , , w - MARGIN * 2, h - MARGIN * 2 )
-  ; Resize the ListView within the Hotkeys tab
-  lvWidth := w - MARGIN * 2 - 20
-  g_LV.GetPos( , &lvY )
-  lvHeight := h - lvY - MARGIN - 10
-  if lvHeight < 50
-  {
-    lvHeight := 50
-  }
-  g_LV.Move( , , lvWidth, lvHeight )
-  ; Resize description header to match
-  g_HeaderHotkey.GetPos( , , &hkW )
-  descWidth := lvWidth - hkW
-  if descWidth < 50
-  {
-    descWidth := 50
-  }
-  g_HeaderDesc.Move( , , descWidth )
-  g_HeaderBg.Move( , , lvWidth )
-  ; Resize the Description column to fill remaining width
-  g_LV.ModifyCol( 2, descWidth )
 }
 
 HelpMenu_HoverCheck()

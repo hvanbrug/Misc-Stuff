@@ -11,25 +11,31 @@ class CommentsTabPage extends TabPage
   {
     super.__New( "Comments" )
 
-    this.m_fontSize    := "s10"
-    this.m_symBtnSizeY := 20
+    super.m_fontSize    := "s10"
+    super.m_symBtnSizeX := 320
+    super.m_symBtnSizeY := 24
 
-    this.RegisterButtons()
-    this.RecalcSizes()
+    super.SetByCol( 2 )
+    this .RegisterButtons()
+    super.RecalcSizes()
   }
 
   RegisterButtons()
   {
-    super.RegisterSymbol( 1, 1, 6, "Thanks 😊.",                       "", "Alt+Win+1" )
-    super.RegisterSymbol( 1, 7, 6, "Thank you 😊.",                    "", "Alt+Win+2" )
-    super.RegisterSymbol( 2, 1, 6, "Thank you very much 🤗.",          "", "Alt+Win+3" )
-    super.RegisterSymbol( 2, 7, 6, "Thank you so much 🤗.",            "", "Alt+Win+4" )
-    super.RegisterSymbol( 3, 1, 6, "Thanks, I appreciate it 😁.",      "", "Alt+Win+5" )
-    super.RegisterSymbol( 3, 7, 6, "Thanks, I'm glad you like it 😁.", "", "Alt+Win+6" )
-    super.RegisterSymbol( 4, 1, 6, "Thanks for the tip 🥰.",           "", "Alt+Win+7" )
-    super.RegisterSymbol( 4, 7, 6, "`b, and thanks for the tip 🥰.",   "", "Alt+Win+8" )
-    ;super.RegisterSymbol( 5, 1, 6, "", "", "" )
-    ;super.RegisterSymbol( 5, 7, 6, "", "", "" )
+    super.RegisterSymbolX( 1, "Thanks 😊.",                       "", "Alt+Win+1" )
+    super.RegisterSymbolX( 1, "Thank you 😊.",                    "", "Alt+Win+2" )
+
+    super.RegisterSymbolX( 1, "Thank you very much 🤗.",          "", "Alt+Win+3" )
+    super.RegisterSymbolX( 1, "Thank you so much 🤗.",            "", "Alt+Win+4" )
+
+    super.RegisterSymbolX( 1, "Thanks, I appreciate it 😁.",      "", "Alt+Win+5" )
+    super.RegisterSymbolX( 1, "Thanks, I'm glad you like it 😁.", "", "Alt+Win+6" )
+
+    super.RegisterSymbolX( 1, "Thanks for the tip 🥰.",           "", "Alt+Win+7" )
+    super.RegisterSymbolX( 1, "`b, and thanks for the tip 🥰.",   "", "Alt+Win+8" )
+
+    ;super.RegisterSymbolX( 1, "", "", "" )
+    ;super.RegisterSymbolX( 1, "", "", "" )
   }
 }
 

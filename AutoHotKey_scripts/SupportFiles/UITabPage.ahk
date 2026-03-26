@@ -6,8 +6,7 @@ class TabPage
   {
     this.m_name          := name
     this.m_symbols       := []
-    ;this.m_fontSize      := "s10"
-    this.m_fontSize      := "s14"
+    this.m_fontSize      := "s14" ; "s10"
     this.m_fontName      := "Segoe UI"
     this.m_hdrHeight     := 24
     this.m_symOrgX       := 15
@@ -18,6 +17,22 @@ class TabPage
     this.m_contentWidth  := 0
     this.m_contentHeight := 0
     this.m_destroyed     := false
+    this.m_lastRow       := 1
+    this.m_lastCol       := 1
+    this.m_maxRowsOrCols := 0
+    this.m_fillHoriz     := false
+  }
+
+  SetByRow( maxRows )
+  {
+    this.m_maxRowsOrCols := maxRows
+    this.m_fillHoriz     := false
+  }
+
+  SetByCol( maxCols )
+  {
+    this.m_maxRowsOrCols := maxCols
+    this.m_fillHoriz     := true
   }
 
   RecalcSizes()
@@ -85,11 +100,41 @@ class TabPage
     }
   }
 
-  RegisterSymbol( row, col, width,
-                  char, desc := unset, hotkey := unset,
+  NextLine()
+  {
+    this.RegisterSpace( this.m_maxRowsOrCols )
+  }
+
+  RegisterSpace( width := 1 )
+  {
+    this.WrapRowOrCol( width )
+  }
+
+  RegisterSymbolX( width,
+                   char,
+                   desc   := unset,
+                   hotkey := unset,
+                   action := unset )
+  {
+    this.RegisterSymbol( this.m_lastRow,
+                         this.m_lastCol,
+                         width,
+                         char,
+                         desc   ?? char,
+                         hotkey ?? "",
+                         action ?? () => SendText( char ) )
+  }
+
+  RegisterSymbol( row,
+                  col,
+                  width,
+                  char,
+                  desc   := unset,
+                  hotkey := unset,
                   action := unset )
   {
-    ;global DoSendText
+    this.WrapRowOrCol( width )
+
     element := { char:   char,
                  desc:   desc   ?? char,
                  hotkey: hotkey ?? "",
@@ -98,6 +143,37 @@ class TabPage
                  col:    col,
                  width:  width }
     this.m_symbols.Push( element )
+  }
+
+  DbgWrapRowOrCol( msg, width )
+  {
+    ;OutputDebug( "WrapRowOrCol " msg this.m_name " - fillH: " this.m_fillHoriz " - max: " this.m_maxRowsOrCols " - width: " width " - lastRow: " this.m_lastRow " - lastCol: " this.m_lastCol )
+  }
+
+  WrapRowOrCol( width )
+  {
+    this.DbgWrapRowOrCol( "In:  ", width )
+    if( this.m_fillHoriz )
+    {
+      this.m_lastCol += width
+      if( this.m_lastCol > this.m_maxRowsOrCols )
+      {
+        this.m_lastCol := 1
+        this.m_lastRow++
+        this.DbgWrapRowOrCol( "Rst: ", width )
+      }
+    }
+    else
+    {
+      this.m_lastRow += 1
+      if( this.m_lastRow > this.m_maxRowsOrCols )
+      {
+        this.m_lastRow := 1
+        this.m_lastCol++
+        this.DbgWrapRowOrCol( "Rst: ", width )
+      }
+    }
+    this.DbgWrapRowOrCol( "Out: ", width )
   }
 
   SymbolClick( action, ctrl, * )
