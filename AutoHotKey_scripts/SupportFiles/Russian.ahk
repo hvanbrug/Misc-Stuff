@@ -15,7 +15,7 @@ class RussianTabPage extends TabPage
 
   RegisterButtons()
   {
-    super.RegisterSpace( this.m_maxRowsOrCols )
+    super.NextLine()
 
     super.RegisterSymbolX( 1, "А", "Uppercase A"       )
     super.RegisterSymbolX( 1, "Б", "Uppercase Be"      )
@@ -53,7 +53,7 @@ class RussianTabPage extends TabPage
     super.RegisterSymbolX( 1, "Я", "Uppercase Ya"        )
     super.RegisterSpace()
 
-    super.RegisterSpace( this.m_maxRowsOrCols )
+    super.NextLine()
 
     super.RegisterSymbolX( 1, "а", "Lowercase A"       )
     super.RegisterSymbolX( 1, "б", "Lowercase Be"      )

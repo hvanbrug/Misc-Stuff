@@ -16,7 +16,7 @@ class GreekTabPage extends TabPage
 
   RegisterButtons()
   {
-    super.RegisterSpace( this.m_maxRowsOrCols )
+    super.NextLine()
 
     super.RegisterSpace( this.m_leftGap )
     super.RegisterSymbolX( 1, "Α", "Uppercase Alpha"   )
@@ -46,7 +46,7 @@ class GreekTabPage extends TabPage
     super.RegisterSymbolX( 1, "Ψ", "Uppercase Psi"     )
     super.RegisterSymbolX( 1, "Ω", "Uppercase Omega"   )
 
-    super.RegisterSpace( this.m_maxRowsOrCols )
+    super.NextLine()
 
     super.RegisterSpace( this.m_leftGap )
     super.RegisterSymbolX( 1, "α", "Lowercase Alpha"   )

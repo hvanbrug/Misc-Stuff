@@ -14,7 +14,7 @@ class SymbolsTabPage extends TabPage
   __New()
   {
     super.__New( "Symbols" )
-    super.SetByCol( 11 )
+    super.SetByCol( 17 )
     this .RegisterButtons()
     super.RecalcSizes()
   }
@@ -48,11 +48,13 @@ class SymbolsTabPage extends TabPage
     super.RegisterSymbolX( 1, "⁸", "Superscript 8" )
     super.RegisterSymbolX( 1, "⁹", "Superscript 9" )
     super.RegisterSymbolX( 1, "ⁿ", "Superscript n" )
+    super.NextLine()
 
     super.RegisterSymbolX( 1, "ₐ", "Subscript a" )
     super.RegisterSymbolX( 1, "ₑ", "Subscript e" )
     super.RegisterSymbolX( 1, "ₒ", "Subscript o" )
     super.RegisterSymbolX( 1, "ₓ", "Subscript x" )
+    super.NextLine()
 
     ; "àáâãäå"
     ; "èéêë"

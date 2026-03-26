@@ -17,27 +17,32 @@ class TabPage
     this.m_contentWidth  := 0
     this.m_contentHeight := 0
     this.m_destroyed     := false
-    this.m_lastRow       := 1
-    this.m_lastCol       := 1
-    this.m_maxRowsOrCols := 0
+    this.m_nextRow       := 1
+    this.m_nextCol       := 1
+    this.m_maxPerLine    := 0
     this.m_fillHoriz     := false
   }
 
   SetByRow( maxRows )
   {
-    this.m_maxRowsOrCols := maxRows
-    this.m_fillHoriz     := false
+    this.m_maxPerLine := maxRows
+    this.m_fillHoriz  := false
   }
 
   SetByCol( maxCols )
   {
-    this.m_maxRowsOrCols := maxCols
-    this.m_fillHoriz     := true
+    this.m_maxPerLine := maxCols
+    this.m_fillHoriz  := true
   }
 
   RecalcSizes()
   {
     this.SetContentSize()
+  }
+
+  MaxPerLine()
+  {
+    return this.m_maxPerLine
   }
 
   SetContentSize()
@@ -102,7 +107,7 @@ class TabPage
 
   NextLine()
   {
-    this.RegisterSpace( this.m_maxRowsOrCols )
+    this.RegisterSpace( this.m_maxPerLine )
   }
 
   RegisterSpace( width := 1 )
@@ -116,8 +121,8 @@ class TabPage
                    hotkey := unset,
                    action := unset )
   {
-    this.RegisterSymbol( this.m_lastRow,
-                         this.m_lastCol,
+    this.RegisterSymbol( this.m_nextRow,
+                         this.m_nextCol,
                          width,
                          char,
                          desc   ?? char,
@@ -155,21 +160,21 @@ class TabPage
     this.DbgWrapRowOrCol( "In:  ", width )
     if( this.m_fillHoriz )
     {
-      this.m_lastCol += width
-      if( this.m_lastCol > this.m_maxRowsOrCols )
+      this.m_nextCol += width
+      if( this.m_nextCol > this.m_maxPerLine )
       {
-        this.m_lastCol := 1
-        this.m_lastRow++
+        this.m_nextCol := 1
+        this.m_nextRow++
         this.DbgWrapRowOrCol( "Rst: ", width )
       }
     }
     else
     {
-      this.m_lastRow += 1
-      if( this.m_lastRow > this.m_maxRowsOrCols )
+      this.m_nextRow += 1
+      if( this.m_nextRow > this.m_maxPerLine )
       {
-        this.m_lastRow := 1
-        this.m_lastCol++
+        this.m_nextRow := 1
+        this.m_nextCol++
         this.DbgWrapRowOrCol( "Rst: ", width )
       }
     }
