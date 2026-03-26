@@ -10,6 +10,7 @@
 ShowHelpMenu( startTab )
 {
   global g_uiTabs
+  global g_activeWindow
 
   global g_gui
   global g_tipMap
@@ -33,8 +34,9 @@ ShowHelpMenu( startTab )
   global g_HeaderDesc
   global g_HeaderBg
 
-  windowTitle := "Henks Hotkey Reference"
+  g_activeWindow := WinActive( "A" )
 
+  windowTitle := "Henks Hotkey Reference"
   if WinExist( windowTitle )
   {
     WinActivate
@@ -121,6 +123,8 @@ ShowHelpMenu( startTab )
 HelpMenu_Close()
 {
   global g_gui
+  global g_activeWindow
+  g_activeWindow := unset
   SetTimer( HelpMenu_HoverCheck, 0 )
   ToolTip()
   if g_gui

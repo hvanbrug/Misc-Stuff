@@ -127,7 +127,7 @@ class TabPage
                          char,
                          desc   ?? char,
                          hotkey ?? "",
-                         action ?? () => SendText( char ) )
+                         action ?? () => DoSendText( char ) )
   }
 
   RegisterSymbol( row,
@@ -143,7 +143,7 @@ class TabPage
     element := { char:   char,
                  desc:   desc   ?? char,
                  hotkey: hotkey ?? "",
-                 action: action ?? () => SendText( char ),
+                 action: action ?? () => DoSendText( char ),
                  row:    row,
                  col:    col,
                  width:  width }
@@ -183,7 +183,7 @@ class TabPage
 
   SymbolClick( action, ctrl, * )
   {
-    HelpMenu_Close()
+    ;HelpMenu_Close()
     Sleep( 150 )
     action.Call()
   }

@@ -19,7 +19,16 @@ RegisterAction( hotkey, desc, action )
 
 DoSendText( msg )
 {
-  SendInput( msg )
+  if( IsSet( g_activeWindow ) ) ; Only send if we have an active window to send to
+  {
+    WinActivate( g_activeWindow )
+    Sleep( 100 ) ; Give time to activate
+    Send( msg )
+  }
+  else
+  {
+    SendInput( msg )
+  }
 }
 
 GetSelectedTextThroughClipboard()
