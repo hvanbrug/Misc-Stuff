@@ -19,10 +19,10 @@ RegisterAction( hotkey, desc, action )
 
 DoSendText( msg )
 {
-  if( IsSet( g_activeWindow ) ) ; Only send if we have an active window to send to
+  if( IsSet( g_activeWindow ) )
   {
     WinActivate( g_activeWindow )
-    Sleep( 100 ) ; Give time to activate
+    Sleep( 100 )
     Send( msg )
   }
   else
