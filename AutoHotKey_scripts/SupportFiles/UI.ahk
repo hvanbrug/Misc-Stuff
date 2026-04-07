@@ -65,7 +65,7 @@ ShowHelpMenu( startTab )
     tabContentHeight := LV_AREA_HEIGHT
   }
 
-  g_tabs := g_gui.Add( "Tab", "x5 y5 w" (tabContentWidth + 10) " h" (tabContentHeight + 30), tabList )
+  g_tabs := g_gui.AddTab3( "x5 y5 w" (tabContentWidth + 10) " h" (tabContentHeight + 30), tabList )
 
   for tabIndex, tab in g_uiTabs
   {
@@ -80,23 +80,20 @@ ShowHelpMenu( startTab )
   ; Colored header bar using a Progress control as background
   g_tabs.UseTab( HOTKEYS_TAB )
   HEADER_FULL_WIDTH := g_COL_HOTKEY_WIDTH + g_COL_DESC_WIDTH + g_RESIZE_H_MARGIN
-  g_HeaderBg := g_gui.Add( "Progress", "x15 y35 w" HEADER_FULL_WIDTH " h" g_hdrHeight
-                           " Background" g_HEADER_BG_COLOR " c" g_HEADER_BG_COLOR, 100 )
+  g_HeaderBg := g_gui.AddProgress( "x15 y35 w" HEADER_FULL_WIDTH " h" g_hdrHeight
+                                   " Background" g_HEADER_BG_COLOR " c" g_HEADER_BG_COLOR, 100 )
 
   g_gui.SetFont( g_fontSize " bold", g_fontName )
-  g_HeaderHotkey := g_gui.Add( "Text",
-               "x15 y35 w" g_COL_HOTKEY_WIDTH " h" g_hdrHeight
-               " BackgroundTrans c" g_HEADER_TEXT_COLOR " +0x200",
-               "  Hotkey" )
-  g_HeaderDesc := g_gui.Add( "Text",
-               "x+0 yp w" (g_COL_DESC_WIDTH + g_RESIZE_H_MARGIN) " h" g_hdrHeight
-               " BackgroundTrans c" g_HEADER_TEXT_COLOR " +0x200",
-               "  Description" )
+  g_HeaderHotkey := g_gui.AddText( "x15 y35 w" g_COL_HOTKEY_WIDTH " h" g_hdrHeight
+                                   " BackgroundTrans c" g_HEADER_TEXT_COLOR " +0x200",
+                                   "  Hotkey" )
+  g_HeaderDesc := g_gui.AddText( "x+0 yp w" (g_COL_DESC_WIDTH + g_RESIZE_H_MARGIN) " h" g_hdrHeight
+                                 " BackgroundTrans c" g_HEADER_TEXT_COLOR " +0x200",
+                                 "  Description" )
   g_gui.SetFont( g_fontSize " norm", g_fontName )
 
-  g_LV := g_gui.Add( "ListView",
-                     "x15 y+0 r" g_LV_ROW_COUNT " w" g_LV_WIDTH " Grid -Hdr",
-                     ["Hotkey", "Description"] )
+  g_LV := g_gui.AddListView( "x15 y+0 r" g_LV_ROW_COUNT " w" g_LV_WIDTH " Grid -Hdr",
+                             ["Hotkey", "Description"] )
   g_LV.ModifyCol( 1, g_COL_HOTKEY_WIDTH )
   g_LV.ModifyCol( 2, g_COL_DESC_WIDTH )
 

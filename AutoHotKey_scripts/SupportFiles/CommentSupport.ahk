@@ -22,17 +22,17 @@ class CommentsTabPage extends TabPage
 
   RegisterButtons()
   {
-    super.RegisterSymbolX( 1, "Thanks 😊.",                       "", "Alt+Win+1" )
-    super.RegisterSymbolX( 1, "Thank you 😊.",                    "", "Alt+Win+2" )
+    super.RegisterSymbolX( 1, "Thanks 😊.",                       "", "#!1" )
+    super.RegisterSymbolX( 1, "Thank you 😊.",                    "", "#!2" )
 
-    super.RegisterSymbolX( 1, "Thank you very much 🤗.",          "", "Alt+Win+3" )
-    super.RegisterSymbolX( 1, "Thank you so much 🤗.",            "", "Alt+Win+4" )
+    super.RegisterSymbolX( 1, "Thank you very much 🤗.",          "", "#!3" )
+    super.RegisterSymbolX( 1, "Thank you so much 🤗.",            "", "#!4" )
 
-    super.RegisterSymbolX( 1, "Thanks, I appreciate it 😁.",      "", "Alt+Win+5" )
-    super.RegisterSymbolX( 1, "Thanks, I'm glad you like it 😁.", "", "Alt+Win+6" )
+    super.RegisterSymbolX( 1, "Thanks, I appreciate it 😁.",      "", "#!5" )
+    super.RegisterSymbolX( 1, "Thanks, I'm glad you like it 😁.", "", "#!6" )
 
-    super.RegisterSymbolX( 1, "Thanks for the tip 🥰.",           "", "Alt+Win+7" )
-    super.RegisterSymbolX( 1, "`b, and thanks for the tip 🥰.",   "", "Alt+Win+8" )
+    super.RegisterSymbolX( 1, "Thanks for the tip 🥰.",           "", "#!7" )
+    super.RegisterSymbolX( 1, "`b, and thanks for the tip 🥰.",   "", "#!8" )
 
     ;super.RegisterSymbolX( 1, "", "", "" )
     ;super.RegisterSymbolX( 1, "", "", "" )
@@ -42,65 +42,65 @@ class CommentsTabPage extends TabPage
 
 
 ; Alt + Wnd + 1 => Thanks message
-RegisterAction( "Alt+Win+1", "Thanks 😊", Thanks )
-#!1::Thanks()
-Thanks()
-{
-  DoSendText( 'Thanks 😊.' )
-}
+;RegisterAction( "Alt+Win+1", "Thanks 😊", Thanks )
+;#!1::Thanks()
+;Thanks()
+;{
+;  DoSendText( 'Thanks 😊.' )
+;}
 
 ; Alt + Wnd + 2 => Thank you message
-RegisterAction( "Alt+Win+2", "Thank you 😊", ThankYou )
-#!2::ThankYou()
-ThankYou()
-{
-  DoSendText( 'Thank you 😊.' )
-}
+;RegisterAction( "Alt+Win+2", "Thank you 😊", ThankYou )
+;#!2::ThankYou()
+;ThankYou()
+;{
+;  DoSendText( 'Thank you 😊.' )
+;}
 
 ; Alt + Wnd + 3 => Thank you very much message
-RegisterAction( "Alt+Win+3", "Thank you very much 🤗", ThankYouVeryMuch )
-#!3::ThankYouVeryMuch()
-ThankYouVeryMuch()
-{
-  DoSendText( 'Thank you very much 🤗.' )
-}
+;RegisterAction( "Alt+Win+3", "Thank you very much 🤗", ThankYouVeryMuch )
+;#!3::ThankYouVeryMuch()
+;ThankYouVeryMuch()
+;{
+;  DoSendText( 'Thank you very much 🤗.' )
+;}
 
 ; Alt + Wnd + 4 => Thank you so much message
-RegisterAction( "Alt+Win+4", "Thank you so much 🤗", ThankYouSoMuch )
-#!4::ThankYouSoMuch()
-ThankYouSoMuch()
-{
-  DoSendText( 'Thank you so much 🤗.' )
-}
+;RegisterAction( "Alt+Win+4", "Thank you so much 🤗", ThankYouSoMuch )
+;#!4::ThankYouSoMuch()
+;ThankYouSoMuch()
+;{
+;  DoSendText( 'Thank you so much 🤗.' )
+;}
 
 ; Alt + Wnd + 5 => Thanks, I appreciate it message
-RegisterAction( "Alt+Win+5", "Thanks, I appreciate it 😁", ThanksIAppreciateIt )
-#!5::ThanksIAppreciateIt()
-ThanksIAppreciateIt()
-{
-  DoSendText( 'Thanks. I appreciate it 😁.' )
-}
+;RegisterAction( "Alt+Win+5", "Thanks, I appreciate it 😁", ThanksIAppreciateIt )
+;#!5::ThanksIAppreciateIt()
+;ThanksIAppreciateIt()
+;{
+;  DoSendText( 'Thanks. I appreciate it 😁.' )
+;}
 
 ; Alt + Wnd + 6 => Thanks, I'm glad you like it message
-RegisterAction( "Alt+Win+6", "Thanks, I'm glad you like it 😁", ThanksImGladYouLikeIt )
-#!6::ThanksImGladYouLikeIt()
-ThanksImGladYouLikeIt()
-{
-  DoSendText( "Thanks. I'm glad you like it 😁." )
-}
+;RegisterAction( "Alt+Win+6", "Thanks, I'm glad you like it 😁", ThanksImGladYouLikeIt )
+;#!6::ThanksImGladYouLikeIt()
+;ThanksImGladYouLikeIt()
+;{
+;  DoSendText( "Thanks. I'm glad you like it 😁." )
+;}
 
 ; Alt + Wnd + 7 => Thanks for the tip message
-RegisterAction( "Alt+Win+7", "Thanks for the tip 🥰", ThanksForTheTip )
-#!7::ThanksForTheTip()
-ThanksForTheTip()
-{
-  DoSendText( "Thanks for the tip 🥰." )
-}
+;RegisterAction( "Alt+Win+7", "Thanks for the tip 🥰", ThanksForTheTip )
+;#!7::ThanksForTheTip()
+;ThanksForTheTip()
+;{
+;  DoSendText( "Thanks for the tip 🥰." )
+;}
 
 ; Alt + Wnd + 8 => And thanks for the tip message
-RegisterAction( "Alt+Win+8", "And thanks for the tip 🥰", AndThanksForTheTip )
-#!8::AndThanksForTheTip()
-AndThanksForTheTip()
-{
-  DoSendText( "`b, and thanks for the tip 🥰." )
-}
+;RegisterAction( "Alt+Win+8", "And thanks for the tip 🥰", AndThanksForTheTip )
+;#!8::AndThanksForTheTip()
+;AndThanksForTheTip()
+;{
+;  DoSendText( "`b, and thanks for the tip 🥰." )
+;}

@@ -40,10 +40,7 @@ NCCreationPrefix()
 }
 
 RegisterAction( "Ctrl+Alt+M", "Maximize window to work area (manual resize)", MaximizeWindowToWorkArea )
-^!m::
-{
-	MaximizeWindowToWorkArea()
-}
+^!m::MaximizeWindowToWorkArea()
 MaximizeWindowToWorkArea()
 {
   hwnd := WinActive( "A" )

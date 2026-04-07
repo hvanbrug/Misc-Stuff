@@ -1,5 +1,3 @@
-
-
 class TabPage
 {
   __New( name )
@@ -79,27 +77,49 @@ class TabPage
            : this.m_contentHeight
   }
 
+  IsAFunction( func )
+  {
+    return (Type( func ) = "Func")      ||
+           (Type( func ) = "BoundFunc") ||
+           (Type( func ) = "Closure")
+  }
+
   AddControls( gui, tabs, tabIdx, tipMap )
   {
     gui.SetFont( this.m_fontSize, this.m_fontName )
 
+    tabs.UseTab( tabIdx )
     for sym in this.m_symbols
     {
-      tabs.UseTab( tabIdx )
+      tip         := sym.desc
+      localAction := sym.action
+      if( !IsSet( localAction ) || !this.IsAFunction( localAction ) )
+      {
+        charToSend  := sym.char
+        localAction := () => DoSendText( charToSend )
+      }
+      if( sym.hotkey != "" )
+      {
+        Hotkey( sym.hotkey, sym.hotkeyAction )
+        if( tip != "" )
+        {
+          tip .= "`n"
+        }
+        tip .= sym.hotkey
+      }
+
       x   := this.m_symOrgX + (sym.col - 1) * (this.m_symBtnSizeX + this.m_symBtnGap)
       y   := this.m_symOrgY + (sym.row - 1) * (this.m_symBtnSizeY + this.m_symBtnGap)
       w   := this.m_symBtnSizeX * sym.width + this.m_symBtnGap * (sym.width - 1)
       h   := this.m_symBtnSizeY
-      tip := (sym.hotkey == "") ? sym.desc : (sym.desc "`n" sym.hotkey)
+      tip := tip
       opt := "x" x " y" y " w" w " h" h
-      ;if sym.tab  = COMMENTS_TAB
-      ;{
-      ;  opt .= " left"
-      ;}
-      btn := gui.Add( "Button", opt, sym.char )
+      btn := gui.AddButton( opt, sym.char )
       btn.SetFont( this.m_fontSize, this.m_fontName )
-      tipMap[btn.Hwnd] := tip
-      localAction := sym.action
+      if( IsSet( tip ) )
+      {
+        tipMap[btn.Hwnd] := tip
+      }
       handler := (( a ) => ( ctrl, * ) => this.SymbolClick( a, ctrl ))( localAction )
       btn.OnEvent( "Click", handler )
     }
@@ -121,13 +141,25 @@ class TabPage
                    hotkey := unset,
                    action := unset )
   {
-    this.RegisterSymbol( this.m_nextRow,
-                         this.m_nextCol,
-                         width,
-                         char,
-                         desc   ?? char,
-                         hotkey ?? "",
-                         action ?? () => DoSendText( char ) )
+    if( IsSet( action ) )
+    {
+      this.RegisterSymbol( this.m_nextRow,
+                           this.m_nextCol,
+                           width,
+                           char,
+                           desc   ?? char,
+                           hotkey ?? "",
+                           action )
+    }
+    else
+    {
+      this.RegisterSymbol( this.m_nextRow,
+                           this.m_nextCol,
+                           width,
+                           char,
+                           desc   ?? char,
+                           hotkey ?? "" )
+    }
   }
 
   RegisterSymbol( row,
@@ -140,14 +172,41 @@ class TabPage
   {
     this.WrapRowOrCol( width )
 
-    element := { char:   char,
-                 desc:   desc   ?? char,
-                 hotkey: hotkey ?? "",
-                 action: action ?? () => DoSendText( char ),
-                 row:    row,
-                 col:    col,
-                 width:  width }
+    ; Button click action: closure captures char by value, always callable with no args
+    charCopy := char
+    if( IsSet( action ) )
+    {
+      clickAction := action
+    }
+    else
+    {
+      clickAction := () => DoSendText( charCopy )
+    }
+
+    ; Hotkey action: must be Func or BoundFunc (Hotkey() does not accept Closures)
+    if( IsSet( action ) && (Type( action ) = "Func" || Type( action ) = "BoundFunc") )
+    {
+      hotkeyAction := action
+    }
+    else
+    {
+      hotkeyAction := TabPage.SendCharFunc.Bind( charCopy )
+    }
+
+    element := { row:         row,
+                 col:         col,
+                 width:       width,
+                 char:        char,
+                 desc:        desc   ?? char,
+                 hotkey:      hotkey ?? "",
+                 action:      clickAction,
+                 hotkeyAction: hotkeyAction }
     this.m_symbols.Push( element )
+  }
+
+  static SendCharFunc( char )
+  {
+    DoSendText( char )
   }
 
   DbgWrapRowOrCol( msg, width )
