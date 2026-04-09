@@ -55,6 +55,25 @@ ShowHelpMenu( startTab )
     tabContentHeight := tab.GetContentHeight( tabContentHeight )
   }
 
+  ; Keep symbol tabs to a bounded viewport so overflow can scroll.
+  TAB_VIEWPORT_SCREEN_MARGIN := 220
+  TAB_VIEWPORT_MAX_HEIGHT    := 230
+  TAB_VIEWPORT_MIN_HEIGHT    := 220
+
+  maxTabContentHeight := A_ScreenHeight - TAB_VIEWPORT_SCREEN_MARGIN
+  if( maxTabContentHeight > TAB_VIEWPORT_MAX_HEIGHT )
+  {
+    maxTabContentHeight := TAB_VIEWPORT_MAX_HEIGHT
+  }
+  if( maxTabContentHeight < TAB_VIEWPORT_MIN_HEIGHT )
+  {
+    maxTabContentHeight := TAB_VIEWPORT_MIN_HEIGHT
+  }
+  if( tabContentHeight > maxTabContentHeight )
+  {
+    tabContentHeight := maxTabContentHeight
+  }
+
   HOTKEYS_TAB := tabList.Length + 1
   tabList.Push( "Hotkey Help" )
 
@@ -64,11 +83,16 @@ ShowHelpMenu( startTab )
   {
     tabContentHeight := LV_AREA_HEIGHT
   }
+  if( tabContentHeight > maxTabContentHeight )
+  {
+    tabContentHeight := maxTabContentHeight
+  }
 
   g_tabs := g_gui.AddTab3( "x5 y5 w" (tabContentWidth + 10) " h" (tabContentHeight + 30), tabList )
 
   for tabIndex, tab in g_uiTabs
   {
+    tab.SetViewportHeight( tabContentHeight )
     tab.AddControls( g_gui, g_tabs, tabIndex, g_tipMap )
   }
 
@@ -103,9 +127,11 @@ ShowHelpMenu( startTab )
   }
 
 
-  g_LV.OnEvent( "DoubleClick", HelpMenu_RowAction )
-  g_gui.OnEvent( "Escape", (*) => HelpMenu_Close() )
-  g_gui.OnEvent( "Close",  (*) => HelpMenu_Close() )
+  g_LV.OnEvent(   "DoubleClick", HelpMenu_RowAction      )
+  g_gui.OnEvent(  "Escape",      (*) => HelpMenu_Close() )
+  g_gui.OnEvent(  "Close",       (*) => HelpMenu_Close() )
+  g_tabs.OnEvent( "Change",      HelpMenu_TabChanged     )
+  OnMessage(      0x020A,        HelpMenu_MouseWheel     ) ; WM_MOUSEWHEEL
 
   if( (startTab < 1) ||
       (startTab > tabList.Length) )
@@ -122,6 +148,7 @@ HelpMenu_Close()
   global g_gui
   global g_activeWindow
   g_activeWindow := unset
+  OnMessage( 0x020A, HelpMenu_MouseWheel, 0 )
   SetTimer( HelpMenu_HoverCheck, 0 )
   ToolTip()
   if g_gui
@@ -129,6 +156,81 @@ HelpMenu_Close()
     g_gui.Destroy()
   }
   g_gui := ""
+}
+
+HelpMenu_TabChanged( ctrl, * )
+{
+  global g_uiTabs
+
+  tabIndex := ctrl.Value
+  if( tabIndex <= g_uiTabs.Length )
+  {
+    g_uiTabs[tabIndex].ApplyScrollPosition()
+  }
+}
+
+HelpMenu_MouseWheel( wParam, lParam, msg, hwnd )
+{
+  global g_gui
+  global g_tabs
+  global g_uiTabs
+
+  ; Acceleration config
+  WHEEL_DELTA              := 120
+  SCROLL_PIXELS_BASE       := 4    ; pixels per notch at rest
+  SCROLL_PIXELS_MAX        := 40   ; pixels per notch at full speed
+  ACCEL_WINDOW_MS          := 150  ; consecutive event window to build speed
+  ACCEL_STEP               := 4    ; extra pixels added per successive notch within window
+
+  ; Acceleration state
+  static lastEventMs   := 0
+  static accelPixels   := 0
+
+  if( !IsSet( g_gui  ) || !IsObject( g_gui  ) ||
+      !IsSet( g_tabs ) || !IsObject( g_tabs ) )
+  {
+    return
+  }
+
+  MouseGetPos( , , &winHwnd )
+  if( winHwnd != g_gui.Hwnd )
+  {
+    return
+  }
+
+  tabIndex := g_tabs.Value
+  if( (tabIndex < 1) ||
+      (tabIndex > g_uiTabs.Length) )
+  {
+    return
+  }
+
+  ; Update acceleration based on elapsed time since last event.
+  nowMs := A_TickCount
+  if( (nowMs - lastEventMs) <= ACCEL_WINDOW_MS )
+  {
+    accelPixels := Min( accelPixels + ACCEL_STEP, SCROLL_PIXELS_MAX - SCROLL_PIXELS_BASE )
+  }
+  else
+  {
+    accelPixels := 0
+  }
+  lastEventMs := nowMs
+
+  tab   := g_uiTabs[tabIndex]
+  delta := (wParam >> 16) & 0xFFFF
+  if( delta >= 0x8000 )
+  {
+    delta -= 0x10000
+  }
+
+  pixelsPerNotch := SCROLL_PIXELS_BASE + accelPixels
+  scrollBy       := -(delta / WHEEL_DELTA) * pixelsPerNotch
+  if( tab.ScrollByPixels( scrollBy ) )
+  {
+    ToolTip()
+    return 0
+  }
 }
 
 HelpMenu_HoverCheck()

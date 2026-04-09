@@ -20,6 +20,12 @@ class TabPage
     this.m_maxSlots       := 0
     this.m_lineIsRow      := true
     this.m_lineShift      := 0
+    this.m_scrollY        := 0
+    this.m_viewportHeight := 0
+
+    this.m_guiHwnd          := 0
+    this.m_redrawWatchdogMs := 20
+    this.m_redrawWatchdogFn := ObjBindMethod( this, "OnRedrawWatchdog" )
   }
 
   SetColsOf( maxRows )
@@ -141,6 +147,9 @@ class TabPage
 
   AddControls( gui, tabs, tabIdx, tipMap )
   {
+    this.m_scrollY := 0
+    this.m_guiHwnd := gui.Hwnd
+
     gui.SetFont( this.m_fontSize, this.m_fontName )
 
     tabs.UseTab( tabIdx )
@@ -172,6 +181,7 @@ class TabPage
       opt := "x" x " y" y " w" w " h" h
       btn := gui.AddButton( opt, this.NormalizeDisplayText( sym.char ) )
       btn.SetFont( this.m_fontSize, this.m_fontName )
+      sym.ctrl := btn
       if( IsSet( tip ) )
       {
         tipMap[btn.Hwnd] := tip
@@ -179,6 +189,142 @@ class TabPage
       handler := (( a ) => ( ctrl, * ) => this.SymbolClick( a, ctrl ))( localAction )
       btn.OnEvent( "Click", handler )
     }
+
+    this.ApplyScrollPosition()
+  }
+
+  SetViewportHeight( viewportHeight )
+  {
+    this.m_viewportHeight := viewportHeight
+  }
+
+  MaxScrollY()
+  {
+    if( this.m_viewportHeight <= 0 )
+    {
+      return 0
+    }
+
+    maxScroll := this.m_contentHeight - this.m_viewportHeight
+    if( maxScroll < 0 )
+    {
+      return 0
+    }
+
+    return maxScroll
+  }
+
+  ClampScrollY( scrollY )
+  {
+    maxScroll := this.MaxScrollY()
+    if( scrollY < 0 )
+    {
+      return 0
+    }
+    if( scrollY > maxScroll )
+    {
+      return maxScroll
+    }
+
+    return scrollY
+  }
+
+  ScrollByPixels( deltaY )
+  {
+    newScrollY := this.ClampScrollY( this.m_scrollY + deltaY )
+    if( newScrollY = this.m_scrollY )
+    {
+      return false
+    }
+
+    this.m_scrollY := newScrollY
+    this.ApplyScrollPosition()
+    this.QueueRedrawWatchdog()
+    return true
+  }
+
+  ResetScroll()
+  {
+    this.m_scrollY := 0
+    this.ApplyScrollPosition()
+  }
+
+  IsSymbolVisibleInViewport( y, h )
+  {
+    if( this.m_viewportHeight <= 0 )
+    {
+      return true
+    }
+
+    viewportTop    := this.m_symOrgY
+    viewportBottom := this.m_symOrgY + this.m_viewportHeight
+    symbolBottom   := y + h
+
+    return (symbolBottom > viewportTop) &&
+           (y < viewportBottom)
+  }
+
+  ApplyScrollPosition()
+  {
+    for sym in this.m_symbols
+    {
+      if( !sym.HasOwnProp( "ctrl" ) )
+      {
+        continue
+      }
+
+      ctrl := sym.ctrl
+      if( !IsSet( ctrl ) )
+      {
+        continue
+      }
+
+      y := sym.y - this.m_scrollY
+      if( this.IsSymbolVisibleInViewport( y, sym.h ) )
+      {
+        ctrl.Move( sym.x,
+                   y,
+                   sym.w,
+                   sym.h )
+        ctrl.Opt( "-Hidden" )
+      }
+      else
+      {
+        ctrl.Opt( "Hidden" )
+      }
+    }
+  }
+
+  QueueRedrawWatchdog()
+  {
+    if( this.m_destroyed )
+    {
+      return
+    }
+
+    ; One-shot watchdog: repeated calls reset the timer and coalesce redraws.
+    SetTimer( this.m_redrawWatchdogFn, -this.m_redrawWatchdogMs )
+  }
+
+  OnRedrawWatchdog()
+  {
+    this.RequestFullRedraw()
+  }
+
+  RequestFullRedraw()
+  {
+    if( this.m_guiHwnd = 0 )
+    {
+      return
+    }
+
+    ; Invalidate only and let Windows batch repaint to reduce flashing.
+    redrawFlags := 0x0001 | 0x0080
+    DllCall( "RedrawWindow",
+             "ptr", this.m_guiHwnd,
+             "ptr", 0,
+             "ptr", 0,
+             "uint", redrawFlags )
   }
 
   NextLine()
@@ -339,6 +485,8 @@ class TabPage
       return
     }
     this.m_destroyed := true
+
+    SetTimer( this.m_redrawWatchdogFn, 0 )
 
     if( IsObject( this.m_symbols ) )
     {
