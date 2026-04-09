@@ -84,6 +84,12 @@ class TabPage
            (Type( func ) = "Closure")
   }
 
+  NormalizeDisplayText( text )
+  {
+    ; Render control escapes as visible symbols for tooltips.
+    return StrReplace( text, "`b", "⌫" )
+  }
+
   AddControls( gui, tabs, tabIdx, tipMap )
   {
     gui.SetFont( this.m_fontSize, this.m_fontName )
@@ -92,6 +98,7 @@ class TabPage
     for sym in this.m_symbols
     {
       tip         := sym.desc
+      tip         := this.NormalizeDisplayText( tip )
       localAction := sym.action
       if( !IsSet( localAction ) || !this.IsAFunction( localAction ) )
       {
@@ -114,7 +121,7 @@ class TabPage
       h   := this.m_symBtnSizeY
       tip := tip
       opt := "x" x " y" y " w" w " h" h
-      btn := gui.AddButton( opt, sym.char )
+      btn := gui.AddButton( opt, this.NormalizeDisplayText( sym.char ) )
       btn.SetFont( this.m_fontSize, this.m_fontName )
       if( IsSet( tip ) )
       {
@@ -193,13 +200,13 @@ class TabPage
       hotkeyAction := TabPage.SendCharFunc.Bind( charCopy )
     }
 
-    element := { row:         row,
-                 col:         col,
-                 width:       width,
-                 char:        char,
-                 desc:        desc   ?? char,
-                 hotkey:      hotkey ?? "",
-                 action:      clickAction,
+    element := { row:          row,
+                 col:          col,
+                 width:        width,
+                 char:         char,
+                 desc:         desc   ?? char,
+                 hotkey:       hotkey ?? "",
+                 action:       clickAction,
                  hotkeyAction: hotkeyAction }
     this.m_symbols.Push( element )
   }

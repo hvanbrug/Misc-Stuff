@@ -34,6 +34,9 @@ class CommentsTabPage extends TabPage
     super.RegisterSymbolX( 1, "Thanks for the tip 🥰.",           "", "#!7" )
     super.RegisterSymbolX( 1, "`b, and thanks for the tip 🥰.",   "", "#!8" )
 
+    super.RegisterSymbolX( 1, "You're welcome 😊.",        "", "#!9" )
+    super.RegisterSymbolX( 1, "You're most welcome 🤗.",   "", "#!0" )
+
     ;super.RegisterSymbolX( 1, "", "", "" )
     ;super.RegisterSymbolX( 1, "", "", "" )
   }
