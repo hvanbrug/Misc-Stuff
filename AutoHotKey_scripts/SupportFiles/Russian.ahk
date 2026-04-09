@@ -8,7 +8,7 @@ class RussianTabPage extends TabPage
   __New()
   {
     super.__New( "Russian" )
-    super.SetByCol( 17 )
+    super.SetRowsOf( 17 )
     this .RegisterButtons()
     super.RecalcSizes()
   }
@@ -53,7 +53,7 @@ class RussianTabPage extends TabPage
     super.RegisterSymbolX( 1, "Я", "Uppercase Ya"        )
     super.RegisterSpace()
 
-    super.NextLine()
+    super.ShiftLineByThird()
 
     super.RegisterSymbolX( 1, "а", "Lowercase A"       )
     super.RegisterSymbolX( 1, "б", "Lowercase Be"      )

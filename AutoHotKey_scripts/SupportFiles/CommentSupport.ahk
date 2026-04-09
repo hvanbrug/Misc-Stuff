@@ -15,7 +15,7 @@ class CommentsTabPage extends TabPage
     super.m_symBtnSizeX := 320
     super.m_symBtnSizeY := 24
 
-    super.SetByCol( 2 )
+    super.SetRowsOf( 2 )
     this .RegisterButtons()
     super.RecalcSizes()
   }
@@ -31,9 +31,14 @@ class CommentsTabPage extends TabPage
     super.RegisterSymbolX( 1, "Thanks, I appreciate it 😁.",      "", "#!5" )
     super.RegisterSymbolX( 1, "Thanks, I'm glad you like it 😁.", "", "#!6" )
 
+    super.ShiftLineByThird()
     super.RegisterSymbolX( 1, "Thanks for the tip 🥰.",           "", "#!7" )
     super.RegisterSymbolX( 1, "`b, and thanks for the tip 🥰.",   "", "#!8" )
 
+    super.RegisterSymbolX( 1, "Thanks 😁, I appreciate the tip 🥰.",   "" )
+    super.RegisterSpace()
+
+    super.ShiftLineByThird()
     super.RegisterSymbolX( 1, "You're welcome 😊.",        "", "#!9" )
     super.RegisterSymbolX( 1, "You're most welcome 🤗.",   "", "#!0" )
 

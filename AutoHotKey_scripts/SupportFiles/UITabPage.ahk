@@ -2,35 +2,38 @@ class TabPage
 {
   __New( name )
   {
-    this.m_name          := name
-    this.m_symbols       := []
-    this.m_fontSize      := "s14" ; "s10"
-    this.m_fontName      := "Segoe UI"
-    this.m_hdrHeight     := 24
-    this.m_symOrgX       := 15
-    this.m_symOrgY       := 35
-    this.m_symBtnSizeX   := 35
-    this.m_symBtnSizeY   := 35
-    this.m_symBtnGap     := 3
-    this.m_contentWidth  := 0
-    this.m_contentHeight := 0
-    this.m_destroyed     := false
-    this.m_nextRow       := 1
-    this.m_nextCol       := 1
-    this.m_maxPerLine    := 0
-    this.m_fillHoriz     := false
+    this.m_name           := name
+    this.m_symbols        := []
+    this.m_fontSize       := "s14" ; "s10"
+    this.m_fontName       := "Segoe UI"
+    this.m_hdrHeight      := 24
+    this.m_symOrgX        := 15
+    this.m_symOrgY        := 35
+    this.m_symBtnSizeX    := 35
+    this.m_symBtnSizeY    := 35
+    this.m_symBtnGap      := 3
+    this.m_contentWidth   := 0
+    this.m_contentHeight  := 0
+    this.m_destroyed      := false
+    this.m_nextLine       := 1
+    this.m_nextSlot       := 1
+    this.m_maxSlots       := 0
+    this.m_lineIsRow      := true
+    this.m_lineShift      := 0
   }
 
-  SetByRow( maxRows )
+  SetColsOf( maxRows )
   {
-    this.m_maxPerLine := maxRows
-    this.m_fillHoriz  := false
+    ; Column-primary: line -> X axis, slot -> Y axis.
+    this.m_maxSlots  := maxRows
+    this.m_lineIsRow := false
   }
 
-  SetByCol( maxCols )
+  SetRowsOf( maxCols )
   {
-    this.m_maxPerLine := maxCols
-    this.m_fillHoriz  := true
+    ; Row-primary: line -> Y axis, slot -> X axis.
+    this.m_maxSlots  := maxCols
+    this.m_lineIsRow := true
   }
 
   RecalcSizes()
@@ -40,27 +43,74 @@ class TabPage
 
   MaxPerLine()
   {
-    return this.m_maxPerLine
+    return this.m_maxSlots
   }
 
   SetContentSize()
   {
-    maxCol := 1
-    maxRow := 1
+    maxRight  := 0
+    maxBottom := 0
     for sym in this.m_symbols
     {
-      if( sym.col > maxCol )
+      rightEdge := sym.x + sym.w
+      if( rightEdge > maxRight )
       {
-        maxCol := sym.col
+        maxRight := rightEdge
       }
-      if( sym.row > maxRow )
+      bottomEdge := sym.y + sym.h
+      if( bottomEdge > maxBottom )
       {
-        maxRow := sym.row
+        maxBottom := bottomEdge
       }
     }
 
-    this.m_contentWidth  := maxCol * (this.m_symBtnSizeX + this.m_symBtnGap) + this.m_symBtnGap + 10
-    this.m_contentHeight := maxRow * (this.m_symBtnSizeY + this.m_symBtnGap) + this.m_symBtnGap + 10
+    if( maxRight = 0 )
+    {
+      this.m_contentWidth := this.m_symBtnSizeX + this.m_symBtnGap + 10
+    }
+    else
+    {
+      this.m_contentWidth := maxRight + 1
+    }
+
+    if( maxBottom = 0 )
+    {
+      this.m_contentHeight := this.m_symBtnSizeY + this.m_symBtnGap + 10
+    }
+    else
+    {
+      this.m_contentHeight := (maxBottom - this.m_symOrgY) + this.m_symBtnGap + 10
+    }
+  }
+
+  RowHeight()
+  {
+    return this.m_symBtnSizeY + this.m_symBtnGap
+  }
+
+  ColWidth()
+  {
+    return this.m_symBtnSizeX + this.m_symBtnGap
+  }
+
+  CalcSymbolX( line, slot )
+  {
+    if( this.m_lineIsRow )
+    {
+      return this.m_symOrgX + (slot - 1) * this.ColWidth()
+    }
+
+    return this.m_symOrgX + ((line - 1) + this.m_lineShift) * this.ColWidth()
+  }
+
+  CalcSymbolY( line, slot )
+  {
+    if( this.m_lineIsRow )
+    {
+      return this.m_symOrgY + ((line - 1) + this.m_lineShift) * this.RowHeight()
+    }
+
+    return this.m_symOrgY + (slot - 1) * this.RowHeight()
   }
 
   GetContentWidth( curWidth )
@@ -86,7 +136,6 @@ class TabPage
 
   NormalizeDisplayText( text )
   {
-    ; Render control escapes as visible symbols for tooltips.
     return StrReplace( text, "`b", "⌫" )
   }
 
@@ -115,10 +164,10 @@ class TabPage
         tip .= sym.hotkey
       }
 
-      x   := this.m_symOrgX + (sym.col - 1) * (this.m_symBtnSizeX + this.m_symBtnGap)
-      y   := this.m_symOrgY + (sym.row - 1) * (this.m_symBtnSizeY + this.m_symBtnGap)
-      w   := this.m_symBtnSizeX * sym.width + this.m_symBtnGap * (sym.width - 1)
-      h   := this.m_symBtnSizeY
+      x   := sym.x
+      y   := sym.y
+      w   := sym.w
+      h   := sym.h
       tip := tip
       opt := "x" x " y" y " w" w " h" h
       btn := gui.AddButton( opt, this.NormalizeDisplayText( sym.char ) )
@@ -134,12 +183,31 @@ class TabPage
 
   NextLine()
   {
-    this.RegisterSpace( this.m_maxPerLine )
+    this.m_nextLine++
+    this.m_nextSlot := 1
   }
 
-  RegisterSpace( width := 1 )
+  ShiftLineByHalf( num := 1 )
   {
-    this.WrapRowOrCol( width )
+    this.ShiftLineByFraction( num, 2 )
+  }
+
+  ShiftLineByThird( num := 1 )
+  {
+    this.ShiftLineByFraction( num, 3 )
+  }
+
+  ShiftLineByFraction( numerator := 1, denominator := 2 )
+  {
+    if( denominator != 0 )
+    {
+      this.m_lineShift += numerator / denominator
+    }
+  }
+
+  RegisterSpace( slots := 1 )
+  {
+    this.AdvanceSlot( slots )
   }
 
   RegisterSymbolX( width,
@@ -150,8 +218,8 @@ class TabPage
   {
     if( IsSet( action ) )
     {
-      this.RegisterSymbol( this.m_nextRow,
-                           this.m_nextCol,
+      this.RegisterSymbol( this.m_nextLine,
+                           this.m_nextSlot,
                            width,
                            char,
                            desc   ?? char,
@@ -160,8 +228,8 @@ class TabPage
     }
     else
     {
-      this.RegisterSymbol( this.m_nextRow,
-                           this.m_nextCol,
+      this.RegisterSymbol( this.m_nextLine,
+                           this.m_nextSlot,
                            width,
                            char,
                            desc   ?? char,
@@ -169,15 +237,21 @@ class TabPage
     }
   }
 
-  RegisterSymbol( row,
-                  col,
+  RegisterSymbol( line,
+                  slot,
                   width,
                   char,
                   desc   := unset,
                   hotkey := unset,
                   action := unset )
   {
-    this.WrapRowOrCol( width )
+    x := this.CalcSymbolX( line, slot )
+    y := this.CalcSymbolY( line, slot )
+    w := this.m_symBtnSizeX * width + this.m_symBtnGap * (width - 1)
+    h := this.m_symBtnSizeY
+
+    ; Visual width does not affect logical fill order.
+    this.AdvanceSlot( 1 )
 
     ; Button click action: closure captures char by value, always callable with no args
     charCopy := char
@@ -191,7 +265,8 @@ class TabPage
     }
 
     ; Hotkey action: must be Func or BoundFunc (Hotkey() does not accept Closures)
-    if( IsSet( action ) && (Type( action ) = "Func" || Type( action ) = "BoundFunc") )
+    if( IsSet( action ) && (Type( action ) = "Func" ||
+                            Type( action ) = "BoundFunc") )
     {
       hotkeyAction := action
     }
@@ -200,9 +275,13 @@ class TabPage
       hotkeyAction := TabPage.SendCharFunc.Bind( charCopy )
     }
 
-    element := { row:          row,
-                 col:          col,
+    element := { line:         line,
+                 slot:         slot,
                  width:        width,
+                 x:            x,
+                 y:            y,
+                 w:            w,
+                 h:            h,
                  char:         char,
                  desc:         desc   ?? char,
                  hotkey:       hotkey ?? "",
@@ -216,35 +295,34 @@ class TabPage
     DoSendText( char )
   }
 
-  DbgWrapRowOrCol( msg, width )
+  DbgWrapRowOrCol( msg, slots )
   {
-    ;OutputDebug( "WrapRowOrCol " msg this.m_name " - fillH: " this.m_fillHoriz " - max: " this.m_maxRowsOrCols " - width: " width " - lastRow: " this.m_lastRow " - lastCol: " this.m_lastCol )
+    ;OutputDebug( "AdvanceSlot " msg this.m_name " - lineIsRow: " this.m_lineIsRow " - maxSlots: " this.m_maxSlots " - step: " slots " - line: " this.m_nextLine " - slot: " this.m_nextSlot )
   }
 
-  WrapRowOrCol( width )
+  AdvanceSlot( slots := 1 )
   {
-    this.DbgWrapRowOrCol( "In:  ", width )
-    if( this.m_fillHoriz )
+    this.DbgWrapRowOrCol( "In:  ", slots )
+    if( this.m_maxSlots <= 0 )
     {
-      this.m_nextCol += width
-      if( this.m_nextCol > this.m_maxPerLine )
-      {
-        this.m_nextCol := 1
-        this.m_nextRow++
-        this.DbgWrapRowOrCol( "Rst: ", width )
-      }
+      this.DbgWrapRowOrCol( "Out: ", slots )
+      return
     }
-    else
+
+    if( slots <= 0 )
     {
-      this.m_nextRow += 1
-      if( this.m_nextRow > this.m_maxPerLine )
-      {
-        this.m_nextRow := 1
-        this.m_nextCol++
-        this.DbgWrapRowOrCol( "Rst: ", width )
-      }
+      this.DbgWrapRowOrCol( "Out: ", slots )
+      return
     }
-    this.DbgWrapRowOrCol( "Out: ", width )
+
+    this.m_nextSlot += slots
+    while( this.m_nextSlot > this.m_maxSlots )
+    {
+      this.m_nextSlot -= this.m_maxSlots
+      this.m_nextLine++
+      this.DbgWrapRowOrCol( "Rst: ", slots )
+    }
+    this.DbgWrapRowOrCol( "Out: ", slots )
   }
 
   SymbolClick( action, ctrl, * )

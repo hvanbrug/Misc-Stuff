@@ -9,7 +9,7 @@ class GreekTabPage extends TabPage
   {
     super.__New( "Greek" )
     this .m_leftGap := 2
-    super.SetByCol( 12 + this.m_leftGap )
+    super.SetRowsOf( 12 + this.m_leftGap )
     this .RegisterButtons()
     super.RecalcSizes()
   }
@@ -46,7 +46,7 @@ class GreekTabPage extends TabPage
     super.RegisterSymbolX( 1, "Ψ", "Uppercase Psi"     )
     super.RegisterSymbolX( 1, "Ω", "Uppercase Omega"   )
 
-    super.NextLine()
+    super.ShiftLineByThird()
 
     super.RegisterSpace( this.m_leftGap )
     super.RegisterSymbolX( 1, "α", "Lowercase Alpha"   )
