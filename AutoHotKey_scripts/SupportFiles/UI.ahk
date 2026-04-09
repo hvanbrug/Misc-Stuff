@@ -56,9 +56,9 @@ ShowHelpMenu( startTab )
   }
 
   ; Keep symbol tabs to a bounded viewport so overflow can scroll.
-  TAB_VIEWPORT_SCREEN_MARGIN := 220
-  TAB_VIEWPORT_MAX_HEIGHT    := 230
-  TAB_VIEWPORT_MIN_HEIGHT    := 220
+  TAB_VIEWPORT_SCREEN_MARGIN := 420
+  TAB_VIEWPORT_MAX_HEIGHT    := 430
+  TAB_VIEWPORT_MIN_HEIGHT    := 420
 
   maxTabContentHeight := A_ScreenHeight - TAB_VIEWPORT_SCREEN_MARGIN
   if( maxTabContentHeight > TAB_VIEWPORT_MAX_HEIGHT )
