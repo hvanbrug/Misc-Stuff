@@ -6,7 +6,7 @@ g_HelpActions := []
 g_symbols     := []
 
 ; Global map for tab names
-if !IsSet( g_tabNames )
+if( !IsSet( g_tabNames ) )
 {
   global g_tabNames := Map()
 }
@@ -38,11 +38,27 @@ GetSelectedTextThroughClipboard()
   Send( '^c' )
   CLIP_WAIT_TIMEOUT_SEC := 1
   CLIP_WAIT_ANY_DATA    := 1
-  if !ClipWait( CLIP_WAIT_TIMEOUT_SEC, CLIP_WAIT_ANY_DATA )
+  if( !ClipWait( CLIP_WAIT_TIMEOUT_SEC, CLIP_WAIT_ANY_DATA ) )
   {
     return (A_Clipboard := backup)
   }
   txt := A_Clipboard
   A_Clipboard := backup
   return txt
+}
+
+CreateButton( text, tip, x, y, w, h, func )
+{
+  global g_gui
+  global g_tipMap
+  global g_fontSize
+  global g_fontName
+
+  g_gui.SetFont( "s14", "Segoe UI Emoji" )
+  btn := g_gui.AddButton( "x" x " y" y " w" w " h" h, text )
+  btn.OnEvent( "Click", func )
+  g_tipMap[btn.Hwnd] := tip
+  g_gui.SetFont( g_fontSize " norm", g_fontName )
+
+  return btn
 }

@@ -21,7 +21,7 @@ class EmojisTabPage extends TabPage
   ; Insert a visual gap between categories.
   CategoryGap()
   {
-    super.NextLine()
+    super.NextLine( true )
     super.ShiftLineByHalf()
   }
 

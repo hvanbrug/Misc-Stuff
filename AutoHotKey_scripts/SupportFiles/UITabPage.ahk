@@ -1,5 +1,7 @@
 class TabPage
 {
+  static m_globalHotkeyMap := Map()
+
   __New( name )
   {
     this.m_name           := name
@@ -21,9 +23,16 @@ class TabPage
     this.m_lineIsRow      := true
     this.m_lineShift      := 0
     this.m_scrollY        := 0
+    this.m_scrollTargetY  := 0
     this.m_viewportHeight := 0
+    this.m_symbolsByY     := []
+    this.m_visibleStart   := 0
+    this.m_visibleEnd     := 0
 
     this.m_guiHwnd          := 0
+    this.m_tabHwnd          := 0
+    this.m_scrollFlushMs    := 16
+    this.m_scrollFlushFn    := ObjBindMethod( this, "OnScrollFlush" )
     this.m_redrawWatchdogMs := 20
     this.m_redrawWatchdogFn := ObjBindMethod( this, "OnRedrawWatchdog" )
   }
@@ -145,10 +154,69 @@ class TabPage
     return StrReplace( text, "`b", "⌫" )
   }
 
+  RegisterHotkeyBinding( hk, hotkeyAction, fallbackChar := "" )
+  {
+    if( hk = "" )
+    {
+      return
+    }
+
+    if( TabPage.m_globalHotkeyMap.Has( hk ) )
+    {
+      return
+    }
+
+    if( (Type( hotkeyAction ) != "Func")      &&
+        (Type( hotkeyAction ) != "BoundFunc") &&
+        (Type( hotkeyAction ) != "Closure") )
+    {
+      fb := fallbackChar
+      hotkeyAction := ( * ) => DoSendText( fb )
+    }
+
+    try
+    {
+      Hotkey( hk, hotkeyAction )
+      TabPage.m_globalHotkeyMap[hk] := this.m_name
+      return
+    }
+    catch Error as err
+    {
+      MsgBox( "Hotkey registration failed [" hk "] in tab [" this.m_name "]: " err.Message )
+    }
+  }
+
+  BuildSymbolsByY()
+  {
+    sortedSymbols := []
+
+    for sym in this.m_symbols
+    {
+      insertAt := sortedSymbols.Length + 1
+      idx      := 1
+      while( idx <= sortedSymbols.Length )
+      {
+        if( sym.y < sortedSymbols[idx].y )
+        {
+          insertAt := idx
+          break
+        }
+
+        idx++
+      }
+
+      sortedSymbols.InsertAt( insertAt, sym )
+    }
+
+    this.m_symbolsByY := sortedSymbols
+  }
+
   AddControls( gui, tabs, tabIdx, tipMap )
   {
-    this.m_scrollY := 0
-    this.m_guiHwnd := gui.Hwnd
+    this.m_scrollY       := 0
+    this.m_scrollTargetY := 0
+    this.m_guiHwnd       := gui.Hwnd
+    this.m_tabHwnd       := tabs.Hwnd
 
     gui.SetFont( this.m_fontSize, this.m_fontName )
 
@@ -165,7 +233,6 @@ class TabPage
       }
       if( sym.hotkey != "" )
       {
-        Hotkey( sym.hotkey, sym.hotkeyAction )
         if( tip != "" )
         {
           tip .= "`n"
@@ -179,6 +246,10 @@ class TabPage
       h   := sym.h
       tip := tip
       opt := "x" x " y" y " w" w " h" h
+      if( sym.align = "left" )
+      {
+        opt .= " Left"
+      }
       btn := gui.AddButton( opt, this.NormalizeDisplayText( sym.char ) )
       btn.SetFont( this.m_fontSize, this.m_fontName )
       sym.ctrl := btn
@@ -190,12 +261,18 @@ class TabPage
       btn.OnEvent( "Click", handler )
     }
 
+    this.m_visibleStart := 0
+    this.m_visibleEnd   := 0
+    this.BuildSymbolsByY()
+
     this.ApplyScrollPosition()
   }
 
   SetViewportHeight( viewportHeight )
   {
     this.m_viewportHeight := viewportHeight
+    this.m_scrollTargetY  := this.ClampScrollY( this.m_scrollTargetY )
+    this.m_scrollY        := this.ClampScrollY( this.m_scrollY )
   }
 
   MaxScrollY()
@@ -212,6 +289,42 @@ class TabPage
     }
 
     return maxScroll
+  }
+
+  GetScrollY()
+  {
+    return this.m_scrollY
+  }
+
+  GetScrollTargetY()
+  {
+    return this.m_scrollTargetY
+  }
+
+  GetViewportHeight()
+  {
+    return this.m_viewportHeight
+  }
+
+  SetScrollY( scrollY, immediate := true )
+  {
+    newScrollY := this.ClampScrollY( scrollY )
+    if( newScrollY = this.m_scrollTargetY )
+    {
+      return false
+    }
+
+    this.m_scrollTargetY := newScrollY
+    if( immediate )
+    {
+      this.FlushScrollNow()
+    }
+    else
+    {
+      this.QueueScrollFlush()
+    }
+
+    return true
   }
 
   ClampScrollY( scrollY )
@@ -231,22 +344,95 @@ class TabPage
 
   ScrollByPixels( deltaY )
   {
-    newScrollY := this.ClampScrollY( this.m_scrollY + deltaY )
-    if( newScrollY = this.m_scrollY )
+    newScrollY := this.ClampScrollY( this.m_scrollTargetY + deltaY )
+    if( newScrollY = this.m_scrollTargetY )
     {
       return false
     }
 
-    this.m_scrollY := newScrollY
-    this.ApplyScrollPosition()
-    this.QueueRedrawWatchdog()
+    this.m_scrollTargetY := newScrollY
+    this.QueueScrollFlush()
     return true
   }
 
   ResetScroll()
   {
     this.m_scrollY := 0
+    this.m_scrollTargetY := 0
     this.ApplyScrollPosition()
+  }
+
+  QueueScrollFlush()
+  {
+    if( this.m_destroyed )
+    {
+      return
+    }
+
+    ; One-shot flush: repeated wheel events coalesce into one repaint.
+    SetTimer( this.m_scrollFlushFn, -this.m_scrollFlushMs )
+  }
+
+  FlushScrollNow()
+  {
+    SetTimer( this.m_scrollFlushFn, 0 )
+    if( this.m_scrollY != this.m_scrollTargetY )
+    {
+      this.m_scrollY := this.m_scrollTargetY
+      this.ApplyScrollPosition()
+      this.RequestViewportRedraw()
+    }
+  }
+
+  OnScrollFlush()
+  {
+    if( this.m_destroyed )
+    {
+      return
+    }
+
+    if( this.m_scrollY = this.m_scrollTargetY )
+    {
+      return
+    }
+
+    ; Interpolate toward the target for smooth scrolling.
+    diff := this.m_scrollTargetY - this.m_scrollY
+    LERP_FACTOR := 0.35
+    SNAP_THRESHOLD := 1
+    if( Abs( diff ) <= SNAP_THRESHOLD )
+    {
+      this.m_scrollY := this.m_scrollTargetY
+    }
+    else
+    {
+      this.m_scrollY := Round( this.m_scrollY + diff * LERP_FACTOR )
+    }
+
+    this.ApplyScrollPosition()
+
+    ; Continue animating if we haven't reached the target yet.
+    if( this.m_scrollY != this.m_scrollTargetY )
+    {
+      SetTimer( this.m_scrollFlushFn, -this.m_scrollFlushMs )
+    }
+  }
+
+  RequestViewportRedraw()
+  {
+    if( this.m_guiHwnd = 0 )
+    {
+      return
+    }
+
+    ; Invalidate the GUI and all child controls so buttons repaint at new positions.
+    ; WS_CLIPCHILDREN on the GUI prevents background erase from covering buttons.
+    ; RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN = 0x0105
+    DllCall( "RedrawWindow",
+             "ptr", this.m_guiHwnd,
+             "ptr", 0,
+             "ptr", 0,
+             "uint", 0x0105 )
   }
 
   IsSymbolVisibleInViewport( y, h )
@@ -266,33 +452,135 @@ class TabPage
 
   ApplyScrollPosition()
   {
-    for sym in this.m_symbols
+    ; No viewport clipping requested: keep all controls in sync.
+    if( this.m_viewportHeight <= 0 )
     {
-      if( !sym.HasOwnProp( "ctrl" ) )
+      for sym in this.m_symbols
       {
-        continue
+        if( !sym.HasOwnProp( "ctrl" ) )
+        {
+          continue
+        }
+
+        ctrl := sym.ctrl
+        if( !IsSet( ctrl ) )
+        {
+          continue
+        }
+
+        y := sym.y - this.m_scrollY
+        shouldMove := (!sym.HasOwnProp( "renderY" )) ||
+                      (sym.renderY != y)
+        if( shouldMove )
+        {
+          ctrl.Move( sym.x,
+                     y,
+                     sym.w,
+                     sym.h )
+          sym.renderY := y
+        }
+
+        if( (!sym.HasOwnProp( "visible" )) ||
+            (!sym.visible) )
+        {
+          ctrl.Opt( "-Hidden" )
+          sym.visible := true
+        }
       }
 
-      ctrl := sym.ctrl
-      if( !IsSet( ctrl ) )
-      {
-        continue
-      }
+      return
+    }
 
-      y := sym.y - this.m_scrollY
-      if( this.IsSymbolVisibleInViewport( y, sym.h ) )
+    topBase    := this.m_symOrgY + this.m_scrollY
+    bottomBase := this.m_symOrgY + this.m_viewportHeight + this.m_scrollY
+
+    ; Include buttons that are partially visible at the top or bottom edge.
+    ; A button is visible if any part of it overlaps the viewport, i.e.
+    ;   sym.y + sym.h > topBase  AND  sym.y < bottomBase
+    ; The startIdx/endIdx searches below use these relaxed bounds.
+
+    n := this.m_symbolsByY.Length
+    if( n = 0 )
+    {
+      return
+    }
+
+    ; Find first symbol whose bottom edge is past the viewport top.
+    startIdx := 1
+    while( (startIdx <= n) &&
+           ((this.m_symbolsByY[startIdx].y + this.m_symbolsByY[startIdx].h) <= topBase) )
+    {
+      startIdx++
+    }
+
+    ; Find last symbol whose top edge is before the viewport bottom.
+    endIdx := n
+    while( (endIdx >= startIdx) &&
+           (this.m_symbolsByY[endIdx].y >= bottomBase) )
+    {
+      endIdx--
+    }
+
+    ; --- Hide buttons that scrolled out of view ---
+    oldStart := this.m_visibleStart
+    oldEnd   := this.m_visibleEnd
+    if( (oldStart >= 1) && (oldEnd >= oldStart) )
+    {
+      i := oldStart
+      while( i <= oldEnd )
       {
-        ctrl.Move( sym.x,
-                   y,
-                   sym.w,
-                   sym.h )
-        ctrl.Opt( "-Hidden" )
-      }
-      else
-      {
-        ctrl.Opt( "Hidden" )
+        if( (i < startIdx) || (i > endIdx) )
+        {
+          sym := this.m_symbolsByY[i]
+          if( sym.HasOwnProp( "ctrl" ) )
+          {
+            ctrl := sym.ctrl
+            if( IsSet( ctrl ) &&
+                ((!sym.HasOwnProp( "visible" )) || (sym.visible)) )
+            {
+              ctrl.Opt( "Hidden" )
+              sym.visible := false
+            }
+          }
+        }
+
+        i++
       }
     }
+
+    ; --- Move and show visible buttons ---
+    if( (startIdx >= 1) && (startIdx <= endIdx) )
+    {
+      i := startIdx
+      while( i <= endIdx )
+      {
+        sym := this.m_symbolsByY[i]
+        if( sym.HasOwnProp( "ctrl" ) )
+        {
+          ctrl := sym.ctrl
+          if( IsSet( ctrl ) )
+          {
+            y := sym.y - this.m_scrollY
+            if( (!sym.HasOwnProp( "renderY" )) || (sym.renderY != y) )
+            {
+              ctrl.Move( sym.x, y, sym.w, sym.h )
+              sym.renderY := y
+            }
+
+            if( (!sym.HasOwnProp( "visible" )) || (!sym.visible) )
+            {
+              ctrl.Opt( "-Hidden" )
+              sym.visible := true
+            }
+          }
+        }
+
+        i++
+      }
+    }
+
+    this.m_visibleStart := startIdx
+    this.m_visibleEnd   := endIdx
   }
 
   QueueRedrawWatchdog()
@@ -321,15 +609,18 @@ class TabPage
     ; Invalidate only and let Windows batch repaint to reduce flashing.
     redrawFlags := 0x0001 | 0x0080
     DllCall( "RedrawWindow",
-             "ptr", this.m_guiHwnd,
-             "ptr", 0,
-             "ptr", 0,
+             "ptr",  this.m_guiHwnd,
+             "ptr",  0,
+             "ptr",  0,
              "uint", redrawFlags )
   }
 
-  NextLine()
+  NextLine( testForEOL := false )
   {
-    this.m_nextLine++
+    if( !testForEOL || (this.m_nextSlot > 1) )
+    {
+      this.m_nextLine++
+    }
     this.m_nextSlot := 1
   }
 
@@ -360,7 +651,8 @@ class TabPage
                    char,
                    desc   := unset,
                    hotkey := unset,
-                   action := unset )
+                   action := unset,
+                   align  := "center" )
   {
     if( IsSet( action ) )
     {
@@ -370,7 +662,8 @@ class TabPage
                            char,
                            desc   ?? char,
                            hotkey ?? "",
-                           action )
+                           action,
+                           align )
     }
     else
     {
@@ -379,7 +672,9 @@ class TabPage
                            width,
                            char,
                            desc   ?? char,
-                           hotkey ?? "" )
+                           hotkey ?? "",
+                           unset,
+                           align )
     }
   }
 
@@ -389,7 +684,8 @@ class TabPage
                   char,
                   desc   := unset,
                   hotkey := unset,
-                  action := unset )
+                  action := unset,
+                  align  := "center" )
   {
     x := this.CalcSymbolX( line, slot )
     y := this.CalcSymbolY( line, slot )
@@ -399,26 +695,36 @@ class TabPage
     ; Visual width does not affect logical fill order.
     this.AdvanceSlot( 1 )
 
-    ; Button click action: closure captures char by value, always callable with no args
-    charCopy := char
+    ; Resolve optional actions only when already callable.
+    resolvedAction := unset
     if( IsSet( action ) )
     {
-      clickAction := action
+      if( this.IsAFunction( action ) )
+      {
+        resolvedAction := action
+      }
+    }
+
+    ; Button click action: closure captures char by value, always callable with no args.
+    charCopy := char
+    if( IsSet( resolvedAction ) && this.IsAFunction( resolvedAction ) )
+    {
+      clickAction := resolvedAction
     }
     else
     {
       clickAction := () => DoSendText( charCopy )
     }
 
-    ; Hotkey action: must be Func or BoundFunc (Hotkey() does not accept Closures)
-    if( IsSet( action ) && (Type( action ) = "Func" ||
-                            Type( action ) = "BoundFunc") )
+    ; Hotkey action: closure captures char, accepts the hotkey-name arg via *.
+    if( IsSet( resolvedAction ) && this.IsAFunction( resolvedAction ) )
     {
-      hotkeyAction := action
+      hotkeyAction := resolvedAction
     }
     else
     {
-      hotkeyAction := TabPage.SendCharFunc.Bind( charCopy )
+      cc := charCopy
+      hotkeyAction := ( * ) => DoSendText( cc )
     }
 
     element := { line:         line,
@@ -431,14 +737,12 @@ class TabPage
                  char:         char,
                  desc:         desc   ?? char,
                  hotkey:       hotkey ?? "",
+                 align:        align,
                  action:       clickAction,
                  hotkeyAction: hotkeyAction }
     this.m_symbols.Push( element )
-  }
 
-  static SendCharFunc( char )
-  {
-    DoSendText( char )
+    this.RegisterHotkeyBinding( hotkey ?? "", hotkeyAction, charCopy )
   }
 
   DbgWrapRowOrCol( msg, slots )
@@ -486,6 +790,7 @@ class TabPage
     }
     this.m_destroyed := true
 
+    SetTimer( this.m_scrollFlushFn,    0 )
     SetTimer( this.m_redrawWatchdogFn, 0 )
 
     if( IsObject( this.m_symbols ) )
