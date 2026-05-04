@@ -153,7 +153,7 @@ ShowHelpMenu( startTab )
   ; Force classic scrollbar appearance so it stays visible instead of auto-hiding.
   DllCall( "uxtheme\SetWindowTheme", "Ptr", g_tabScrollHwnd, "Str", "", "Str", "" )
 
-  OnMessage( 0x0115, HelpMenu_VScroll )  ; WM_VSCROLL
+  OnMessage( 0x0115, VScroll )  ; WM_VSCROLL
 
   for tabIndex, tab in g_uiTabs
   {
@@ -163,8 +163,8 @@ ShowHelpMenu( startTab )
 
   g_gui.SetFont( g_fontSize " norm", g_fontName )
 
-  SetTimer( HelpMenu_HoverCheck, 100 )
-  SetTimer( HelpMenu_TrackActiveWindow, 100 )
+  SetTimer( HoverCheck, 100 )
+  SetTimer( TrackActiveWindow, 100 )
 
 
   ; Colored header bar using a Progress control as background
@@ -193,17 +193,17 @@ ShowHelpMenu( startTab )
   }
 
 
-  g_LV.OnEvent(   "DoubleClick", HelpMenu_RowAction      )
-  g_gui.OnEvent(  "Escape",      (*) => HelpMenu_Close() )
-  g_gui.OnEvent(  "Close",       (*) => HelpMenu_Close() )
-  g_tabs.OnEvent( "Change",      HelpMenu_TabChanged     )
+  g_LV.OnEvent(   "DoubleClick", RowAction      )
+  g_gui.OnEvent(  "Escape",      (*) => Close() )
+  g_gui.OnEvent(  "Close",       (*) => Close() )
+  g_tabs.OnEvent( "Change",      TabChanged     )
 
   ; Use low-level mouse hook hotkeys to intercept wheel events before Windows
   ; routes them to any window.  OnMessage(WM_MOUSEWHEEL) only sees messages
   ; for our own window; the window beneath receives its own copy and scrolls.
-  HotIf HelpMenu_IsMouseOverGui
-  Hotkey "WheelUp",   HelpMenu_WheelUpHandler,   "On"
-  Hotkey "WheelDown", HelpMenu_WheelDownHandler, "On"
+  HotIf IsMouseOverGui
+  Hotkey "WheelUp",   WheelUpHandler,   "On"
+  Hotkey "WheelDown", WheelDownHandler, "On"
   HotIf
 
   if( (startTab < 1) ||
@@ -212,7 +212,7 @@ ShowHelpMenu( startTab )
     startTab := 1
   }
   g_tabs.Value := startTab
-  HelpMenu_UpdateScrollInfo()
+  UpdateScrollInfo()
 
   ; Bring scrollbar to top of z-order so tab buttons don't steal mouse events from it.
   SWP_NOMOVE := 0x0002, SWP_NOSIZE := 0x0001, SWP_NOACTIVATE := 0x0010
@@ -229,7 +229,7 @@ ShowHelpMenu( startTab )
   CreateButton( "", "Repaint / Refresh",
                 "Segoe UI Symbol", "s10",
                 rightEdge - 80 - buttonGap, 0, 40, 24,
-                (*) => HelpMenu_ForceRepaint() )
+                (*) => ForceRepaint() )
 
   CreateButton( "↩", "Enter / Newline",
                 "Segoe UI Symbol", "s14",
@@ -237,10 +237,10 @@ ShowHelpMenu( startTab )
                 (*) => DoSendText( "`n" ) )
 
   g_gui.Show()
-  HelpMenu_RedrawScrollbar()
+  RedrawScrollbar()
 }
 
-HelpMenu_ForceRepaint()
+ForceRepaint()
 {
   global g_gui
   global g_tabs
@@ -267,10 +267,10 @@ HelpMenu_ForceRepaint()
            "ptr",  0,
            "uint", 0x0185 )
 
-  HelpMenu_RedrawScrollbar()
+  RedrawScrollbar()
 }
 
-HelpMenu_RedrawScrollbar()
+RedrawScrollbar()
 {
   global g_tabScrollHwnd
   if( !g_tabScrollHwnd )
@@ -282,20 +282,20 @@ HelpMenu_RedrawScrollbar()
   DllCall( "RedrawWindow", "Ptr", g_tabScrollHwnd, "Ptr", 0, "Ptr", 0, "UInt", 0x0109 )
 }
 
-HelpMenu_Close()
+Close()
 {
   global g_gui
   global g_tabScrollHwnd
   global g_activeWindow
   g_activeWindow  := unset
   g_tabScrollHwnd := 0
-  OnMessage( 0x0115, HelpMenu_VScroll, 0 )
-  HotIf HelpMenu_IsMouseOverGui
+  OnMessage( 0x0115, VScroll, 0 )
+  HotIf IsMouseOverGui
   Hotkey "WheelUp",   "Off"
   Hotkey "WheelDown", "Off"
   HotIf
-  SetTimer( HelpMenu_HoverCheck, 0 )
-  SetTimer( HelpMenu_TrackActiveWindow, 0 )
+  SetTimer( HoverCheck, 0 )
+  SetTimer( TrackActiveWindow, 0 )
   ToolTip()
   if g_gui
   {
@@ -304,7 +304,7 @@ HelpMenu_Close()
   g_gui := ""
 }
 
-HelpMenu_TabChanged( ctrl, * )
+TabChanged( ctrl, * )
 {
   global g_uiTabs
   global g_tabScrollHwnd
@@ -315,18 +315,18 @@ HelpMenu_TabChanged( ctrl, * )
     g_uiTabs[tabIndex].FlushScrollNow()
   }
 
-  HelpMenu_UpdateScrollInfo()
+  UpdateScrollInfo()
 
   ; Re-raise scrollbar above tab content that was just repainted.
   ; Use a short deferred timer because the tab control repaints asynchronously
   ; after the Change event, which can bury the scrollbar again.
   if( g_tabScrollHwnd )
   {
-    SetTimer( HelpMenu_DeferredScrollbarRaise, -30 )
+    SetTimer( DeferredScrollbarRaise, -30 )
   }
 }
 
-HelpMenu_DeferredScrollbarRaise()
+DeferredScrollbarRaise()
 {
   global g_tabScrollHwnd
   if( !g_tabScrollHwnd )
@@ -338,10 +338,10 @@ HelpMenu_DeferredScrollbarRaise()
   DllCall( "SetWindowPos", "Ptr", g_tabScrollHwnd, "Ptr", 0,
            "Int", 0, "Int", 0, "Int", 0, "Int", 0,
            "UInt", SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE )
-  HelpMenu_RedrawScrollbar()
+  RedrawScrollbar()
 }
 
-HelpMenu_VScroll( wParam, lParam, msg, hwnd )
+VScroll( wParam, lParam, msg, hwnd )
 {
   global g_tabs
   global g_uiTabs
@@ -419,12 +419,12 @@ HelpMenu_VScroll( wParam, lParam, msg, hwnd )
     return
   }
 
-  HelpMenu_UpdateScrollInfo()
+  UpdateScrollInfo()
   ToolTip()
   return 0
 }
 
-HelpMenu_UpdateScrollInfo()
+UpdateScrollInfo()
 {
   global g_tabs
   global g_uiTabs
@@ -477,10 +477,10 @@ HelpMenu_UpdateScrollInfo()
 
   ; SB_CTL = 2 (required for standalone scrollbar controls)
   DllCall( "SetScrollInfo", "Ptr", g_tabScrollHwnd, "Int", 2, "Ptr", si.Ptr, "Int", true )
-  HelpMenu_RedrawScrollbar()
+  RedrawScrollbar()
 }
 
-HelpMenu_IsMouseOverGui( * )
+IsMouseOverGui( * )
 {
   global g_gui
   if( !IsSet( g_gui ) || !IsObject( g_gui ) )
@@ -492,17 +492,17 @@ HelpMenu_IsMouseOverGui( * )
   return (winHwnd = g_gui.Hwnd)
 }
 
-HelpMenu_WheelUpHandler( * )
+WheelUpHandler( * )
 {
-  HelpMenu_DoWheel( -1 )
+  DoWheel( -1 )
 }
 
-HelpMenu_WheelDownHandler( * )
+WheelDownHandler( * )
 {
-  HelpMenu_DoWheel( 1 )
+  DoWheel( 1 )
 }
 
-HelpMenu_DoWheel( direction )
+DoWheel( direction )
 {
   global g_tabs
   global g_uiTabs
@@ -546,12 +546,12 @@ HelpMenu_DoWheel( direction )
   scrollBy       := direction * pixelsPerNotch
   if( tab.ScrollByPixels( scrollBy ) )
   {
-    HelpMenu_UpdateScrollInfo()
+    UpdateScrollInfo()
     ToolTip()
   }
 }
 
-HelpMenu_HoverCheck()
+HoverCheck()
 {
   global g_tipMap
   static prevHwnd := 0
@@ -571,7 +571,7 @@ HelpMenu_HoverCheck()
   }
 }
 
-HelpMenu_TrackActiveWindow()
+TrackActiveWindow()
 {
   global g_activeWindow
   global g_gui
@@ -590,14 +590,14 @@ HelpMenu_TrackActiveWindow()
   g_activeWindow := hwnd
 }
 
-HelpMenu_SymbolClick( action, ctrl, * )
+SymbolClick( action, ctrl, * )
 {
-  HelpMenu_Close()
+  Close()
   Sleep( 150 )
   action.Call()
 }
 
-HelpMenu_RowAction( ctrl, rowNum )
+RowAction( ctrl, rowNum )
 {
   global g_HelpActions
   if rowNum = 0
@@ -612,7 +612,7 @@ HelpMenu_RowAction( ctrl, rowNum )
             "Icon!" )
     return
   }
-  HelpMenu_Close()
+  Close()
   Sleep( 150 )
   entry.action.Call()
 }

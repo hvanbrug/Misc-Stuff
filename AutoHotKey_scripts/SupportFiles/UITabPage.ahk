@@ -798,7 +798,7 @@ class TabPage
 
   SymbolClick( action, ctrl, * )
   {
-    ;HelpMenu_Close()
+    ;Close()
     Sleep( 150 )
     action.Call()
   }
