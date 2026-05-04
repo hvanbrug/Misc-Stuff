@@ -591,14 +591,17 @@ class TabPage
       }
     }
 
-    ; Re-enable drawing and force a single full repaint.
+    ; Re-enable drawing and invalidate for an async repaint.
+    ; Avoid RDW_UPDATENOW here: a synchronous repaint of all children blocks
+    ; AHK's message pump, which can cause the low-level mouse hook to time
+    ; out and let wheel events leak through to the window beneath.
     DllCall( "SendMessageW", "ptr", guiHwnd, "uint", WM_SETREDRAW, "ptr", 1, "ptr", 0 )
-    ; RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN = 0x0185
+    ; RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN = 0x0085
     DllCall( "RedrawWindow",
              "ptr",  guiHwnd,
              "ptr",  0,
              "ptr",  0,
-             "uint", 0x0185 )
+             "uint", 0x0085 )
 
     this.m_visibleStart := startIdx
     this.m_visibleEnd   := endIdx

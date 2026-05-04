@@ -10,6 +10,10 @@ g_HeaderDesc     := ""
 g_HeaderBg       := ""
 g_tabs           := ""
 g_activeWindow   := unset
+g_wheelPendingSteps   := 0
+g_wheelFlushScheduled := false
+g_mouseWheelHook      := 0
+g_mouseWheelHookProc  := 0
 
 ; ── Constants from ShowWindow ──
 g_fontSize      := "s10"

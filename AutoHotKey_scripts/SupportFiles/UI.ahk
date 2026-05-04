@@ -18,6 +18,7 @@ ShowWindow( startTab )
   global g_tabNames
   global g_tabs
   global g_tabScrollHwnd
+  global g_guiHwndRaw
   global g_fontSize
   global g_fontName
 
@@ -198,13 +199,8 @@ ShowWindow( startTab )
   g_gui.OnEvent(  "Close",       (*) => Close() )
   g_tabs.OnEvent( "Change",      TabChanged     )
 
-  ; Use low-level mouse hook hotkeys to intercept wheel events before Windows
-  ; routes them to any window.  OnMessage(WM_MOUSEWHEEL) only sees messages
-  ; for our own window; the window beneath receives its own copy and scrolls.
-  HotIf IsMouseOverGui
-  Hotkey "WheelUp",   WheelUpHandler,   "On"
-  Hotkey "WheelDown", WheelDownHandler, "On"
-  HotIf
+  g_guiHwndRaw := g_gui.Hwnd
+  InstallWheelHook()
 
   if( (startTab < 1) ||
       (startTab > tabList.Length) )
@@ -285,15 +281,18 @@ RedrawScrollbar()
 Close()
 {
   global g_gui
+  global g_guiHwndRaw
   global g_tabScrollHwnd
   global g_activeWindow
+  global g_wheelPendingSteps
+  global g_wheelFlushScheduled
   g_activeWindow  := unset
   g_tabScrollHwnd := 0
   OnMessage( 0x0115, VScroll, 0 )
-  HotIf IsMouseOverGui
-  Hotkey "WheelUp",   "Off"
-  Hotkey "WheelDown", "Off"
-  HotIf
+  RemoveWheelHook()
+  g_guiHwndRaw := 0
+  g_wheelPendingSteps := 0
+  g_wheelFlushScheduled := false
   SetTimer( HoverCheck, 0 )
   SetTimer( TrackActiveWindow, 0 )
   ToolTip()
@@ -480,7 +479,63 @@ UpdateScrollInfo()
   RedrawScrollbar()
 }
 
-IsMouseOverGui( * )
+WheelUpHandler( * )
+{
+  if( IsCursorOverGuiRoot() )
+  {
+    QueueWheel( -1 )
+    return
+  }
+
+  ; Cursor is not over our GUI — re-send so the target window gets it.
+  ; Synthetic events at SendLevel 0 won't retrigger our InputLevel 0 hotkey.
+  Send( "{WheelUp}" )
+}
+
+WheelDownHandler( * )
+{
+  if( IsCursorOverGuiRoot() )
+  {
+    QueueWheel( 1 )
+    return
+  }
+
+  Send( "{WheelDown}" )
+}
+
+QueueWheel( stepDelta )
+{
+  global g_wheelPendingSteps
+  global g_wheelFlushScheduled
+
+  g_wheelPendingSteps += stepDelta
+  if( g_wheelFlushScheduled )
+  {
+    return
+  }
+
+  g_wheelFlushScheduled := true
+  ; Run scroll work outside the hotkey hook callback to avoid hook timeouts.
+  SetTimer( FlushQueuedWheel, -1 )
+}
+
+FlushQueuedWheel()
+{
+  global g_wheelPendingSteps
+  global g_wheelFlushScheduled
+
+  stepDelta := g_wheelPendingSteps
+  g_wheelPendingSteps := 0
+  g_wheelFlushScheduled := false
+  if( stepDelta = 0 )
+  {
+    return
+  }
+
+  DoWheel( stepDelta )
+}
+
+IsCursorOverGuiRoot()
 {
   global g_gui
   if( !IsSet( g_gui ) || !IsObject( g_gui ) )
@@ -488,24 +543,119 @@ IsMouseOverGui( * )
     return false
   }
 
-  MouseGetPos( , , &winHwnd )
-  return (winHwnd = g_gui.Hwnd)
+  ; Get both the window and control under cursor as HWNDs.
+  MouseGetPos( , , &winHwnd, &ctrlHwnd, 2 )
+  hitHwnd := ctrlHwnd ? ctrlHwnd : winHwnd
+  if( !hitHwnd )
+  {
+    return false
+  }
+
+  GA_ROOT := 2
+  rootHwnd := DllCall( "GetAncestor", "Ptr", hitHwnd, "UInt", GA_ROOT, "Ptr" )
+  return (rootHwnd = g_gui.Hwnd)
 }
 
-WheelUpHandler( * )
+InstallWheelHook()
 {
-  DoWheel( -1 )
+  global g_mouseWheelHook
+  global g_mouseWheelHookProc
+
+  if( g_mouseWheelHook )
+  {
+    return
+  }
+
+  if( !g_mouseWheelHookProc )
+  {
+    g_mouseWheelHookProc := CallbackCreate( LowLevelMouseProc, "Fast" )
+  }
+
+  WH_MOUSE_LL := 14
+  hModule := DllCall( "GetModuleHandle", "Ptr", 0, "Ptr" )
+  g_mouseWheelHook := DllCall( "SetWindowsHookEx",
+                               "Int",  WH_MOUSE_LL,
+                               "Ptr",  g_mouseWheelHookProc,
+                               "Ptr",  hModule,
+                               "UInt", 0,
+                               "Ptr" )
 }
 
-WheelDownHandler( * )
+RemoveWheelHook()
 {
-  DoWheel( 1 )
+  global g_mouseWheelHook
+  global g_mouseWheelHookProc
+
+  if( g_mouseWheelHook )
+  {
+    DllCall( "UnhookWindowsHookEx", "Ptr", g_mouseWheelHook )
+    g_mouseWheelHook := 0
+  }
+
+  if( g_mouseWheelHookProc )
+  {
+    CallbackFree( g_mouseWheelHookProc )
+    g_mouseWheelHookProc := 0
+  }
+}
+
+LowLevelMouseProc( nCode, wParam, lParam )
+{
+  global g_guiHwndRaw
+
+  if( nCode < 0 )
+  {
+    return DllCall( "CallNextHookEx", "Ptr", 0, "Int", nCode, "UPtr", wParam, "UPtr", lParam, "Ptr" )
+  }
+
+  WM_MOUSEWHEEL := 0x020A
+  if( !g_guiHwndRaw || (wParam != WM_MOUSEWHEEL) )
+  {
+    return DllCall( "CallNextHookEx", "Ptr", 0, "Int", nCode, "UPtr", wParam, "UPtr", lParam, "Ptr" )
+  }
+
+  ; MSLLHOOKSTRUCT starts with POINT {x, y} in screen coords.
+  mx := NumGet( lParam, 0, "Int" )
+  my := NumGet( lParam, 4, "Int" )
+
+  ; Treat any wheel event inside the GUI window rect as belonging to our UI.
+  ; This avoids WindowFromPoint/root resolution edge cases on child controls.
+  rect := Buffer( 16, 0 )
+  if( !DllCall( "GetWindowRect", "Ptr", g_guiHwndRaw, "Ptr", rect, "Int" ) )
+  {
+    return DllCall( "CallNextHookEx", "Ptr", 0, "Int", nCode, "UPtr", wParam, "UPtr", lParam, "Ptr" )
+  }
+
+  left   := NumGet( rect, 0,  "Int" )
+  top    := NumGet( rect, 4,  "Int" )
+  right  := NumGet( rect, 8,  "Int" )
+  bottom := NumGet( rect, 12, "Int" )
+  if( (mx < left) || (mx >= right) || (my < top) || (my >= bottom) )
+  {
+    return DllCall( "CallNextHookEx", "Ptr", 0, "Int", nCode, "UPtr", wParam, "UPtr", lParam, "Ptr" )
+  }
+
+  mouseData := NumGet( lParam, 8, "UInt" )
+  delta := (mouseData >> 16) & 0xFFFF
+  if( delta >= 0x8000 )
+  {
+    delta -= 0x10000
+  }
+
+  if( delta )
+  {
+    QueueWheel( -(delta / 120) )
+  }
+
+  ; Non-zero return swallows this mouse event system-wide.
+  return 1
 }
 
 DoWheel( direction )
 {
   global g_tabs
   global g_uiTabs
+  global g_tabScrollHwnd
 
   ; Acceleration config
   SCROLL_PIXELS_BASE := 4    ; pixels per notch at rest
@@ -547,6 +697,11 @@ DoWheel( direction )
   if( tab.ScrollByPixels( scrollBy ) )
   {
     UpdateScrollInfo()
+    if( g_tabScrollHwnd )
+    {
+      ; Wheel-driven redraws can briefly bury the standalone scrollbar.
+      SetTimer( DeferredScrollbarRaise, -1 )
+    }
     ToolTip()
   }
 }
