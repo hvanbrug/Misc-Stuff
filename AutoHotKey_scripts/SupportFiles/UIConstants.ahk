@@ -11,7 +11,7 @@ g_HeaderBg       := ""
 g_tabs           := ""
 g_activeWindow   := unset
 
-; ── Constants from ShowHelpMenu ──
+; ── Constants from ShowWindow ──
 g_fontSize      := "s10"
 g_fontName      := "Segoe UI"
 

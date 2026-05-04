@@ -2,12 +2,12 @@
 ; Ctrl + Shift + / => Show Help Menu with all available hotkeys
 ; ═══════════════════════════════════════════════════════════════
 ^+a::ListHotkeys
-^+z::ShowHelpMenu( 1 ) ; Start on the special characters tab
-^+x::ShowHelpMenu( 2 ) ; Start on the emojis tab
-^+c::ShowHelpMenu( 3 ) ; Start on the comments tab
+^+z::ShowWindow( 1 ) ; Start on the special characters tab
+^+x::ShowWindow( 2 ) ; Start on the emojis tab
+^+c::ShowWindow( 3 ) ; Start on the comments tab
 
 
-ShowHelpMenu( startTab )
+ShowWindow( startTab )
 {
   global g_uiTabs
   global g_activeWindow
