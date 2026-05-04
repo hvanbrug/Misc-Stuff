@@ -47,14 +47,14 @@ GetSelectedTextThroughClipboard()
   return txt
 }
 
-CreateButton( text, tip, x, y, w, h, func )
+CreateButton( text, tip, fontName, fontSize, x, y, w, h, func )
 {
   global g_gui
   global g_tipMap
   global g_fontSize
   global g_fontName
 
-  g_gui.SetFont( "s14", "Segoe UI Emoji" )
+  g_gui.SetFont( fontSize, fontName )
   btn := g_gui.AddButton( "x" x " y" y " w" w " h" h, text )
   btn.OnEvent( "Click", func )
   g_tipMap[btn.Hwnd] := tip

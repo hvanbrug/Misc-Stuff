@@ -197,7 +197,14 @@ ShowHelpMenu( startTab )
   g_gui.OnEvent(  "Escape",      (*) => HelpMenu_Close() )
   g_gui.OnEvent(  "Close",       (*) => HelpMenu_Close() )
   g_tabs.OnEvent( "Change",      HelpMenu_TabChanged     )
-  OnMessage(      0x020A,        HelpMenu_MouseWheel     ) ; WM_MOUSEWHEEL
+
+  ; Use low-level mouse hook hotkeys to intercept wheel events before Windows
+  ; routes them to any window.  OnMessage(WM_MOUSEWHEEL) only sees messages
+  ; for our own window; the window beneath receives its own copy and scrolls.
+  HotIf HelpMenu_IsMouseOverGui
+  Hotkey "WheelUp",   HelpMenu_WheelUpHandler,   "On"
+  Hotkey "WheelDown", HelpMenu_WheelDownHandler, "On"
+  HotIf
 
   if( (startTab < 1) ||
       (startTab > tabList.Length) )
@@ -213,15 +220,53 @@ ShowHelpMenu( startTab )
            "Int", 0, "Int", 0, "Int", 0, "Int", 0,
            "UInt", SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE )
 
-  ; Enter button in top-right corner (outside tab context).
+  ; Utility buttons in top-right corner (outside tab context).
   g_tabs.UseTab( 0 )
   rightEdge := tabContentWidth + TAB_SCROLL_W + 16
+  buttonGap := 2
 
-  CreateButton( "⏎", "Enter / Newline",
+; 🔄⏎
+  CreateButton( "", "Repaint / Refresh",
+                "Segoe UI Symbol", "s10",
+                rightEdge - 80 - buttonGap, 0, 40, 24,
+                (*) => HelpMenu_ForceRepaint() )
+
+  CreateButton( "↩", "Enter / Newline",
+                "Segoe UI Symbol", "s14",
                 rightEdge - 40, 0, 40, 24,
                 (*) => DoSendText( "`n" ) )
 
   g_gui.Show()
+  HelpMenu_RedrawScrollbar()
+}
+
+HelpMenu_ForceRepaint()
+{
+  global g_gui
+  global g_tabs
+  global g_uiTabs
+
+  if( !IsSet( g_gui ) || !IsObject( g_gui ) )
+  {
+    return
+  }
+
+  if( IsSet( g_tabs ) && IsObject( g_tabs ) && IsSet( g_uiTabs ) )
+  {
+    tabIndex := g_tabs.Value
+    if( (tabIndex >= 1) && (tabIndex <= g_uiTabs.Length) )
+    {
+      g_uiTabs[tabIndex].ApplyScrollPosition()
+    }
+  }
+
+  ; RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN = 0x0185
+  DllCall( "RedrawWindow",
+           "ptr",  g_gui.Hwnd,
+           "ptr",  0,
+           "ptr",  0,
+           "uint", 0x0185 )
+
   HelpMenu_RedrawScrollbar()
 }
 
@@ -244,8 +289,11 @@ HelpMenu_Close()
   global g_activeWindow
   g_activeWindow  := unset
   g_tabScrollHwnd := 0
-  OnMessage( 0x0115, HelpMenu_VScroll,    0 )
-  OnMessage( 0x020A, HelpMenu_MouseWheel, 0 )
+  OnMessage( 0x0115, HelpMenu_VScroll, 0 )
+  HotIf HelpMenu_IsMouseOverGui
+  Hotkey "WheelUp",   "Off"
+  Hotkey "WheelDown", "Off"
+  HotIf
   SetTimer( HelpMenu_HoverCheck, 0 )
   SetTimer( HelpMenu_TrackActiveWindow, 0 )
   ToolTip()
@@ -432,40 +480,53 @@ HelpMenu_UpdateScrollInfo()
   HelpMenu_RedrawScrollbar()
 }
 
-HelpMenu_MouseWheel( wParam, lParam, msg, hwnd )
+HelpMenu_IsMouseOverGui( * )
 {
   global g_gui
+  if( !IsSet( g_gui ) || !IsObject( g_gui ) )
+  {
+    return false
+  }
+
+  MouseGetPos( , , &winHwnd )
+  return (winHwnd = g_gui.Hwnd)
+}
+
+HelpMenu_WheelUpHandler( * )
+{
+  HelpMenu_DoWheel( -1 )
+}
+
+HelpMenu_WheelDownHandler( * )
+{
+  HelpMenu_DoWheel( 1 )
+}
+
+HelpMenu_DoWheel( direction )
+{
   global g_tabs
   global g_uiTabs
 
   ; Acceleration config
-  WHEEL_DELTA              := 120
-  SCROLL_PIXELS_BASE       := 4    ; pixels per notch at rest
-  SCROLL_PIXELS_MAX        := 40   ; pixels per notch at full speed
-  ACCEL_WINDOW_MS          := 150  ; consecutive event window to build speed
-  ACCEL_STEP               := 4    ; extra pixels added per successive notch within window
+  SCROLL_PIXELS_BASE := 4    ; pixels per notch at rest
+  SCROLL_PIXELS_MAX  := 40   ; pixels per notch at full speed
+  ACCEL_WINDOW_MS    := 150  ; consecutive event window to build speed
+  ACCEL_STEP         := 4    ; extra pixels added per successive notch within window
 
   ; Acceleration state
-  static lastEventMs   := 0
-  static accelPixels   := 0
+  static lastEventMs := 0
+  static accelPixels := 0
 
-  if( !IsSet( g_gui  ) || !IsObject( g_gui  ) ||
-      !IsSet( g_tabs ) || !IsObject( g_tabs ) )
+  if( !IsSet( g_tabs ) || !IsObject( g_tabs ) )
   {
     return
-  }
-
-  MouseGetPos( , , &winHwnd )
-  if( winHwnd != g_gui.Hwnd )
-  {
-    return 0
   }
 
   tabIndex := g_tabs.Value
   if( (tabIndex < 1) ||
       (tabIndex > g_uiTabs.Length) )
   {
-    return 0
+    return
   }
 
   ; Update acceleration based on elapsed time since last event.
@@ -480,21 +541,14 @@ HelpMenu_MouseWheel( wParam, lParam, msg, hwnd )
   }
   lastEventMs := nowMs
 
-  tab   := g_uiTabs[tabIndex]
-  delta := (wParam >> 16) & 0xFFFF
-  if( delta >= 0x8000 )
-  {
-    delta -= 0x10000
-  }
-
+  tab            := g_uiTabs[tabIndex]
   pixelsPerNotch := SCROLL_PIXELS_BASE + accelPixels
-  scrollBy       := -(delta / WHEEL_DELTA) * pixelsPerNotch
+  scrollBy       := direction * pixelsPerNotch
   if( tab.ScrollByPixels( scrollBy ) )
   {
     HelpMenu_UpdateScrollInfo()
     ToolTip()
   }
-  return 0
 }
 
 HelpMenu_HoverCheck()

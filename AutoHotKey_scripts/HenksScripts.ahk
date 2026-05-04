@@ -1,5 +1,6 @@
 ﻿#Requires AutoHotkey v2.0
 #SingleInstance Force
+A_MaxHotkeysPerInterval := 400
 
 #Include "SupportFiles\Utilities.ahk"
 #Include "SupportFiles\Symbols.ahk"

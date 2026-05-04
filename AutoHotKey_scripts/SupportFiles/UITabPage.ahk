@@ -425,9 +425,9 @@ class TabPage
       return
     }
 
-    ; Invalidate the GUI and all child controls so buttons repaint at new positions.
+    ; Invalidate the GUI so the parent background repaints between moved buttons.
     ; WS_CLIPCHILDREN on the GUI prevents background erase from covering buttons.
-    ; RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN = 0x0105
+    ; RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW = 0x0105
     DllCall( "RedrawWindow",
              "ptr", this.m_guiHwnd,
              "ptr", 0,
@@ -521,6 +521,18 @@ class TabPage
       endIdx--
     }
 
+    ; --- Suppress repaints while repositioning all buttons ---
+    ; Moving buttons one at a time with ctrl.Move() leaves ghost images
+    ; because the parent repaints between individual moves. Suppressing
+    ; WM_SETREDRAW on the GUI batches all visual changes into a single
+    ; repaint at the end, eliminating artifacts in both scroll directions.
+    ; We use AHK's native ctrl.Move()/ctrl.Opt() so DPI scaling is handled
+    ; correctly (raw Win32 DeferWindowPos bypasses AHK's DPI conversion).
+
+    guiHwnd := this.m_guiHwnd
+    WM_SETREDRAW := 0x000B
+    DllCall( "SendMessageW", "ptr", guiHwnd, "uint", WM_SETREDRAW, "ptr", 0, "ptr", 0 )
+
     ; --- Hide buttons that scrolled out of view ---
     oldStart := this.m_visibleStart
     oldEnd   := this.m_visibleEnd
@@ -578,6 +590,15 @@ class TabPage
         i++
       }
     }
+
+    ; Re-enable drawing and force a single full repaint.
+    DllCall( "SendMessageW", "ptr", guiHwnd, "uint", WM_SETREDRAW, "ptr", 1, "ptr", 0 )
+    ; RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN = 0x0185
+    DllCall( "RedrawWindow",
+             "ptr",  guiHwnd,
+             "ptr",  0,
+             "ptr",  0,
+             "uint", 0x0185 )
 
     this.m_visibleStart := startIdx
     this.m_visibleEnd   := endIdx

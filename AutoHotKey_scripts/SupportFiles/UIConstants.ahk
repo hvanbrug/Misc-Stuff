@@ -2,6 +2,7 @@
 
 ; ── Globals for the Help Menu ──
 g_gui            := ""
+g_guiHwndRaw     := 0
 g_tipMap         := Map()
 g_LV             := ""
 g_HeaderHotkey   := ""
