@@ -37,7 +37,7 @@ ShowHelpMenu( startTab )
 
   g_activeWindow := WinActive( "A" )
 
-  windowTitle := "Henks Hotkey Reference"
+  windowTitle := "Henks Hotkeys"
   if WinExist( windowTitle )
   {
     WinActivate
