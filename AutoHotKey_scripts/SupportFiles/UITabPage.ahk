@@ -25,16 +25,13 @@ class TabPage
     this.m_scrollY        := 0
     this.m_scrollTargetY  := 0
     this.m_viewportHeight := 0
-    this.m_symbolsByY     := []
-    this.m_visibleStart   := 0
-    this.m_visibleEnd     := 0
 
     this.m_guiHwnd          := 0
     this.m_tabHwnd          := 0
+    this.m_clipPanelHwnd    := 0
+    this.m_contentPanelHwnd := 0
     this.m_scrollFlushMs    := 16
     this.m_scrollFlushFn    := ObjBindMethod( this, "OnScrollFlush" )
-    this.m_redrawWatchdogMs := 20
-    this.m_redrawWatchdogFn := ObjBindMethod( this, "OnRedrawWatchdog" )
   }
 
   SetColsOf( maxRows )
@@ -186,31 +183,6 @@ class TabPage
     }
   }
 
-  BuildSymbolsByY()
-  {
-    sortedSymbols := []
-
-    for sym in this.m_symbols
-    {
-      insertAt := sortedSymbols.Length + 1
-      idx      := 1
-      while( idx <= sortedSymbols.Length )
-      {
-        if( sym.y < sortedSymbols[idx].y )
-        {
-          insertAt := idx
-          break
-        }
-
-        idx++
-      }
-
-      sortedSymbols.InsertAt( insertAt, sym )
-    }
-
-    this.m_symbolsByY := sortedSymbols
-  }
-
   AddControls( gui, tabs, tabIdx, tipMap )
   {
     this.m_scrollY       := 0
@@ -220,7 +192,65 @@ class TabPage
 
     gui.SetFont( this.m_fontSize, this.m_fontName )
 
-    tabs.UseTab( tabIdx )
+    ; Detach from tab association so AHK's Tab3 never shows/hides our buttons.
+    ; We manage visibility entirely through the clip panel.
+    tabs.UseTab( 0 )
+
+    ; Determine the tab display area offset (below the tab strip) in tab-client coords.
+    ; TCM_ADJUSTRECT with wParam=FALSE shrinks the client rect to the display area.
+    displayRect := Buffer( 16, 0 )
+    DllCall( "GetClientRect", "Ptr", tabs.Hwnd, "Ptr", displayRect.Ptr )
+    SendMessage( 0x1328, 0, displayRect.Ptr, tabs.Hwnd )
+    dispLeft   := NumGet( displayRect, 0,  "Int" )
+    dispTop    := NumGet( displayRect, 4,  "Int" )
+    dispRight  := NumGet( displayRect, 8,  "Int" )
+    dispBottom := NumGet( displayRect, 12, "Int" )
+
+    dpi := DllCall( "GetDpiForWindow", "Ptr", gui.Hwnd, "UInt" )
+    dpiScale := dpi / 96
+
+    ; Create a clip panel that fills the tab display area to clip scrolled content.
+    ; WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN = 0x52000000
+    clipW := dispRight - dispLeft
+    clipH := dispBottom - dispTop
+
+    ; Override viewport height with the actual visible area in logical pixels.
+    this.m_viewportHeight := Round( clipH / dpiScale )
+
+    this.m_clipPanelHwnd := DllCall( "CreateWindowEx",
+                                     "UInt", 0,
+                                     "Str",  "Static",
+                                     "Ptr",  0,
+                                     "UInt", 0x52000000,
+                                     "Int",  dispLeft,
+                                     "Int",  dispTop,
+                                     "Int",  clipW,
+                                     "Int",  clipH,
+                                     "Ptr",  tabs.Hwnd,
+                                     "Ptr",  0,
+                                     "Ptr",  0,
+                                     "Ptr",  0,
+                                     "Ptr" )
+
+    ; Create a content panel (full content height) inside the clip panel.
+    ; All buttons will be children of this panel.  Scrolling moves this panel.
+    ; WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN = 0x52000000
+    contentH := Round( this.m_contentHeight * dpiScale )
+    this.m_contentPanelHwnd := DllCall( "CreateWindowEx",
+                                        "UInt", 0,
+                                        "Str",  "Static",
+                                        "Ptr",  0,
+                                        "UInt", 0x52000000,
+                                        "Int",  0,
+                                        "Int",  0,
+                                        "Int",  clipW,
+                                        "Int",  contentH,
+                                        "Ptr",  this.m_clipPanelHwnd,
+                                        "Ptr",  0,
+                                        "Ptr",  0,
+                                        "Ptr",  0,
+                                        "Ptr" )
+
     for sym in this.m_symbols
     {
       tip         := sym.desc
@@ -245,7 +275,7 @@ class TabPage
       w   := sym.w
       h   := sym.h
       tip := tip
-      opt := "x" x " y" y " w" w " h" h
+      opt := "x" x " y" y " w" w " h" h " Hidden"
       if( sym.align = "left" )
       {
         opt .= " Left"
@@ -259,11 +289,18 @@ class TabPage
       }
       handler := (( a ) => ( ctrl, * ) => this.SymbolClick( a, ctrl ))( localAction )
       btn.OnEvent( "Click", handler )
-    }
 
-    this.m_visibleStart := 0
-    this.m_visibleEnd   := 0
-    this.BuildSymbolsByY()
+      ; Re-parent the button into the content panel so it scrolls with the panel.
+      ; After SetParent, reposition it at the correct coords relative to the
+      ; content panel.  Use SWP_NOSIZE to keep AHK's DPI-scaled button dimensions.
+      ; Subtract m_symOrgY so buttons start at the top of the content panel.
+      DllCall( "SetParent", "Ptr", btn.Hwnd, "Ptr", this.m_contentPanelHwnd )
+      scaledX := Round( x * dpiScale )
+      scaledY := Round( (y - this.m_symOrgY) * dpiScale )
+      DllCall( "SetWindowPos", "Ptr", btn.Hwnd, "Ptr", 0,
+               "Int", scaledX, "Int", scaledY, "Int", 0, "Int", 0,
+               "UInt", 0x0001 | 0x0004 | 0x0010 | 0x0040 )  ; SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW
+    }
 
     this.ApplyScrollPosition()
   }
@@ -273,6 +310,41 @@ class TabPage
     this.m_viewportHeight := viewportHeight
     this.m_scrollTargetY  := this.ClampScrollY( this.m_scrollTargetY )
     this.m_scrollY        := this.ClampScrollY( this.m_scrollY )
+  }
+
+  ShowClipPanel()
+  {
+    if( this.m_clipPanelHwnd )
+    {
+      DllCall( "ShowWindow", "Ptr", this.m_clipPanelHwnd, "Int", 5 )  ; SW_SHOW
+      ; AHK's Tab3 may have hidden buttons on inactive tabs.
+      ; Explicitly show every button so they paint in the content panel.
+      for sym in this.m_symbols
+      {
+        if( sym.HasOwnProp( "ctrl" ) )
+        {
+          DllCall( "ShowWindow", "Ptr", sym.ctrl.Hwnd, "Int", 5 )  ; SW_SHOW
+        }
+      }
+    }
+  }
+
+  HideClipPanel()
+  {
+    if( this.m_clipPanelHwnd )
+    {
+      DllCall( "ShowWindow", "Ptr", this.m_clipPanelHwnd, "Int", 0 )  ; SW_HIDE
+    }
+  }
+
+  InvalidatePanel()
+  {
+    if( this.m_clipPanelHwnd )
+    {
+      ; RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN = 0x0185
+      DllCall( "RedrawWindow", "Ptr", this.m_clipPanelHwnd,
+               "Ptr", 0, "Ptr", 0, "UInt", 0x0185 )
+    }
   }
 
   MaxScrollY()
@@ -380,7 +452,6 @@ class TabPage
     {
       this.m_scrollY := this.m_scrollTargetY
       this.ApplyScrollPosition()
-      this.RequestViewportRedraw()
     }
   }
 
@@ -418,225 +489,23 @@ class TabPage
     }
   }
 
-  RequestViewportRedraw()
-  {
-    if( this.m_guiHwnd = 0 )
-    {
-      return
-    }
-
-    ; Invalidate the GUI so the parent background repaints between moved buttons.
-    ; WS_CLIPCHILDREN on the GUI prevents background erase from covering buttons.
-    ; RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW = 0x0105
-    DllCall( "RedrawWindow",
-             "ptr", this.m_guiHwnd,
-             "ptr", 0,
-             "ptr", 0,
-             "uint", 0x0105 )
-  }
-
-  IsSymbolVisibleInViewport( y, h )
-  {
-    if( this.m_viewportHeight <= 0 )
-    {
-      return true
-    }
-
-    viewportTop    := this.m_symOrgY
-    viewportBottom := this.m_symOrgY + this.m_viewportHeight
-    symbolBottom   := y + h
-
-    return (symbolBottom > viewportTop) &&
-           (y < viewportBottom)
-  }
-
   ApplyScrollPosition()
   {
-    ; No viewport clipping requested: keep all controls in sync.
-    if( this.m_viewportHeight <= 0 )
+    ; Move the content panel inside the clip panel.  The clip panel's bounds
+    ; handle all clipping automatically — no per-button visibility management.
+    if( this.m_contentPanelHwnd )
     {
-      for sym in this.m_symbols
-      {
-        if( !sym.HasOwnProp( "ctrl" ) )
-        {
-          continue
-        }
-
-        ctrl := sym.ctrl
-        if( !IsSet( ctrl ) )
-        {
-          continue
-        }
-
-        y := sym.y - this.m_scrollY
-        shouldMove := (!sym.HasOwnProp( "renderY" )) ||
-                      (sym.renderY != y)
-        if( shouldMove )
-        {
-          ctrl.Move( sym.x,
-                     y,
-                     sym.w,
-                     sym.h )
-          sym.renderY := y
-        }
-
-        if( (!sym.HasOwnProp( "visible" )) ||
-            (!sym.visible) )
-        {
-          ctrl.Opt( "-Hidden" )
-          sym.visible := true
-        }
-      }
-
-      return
+      dpi := DllCall( "GetDpiForWindow", "Ptr", this.m_guiHwnd, "UInt" )
+      dpiScale := dpi / 96
+      DllCall( "SetWindowPos",
+               "Ptr",  this.m_contentPanelHwnd,
+               "Ptr",  0,
+               "Int",  0,
+               "Int",  Round( -this.m_scrollY * dpiScale ),
+               "Int",  0,
+               "Int",  0,
+               "UInt", 0x0001 | 0x0004 | 0x0010 )  ; SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
     }
-
-    topBase    := this.m_symOrgY + this.m_scrollY
-    bottomBase := this.m_symOrgY + this.m_viewportHeight + this.m_scrollY
-
-    ; Include buttons that are partially visible at the top or bottom edge.
-    ; A button is visible if any part of it overlaps the viewport, i.e.
-    ;   sym.y + sym.h > topBase  AND  sym.y < bottomBase
-    ; The startIdx/endIdx searches below use these relaxed bounds.
-
-    n := this.m_symbolsByY.Length
-    if( n = 0 )
-    {
-      return
-    }
-
-    ; Find first symbol whose bottom edge is past the viewport top.
-    startIdx := 1
-    while( (startIdx <= n) &&
-           ((this.m_symbolsByY[startIdx].y + this.m_symbolsByY[startIdx].h) <= topBase) )
-    {
-      startIdx++
-    }
-
-    ; Find last symbol whose top edge is before the viewport bottom.
-    endIdx := n
-    while( (endIdx >= startIdx) &&
-           (this.m_symbolsByY[endIdx].y >= bottomBase) )
-    {
-      endIdx--
-    }
-
-    ; --- Suppress repaints while repositioning all buttons ---
-    ; Moving buttons one at a time with ctrl.Move() leaves ghost images
-    ; because the parent repaints between individual moves. Suppressing
-    ; WM_SETREDRAW on the GUI batches all visual changes into a single
-    ; repaint at the end, eliminating artifacts in both scroll directions.
-    ; We use AHK's native ctrl.Move()/ctrl.Opt() so DPI scaling is handled
-    ; correctly (raw Win32 DeferWindowPos bypasses AHK's DPI conversion).
-
-    guiHwnd := this.m_guiHwnd
-    WM_SETREDRAW := 0x000B
-    DllCall( "SendMessageW", "ptr", guiHwnd, "uint", WM_SETREDRAW, "ptr", 0, "ptr", 0 )
-
-    ; --- Hide buttons that scrolled out of view ---
-    oldStart := this.m_visibleStart
-    oldEnd   := this.m_visibleEnd
-    if( (oldStart >= 1) && (oldEnd >= oldStart) )
-    {
-      i := oldStart
-      while( i <= oldEnd )
-      {
-        if( (i < startIdx) || (i > endIdx) )
-        {
-          sym := this.m_symbolsByY[i]
-          if( sym.HasOwnProp( "ctrl" ) )
-          {
-            ctrl := sym.ctrl
-            if( IsSet( ctrl ) &&
-                ((!sym.HasOwnProp( "visible" )) || (sym.visible)) )
-            {
-              ctrl.Opt( "Hidden" )
-              sym.visible := false
-            }
-          }
-        }
-
-        i++
-      }
-    }
-
-    ; --- Move and show visible buttons ---
-    if( (startIdx >= 1) && (startIdx <= endIdx) )
-    {
-      i := startIdx
-      while( i <= endIdx )
-      {
-        sym := this.m_symbolsByY[i]
-        if( sym.HasOwnProp( "ctrl" ) )
-        {
-          ctrl := sym.ctrl
-          if( IsSet( ctrl ) )
-          {
-            y := sym.y - this.m_scrollY
-            if( (!sym.HasOwnProp( "renderY" )) || (sym.renderY != y) )
-            {
-              ctrl.Move( sym.x, y, sym.w, sym.h )
-              sym.renderY := y
-            }
-
-            if( (!sym.HasOwnProp( "visible" )) || (!sym.visible) )
-            {
-              ctrl.Opt( "-Hidden" )
-              sym.visible := true
-            }
-          }
-        }
-
-        i++
-      }
-    }
-
-    ; Re-enable drawing and invalidate for an async repaint.
-    ; Avoid RDW_UPDATENOW here: a synchronous repaint of all children blocks
-    ; AHK's message pump, which can cause the low-level mouse hook to time
-    ; out and let wheel events leak through to the window beneath.
-    DllCall( "SendMessageW", "ptr", guiHwnd, "uint", WM_SETREDRAW, "ptr", 1, "ptr", 0 )
-    ; RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN = 0x0085
-    DllCall( "RedrawWindow",
-             "ptr",  guiHwnd,
-             "ptr",  0,
-             "ptr",  0,
-             "uint", 0x0085 )
-
-    this.m_visibleStart := startIdx
-    this.m_visibleEnd   := endIdx
-  }
-
-  QueueRedrawWatchdog()
-  {
-    if( this.m_destroyed )
-    {
-      return
-    }
-
-    ; One-shot watchdog: repeated calls reset the timer and coalesce redraws.
-    SetTimer( this.m_redrawWatchdogFn, -this.m_redrawWatchdogMs )
-  }
-
-  OnRedrawWatchdog()
-  {
-    this.RequestFullRedraw()
-  }
-
-  RequestFullRedraw()
-  {
-    if( this.m_guiHwnd = 0 )
-    {
-      return
-    }
-
-    ; Invalidate only and let Windows batch repaint to reduce flashing.
-    redrawFlags := 0x0001 | 0x0080
-    DllCall( "RedrawWindow",
-             "ptr",  this.m_guiHwnd,
-             "ptr",  0,
-             "ptr",  0,
-             "uint", redrawFlags )
   }
 
   NextLine( testForEOL := false )
@@ -814,8 +683,18 @@ class TabPage
     }
     this.m_destroyed := true
 
-    SetTimer( this.m_scrollFlushFn,    0 )
-    SetTimer( this.m_redrawWatchdogFn, 0 )
+    SetTimer( this.m_scrollFlushFn, 0 )
+
+    if( this.m_contentPanelHwnd )
+    {
+      DllCall( "DestroyWindow", "Ptr", this.m_contentPanelHwnd )
+      this.m_contentPanelHwnd := 0
+    }
+    if( this.m_clipPanelHwnd )
+    {
+      DllCall( "DestroyWindow", "Ptr", this.m_clipPanelHwnd )
+      this.m_clipPanelHwnd := 0
+    }
 
     if( IsObject( this.m_symbols ) )
     {

@@ -162,6 +162,13 @@ ShowWindow( startTab )
     tab.AddControls( g_gui, g_tabs, tabIndex, g_tipMap )
   }
 
+  ; All clip panels start visible (WS_VISIBLE); hide them all for now.
+  ; The correct one will be shown after startTab is determined.
+  for tabIndex, tab in g_uiTabs
+  {
+    tab.HideClipPanel()
+  }
+
   g_gui.SetFont( g_fontSize " norm", g_fontName )
 
   SetTimer( HoverCheck, 100 )
@@ -208,6 +215,13 @@ ShowWindow( startTab )
     startTab := 1
   }
   g_tabs.Value := startTab
+
+  ; Show the clip panel for the active start tab.
+  if( (startTab >= 1) && (startTab <= g_uiTabs.Length) )
+  {
+    g_uiTabs[startTab].ShowClipPanel()
+  }
+
   UpdateScrollInfo()
 
   ; Bring scrollbar to top of z-order so tab buttons don't steal mouse events from it.
@@ -232,7 +246,11 @@ ShowWindow( startTab )
                 rightEdge - 40, 0, 40, 24,
                 (*) => DoSendText( "`n" ) )
 
-  g_gui.Show()
+  ; Explicit window size based on tab control dimensions.
+  ; Prevents AHK from auto-sizing to include hidden buttons at large Y offsets.
+  showW := tabContentWidth + TAB_SCROLL_W + 14 + 14
+  showH := tabContentHeight + 30 + 14
+  g_gui.Show( "w" showW " h" showH )
   RedrawScrollbar()
 }
 
@@ -252,16 +270,11 @@ ForceRepaint()
     tabIndex := g_tabs.Value
     if( (tabIndex >= 1) && (tabIndex <= g_uiTabs.Length) )
     {
-      g_uiTabs[tabIndex].ApplyScrollPosition()
+      tab := g_uiTabs[tabIndex]
+      tab.ShowClipPanel()
+      tab.ApplyScrollPosition()
     }
   }
-
-  ; RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN = 0x0185
-  DllCall( "RedrawWindow",
-           "ptr",  g_gui.Hwnd,
-           "ptr",  0,
-           "ptr",  0,
-           "uint", 0x0185 )
 
   RedrawScrollbar()
 }
@@ -309,6 +322,20 @@ TabChanged( ctrl, * )
   global g_tabScrollHwnd
 
   tabIndex := ctrl.Value
+
+  ; Show only the active tab's clip panel; hide all others.
+  for idx, tab in g_uiTabs
+  {
+    if( idx = tabIndex )
+    {
+      tab.ShowClipPanel()
+    }
+    else
+    {
+      tab.HideClipPanel()
+    }
+  }
+
   if( tabIndex <= g_uiTabs.Length )
   {
     g_uiTabs[tabIndex].FlushScrollNow()
@@ -338,6 +365,22 @@ DeferredScrollbarRaise()
            "Int", 0, "Int", 0, "Int", 0, "Int", 0,
            "UInt", SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE )
   RedrawScrollbar()
+}
+
+; Lightweight z-order raise without forced redraw.
+; Used during wheel scrolling to avoid flash loops.
+ScrollbarRaiseOnly()
+{
+  global g_tabScrollHwnd
+  if( !g_tabScrollHwnd )
+  {
+    return
+  }
+
+  SWP_NOMOVE := 0x0002, SWP_NOSIZE := 0x0001, SWP_NOACTIVATE := 0x0010, SWP_NOREDRAW := 0x0008
+  DllCall( "SetWindowPos", "Ptr", g_tabScrollHwnd, "Ptr", 0,
+           "Int", 0, "Int", 0, "Int", 0, "Int", 0,
+           "UInt", SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW )
 }
 
 VScroll( wParam, lParam, msg, hwnd )
@@ -699,8 +742,8 @@ DoWheel( direction )
     UpdateScrollInfo()
     if( g_tabScrollHwnd )
     {
-      ; Wheel-driven redraws can briefly bury the standalone scrollbar.
-      SetTimer( DeferredScrollbarRaise, -1 )
+      ; Re-raise scrollbar z-order without forced redraw to avoid flash loops.
+      ScrollbarRaiseOnly()
     }
     ToolTip()
   }
