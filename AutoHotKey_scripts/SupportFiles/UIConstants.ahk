@@ -31,5 +31,6 @@ g_HEADER_TEXT_COLOR := "FFFFFF"
 g_uiTabs := [ SymbolsTabPage(),
               EmojisTabPage(),
               CommentsTabPage(),
+              PromptsTabPage(),
               GreekTabPage(),
               RussianTabPage() ]

@@ -1,13 +1,38 @@
 ; PromptHelpers.ahk
 ; A collection of helper shortcuts for writing specific prompts.
 
-; Ctrl + Shift + 1 => Daily Challenge description template
-RegisterAction( "Ctrl+Shift+1", "Daily Challenge description", DailyChallengeDescription )
-^+1::DailyChallengeDescription()
-DailyChallengeDescription()
+
+
+
+class PromptsTabPage extends TabPage
 {
-  DoSendText( "abc of def - score - DC `n" )
+  __New()
+  {
+    super.__New( "Prompt Helpers" )
+
+    super.m_fontSize    := "s10"
+    super.m_symBtnSizeX := 320
+    super.m_symBtnSizeY := 24
+
+    super.SetRowsOf( 2 )
+    this .RegisterButtons()
+    super.RecalcSizes()
+  }
+
+  RegisterButtons()
+  {
+    super.RegisterSymbolX( 1, "abc of def - score - DC `n", "Daily Challenge description",     "^+1", unset, "left" )
+    super.RegisterSymbolX( 1, "abc of def (ghi) - score`n", "Community Challenge description", "^+2", unset, "left" )
+  }
 }
+
+;; Ctrl + Shift + 1 => Daily Challenge description template
+;RegisterAction( "Ctrl+Shift+1", "Daily Challenge description", DailyChallengeDescription )
+;^+1::DailyChallengeDescription()
+;DailyChallengeDescription()
+;{
+;  DoSendText( "abc of def - score - DC `n" )
+;}
 
 ; Ctrl + Shift + 2 => Community Challenge description template
 RegisterAction( "Ctrl+Shift+2", "Community Challenge description", CommunityChallengeDescription )

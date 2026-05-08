@@ -30,6 +30,7 @@ class TabPage
     this.m_tabHwnd          := 0
     this.m_clipPanelHwnd    := 0
     this.m_contentPanelHwnd := 0
+    this.m_subclassCallback := 0
     this.m_scrollFlushMs    := 16
     this.m_scrollFlushFn    := ObjBindMethod( this, "OnScrollFlush" )
   }
@@ -250,6 +251,16 @@ class TabPage
                                         "Ptr",  0,
                                         "Ptr",  0,
                                         "Ptr" )
+
+    ; Subclass the content panel so WM_COMMAND (button click) notifications
+    ; are forwarded back to the AHK GUI window.  Without this, SetParent
+    ; causes click events to be swallowed by the Static control.
+    this.m_subclassCallback := CallbackCreate( _ContentPanelForwardCmd, , 6 )
+    DllCall( "comctl32\SetWindowSubclass",
+             "Ptr",  this.m_contentPanelHwnd,
+             "Ptr",  this.m_subclassCallback,
+             "UPtr", 1,
+             "UPtr", gui.Hwnd )
 
     for sym in this.m_symbols
     {
@@ -685,6 +696,16 @@ class TabPage
 
     SetTimer( this.m_scrollFlushFn, 0 )
 
+    if( this.m_subclassCallback && this.m_contentPanelHwnd )
+    {
+      DllCall( "comctl32\RemoveWindowSubclass",
+               "Ptr",  this.m_contentPanelHwnd,
+               "Ptr",  this.m_subclassCallback,
+               "UPtr", 1 )
+      CallbackFree( this.m_subclassCallback )
+      this.m_subclassCallback := 0
+    }
+
     if( this.m_contentPanelHwnd )
     {
       DllCall( "DestroyWindow", "Ptr", this.m_contentPanelHwnd )
@@ -706,4 +727,26 @@ class TabPage
   {
     this.Destroy()
   }
+}
+
+; Subclass callback: forwards WM_COMMAND from the content panel to the AHK GUI
+; so that button click events are routed through AHK's event system.
+_ContentPanelForwardCmd( hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData )
+{
+  if( uMsg = 0x0111 )  ; WM_COMMAND
+  {
+    return DllCall( "SendMessageW",
+                    "Ptr",  dwRefData,
+                    "UInt", uMsg,
+                    "Ptr",  wParam,
+                    "Ptr",  lParam,
+                    "Ptr" )
+  }
+
+  return DllCall( "comctl32\DefSubclassProc",
+                  "Ptr",  hWnd,
+                  "UInt", uMsg,
+                  "Ptr",  wParam,
+                  "Ptr",  lParam,
+                  "Ptr" )
 }
