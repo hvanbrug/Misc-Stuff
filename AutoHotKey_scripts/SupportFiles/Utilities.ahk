@@ -47,7 +47,10 @@ GetSelectedTextThroughClipboard()
   return txt
 }
 
-CreateButton( text, tip, fontName, fontSize, x, y, w, h, func )
+CreateButton( text, tip,
+              fontName, fontSize,
+              x, y, w, h,
+              func )
 {
   global g_gui
   global g_tipMap
@@ -61,4 +64,23 @@ CreateButton( text, tip, fontName, fontSize, x, y, w, h, func )
   g_gui.SetFont( g_fontSize " norm", g_fontName )
 
   return btn
+}
+
+CreateBtnWithStyle( text, tip,
+                    fontName, fontSize,
+                    styleMask, styleBits,
+                    x, y, w, h,
+                    func )
+{
+  btn := CreateButton( text, tip,
+                       fontName, fontSize,
+                       x, y, w, h,
+                       func )
+  style := DllCall( "GetWindowLong", "Ptr", btn.Hwnd, "Int", -16, "Int" )
+           DllCall( "SetWindowLong", "Ptr", btn.Hwnd, "Int", -16, "Int", (style & ~styleMask) | styleBits )
+}
+
+BtnPos( btnIdx, btnWidth, btnGap )
+{
+  return btnWidth + (btnWidth * btnIdx) + (btnGap * btnIdx)
 }

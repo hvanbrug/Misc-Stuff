@@ -238,12 +238,18 @@ ShowWindow( startTab )
 ; 🔄⏎
   CreateButton( "", "Repaint / Refresh",
                 "Segoe UI Symbol", "s10",
-                rightEdge - 80 - buttonGap, 0, 40, 24,
+                rightEdge - BtnPos( 2, 40, 2 ), 0, 40, 24,
                 (*) => ForceRepaint() )
+
+  CreateBtnWithStyle( "⇚,", "Back 3, Insert Comma",
+                      "Segoe UI Symbol", "s16",
+                      0x0F00, 0x0800, ; BS_BOTTOM (0x0800) — push baseline up so the tall glyph isn't clipped.
+                      rightEdge - BtnPos( 1, 40, 2 ), 0, 40, 24,
+                      (*) => DoSendText( "{Left}{Left}{Left}, " ) )
 
   CreateButton( "↩", "Enter / Newline",
                 "Segoe UI Symbol", "s14",
-                rightEdge - 40, 0, 40, 24,
+                rightEdge - BtnPos( 0, 40, 2 ), 0, 40, 24,
                 (*) => DoSendText( "`n" ) )
 
   ; Explicit window size based on tab control dimensions.
