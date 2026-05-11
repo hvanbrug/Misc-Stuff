@@ -35,6 +35,10 @@ ShowWindow( startTab )
   global g_HeaderHotkey
   global g_HeaderDesc
   global g_HeaderBg
+  global g_fullW
+  global g_fullH
+  global g_shrinkBtn
+  global g_expandBtn
 
   g_activeWindow := WinActive( "A" )
 
@@ -45,7 +49,7 @@ ShowWindow( startTab )
     return
   }
 
-  g_gui := Gui( "+AlwaysOnTop -Resize", windowTitle )
+  g_gui := Gui( "+AlwaysOnTop -Resize -MinimizeBox -MaximizeBox", windowTitle )
 
   ; Prevent the GUI from painting its background over child button areas during scroll.
   WS_CLIPCHILDREN := 0x02000000
@@ -63,9 +67,9 @@ ShowWindow( startTab )
   }
 
   ; Keep symbol tabs to a bounded viewport so overflow can scroll.
-  TAB_VIEWPORT_SCREEN_MARGIN := 220
-  TAB_VIEWPORT_MAX_HEIGHT    := 230
-  TAB_VIEWPORT_MIN_HEIGHT    := 220
+  TAB_VIEWPORT_SCREEN_MARGIN := 320
+  TAB_VIEWPORT_MAX_HEIGHT    := 330
+  TAB_VIEWPORT_MIN_HEIGHT    := 320
 
   maxTabContentHeight := A_ScreenHeight - TAB_VIEWPORT_SCREEN_MARGIN
   if( maxTabContentHeight > TAB_VIEWPORT_MAX_HEIGHT )
@@ -97,9 +101,14 @@ ShowWindow( startTab )
 
   TAB_SCROLL_W := 18
 
-  g_tabs := g_gui.AddTab3( "x5 y5 w" (tabContentWidth + TAB_SCROLL_W + 14) " h" (tabContentHeight + 30), tabList )
+  g_tabs := g_gui.AddTab3( "x5 y24 w" (tabContentWidth + TAB_SCROLL_W + 14) " h" (tabContentHeight + 30), tabList )
 
-  ; Use TCM_ADJUSTRECT to get the tab's display area (content region below the tab strip).
+  ; WS_CLIPSIBLINGS: prevents the tab control from painting over sibling windows
+  ; (the utility buttons) that sit above it in z-order.  Set once here so we
+  ; never need to fiddle with z-order during shrink/expand.
+  WS_CLIPSIBLINGS := 0x04000000
+  tabStyle := DllCall( "GetWindowLong", "Ptr", g_tabs.Hwnd, "Int", -16, "Int" )
+              DllCall( "SetWindowLong", "Ptr", g_tabs.Hwnd, "Int", -16, "Int", tabStyle | WS_CLIPSIBLINGS )
   ; Start from the tab's client rect, then shrink to the display area.
   displayRect := Buffer( 16, 0 )
   DllCall( "GetClientRect", "Ptr", g_tabs.Hwnd, "Ptr", displayRect.Ptr )
@@ -233,30 +242,114 @@ ShowWindow( startTab )
   ; Utility buttons in top-right corner (outside tab context).
   g_tabs.UseTab( 0 )
   rightEdge := tabContentWidth + TAB_SCROLL_W + 16
-  buttonGap := 2
-
-; 🔄⏎
-  CreateButton( "", "Repaint / Refresh",
-                "Segoe UI Symbol", "s10",
-                rightEdge - BtnPos( 2, 40, 2 ), 0, 40, 24,
-                (*) => ForceRepaint() )
+  btnGap    := 2
+  btnWth    := 40
+  btnHgt    := 24
 
   CreateBtnWithStyle( "⇚,", "Back 3, Insert Comma",
                       "Segoe UI Symbol", "s16",
                       0x0F00, 0x0800, ; BS_BOTTOM (0x0800) — push baseline up so the tall glyph isn't clipped.
-                      rightEdge - BtnPos( 1, 40, 2 ), 0, 40, 24,
+                      rightEdge - BtnPos( 2, btnWth, btnGap ), 0, btnWth, btnHgt,
                       (*) => DoSendText( "{Left}{Left}{Left}, " ) )
 
   CreateButton( "↩", "Enter / Newline",
                 "Segoe UI Symbol", "s14",
-                rightEdge - BtnPos( 0, 40, 2 ), 0, 40, 24,
+                rightEdge - BtnPos( 1, btnWth, btnGap ), 0, btnWth, btnHgt,
                 (*) => DoSendText( "`n" ) )
+
+; 🔄⏎
+  CreateButton( "", "Repaint / Refresh",
+                "Segoe UI Symbol", "s10",
+                rightEdge - BtnPos( 0, btnWth, btnGap ), 0, btnWth, btnHgt,
+                (*) => ForceRepaint() )
+
+  g_shrinkBtn := CreateButton( "▼", "Shrink window",
+                               "Segoe UI Symbol", "s14",
+                               55, 0, btnWth, btnHgt,
+                               (*) => ShrinkWindow() )
+  g_shrinkBtn.Opt( "-Hidden" )
+
+  g_expandBtn := CreateButton( "▲", "Expand window",
+                               "Segoe UI Symbol", "s14",
+                               55, 0, btnWth, btnHgt,
+                               (*) => ExpandWindow() )
+  g_expandBtn.Opt( "Hidden" )
 
   ; Explicit window size based on tab control dimensions.
   ; Prevents AHK from auto-sizing to include hidden buttons at large Y offsets.
-  showW := tabContentWidth + TAB_SCROLL_W + 14 + 14
-  showH := tabContentHeight + 30 + 14
-  g_gui.Show( "w" showW " h" showH )
+  showW   := tabContentWidth + TAB_SCROLL_W + 14 + 14
+  showH   := tabContentHeight + 30 + 14
+  g_fullW := showW
+  g_fullH := showH
+  savedPos := LoadWindowPos()
+  g_gui.Show( "w" showW " h" showH " " savedPos )
+  RedrawScrollbar()
+
+  OnMessage( 0x0003, OnWindowMove )  ; WM_MOVE
+}
+
+ShrinkWindow()
+{
+  global g_gui
+  global g_tabs
+  global g_fullW
+  global g_fullH
+  global g_shrinkBtn
+  global g_expandBtn
+
+  if( !IsObject( g_gui ) )
+  {
+    return
+  }
+
+  g_tabs     .Opt( "Hidden" )
+  g_shrinkBtn.Opt( "Hidden" )
+  g_expandBtn.Opt( "-Hidden" )
+
+  ; Shrink to just the title bar + button strip (no client area).
+  ; GetSystemMetrics(31) = SM_CYCAPTION (title bar height).
+  titleH := DllCall( "GetSystemMetrics", "Int", 31, "Int" )
+  g_gui.Show( "w150 h" titleH " NoActivate" )
+}
+
+ExpandWindow()
+{
+  global g_gui
+  global g_tabs
+  global g_uiTabs
+  global g_fullW
+  global g_fullH
+  global g_shrinkBtn
+  global g_expandBtn
+
+  if( !IsObject( g_gui ) )
+  {
+    return
+  }
+
+  g_tabs     .Opt( "-Hidden" )
+  g_shrinkBtn.Opt( "-Hidden" )
+  g_expandBtn.Opt( "Hidden" )
+
+  ; Hiding the tab control also hides its child clip panels.
+  ; Re-show the active tab's clip panel so buttons reappear.
+  if( IsObject( g_uiTabs ) )
+  {
+    tabIndex := g_tabs.Value
+    for idx, tab in g_uiTabs
+    {
+      if( idx = tabIndex )
+      {
+        tab.ShowClipPanel()
+      }
+      else
+      {
+        tab.HideClipPanel()
+      }
+    }
+  }
+
+  g_gui.Show( "w" g_fullW " h" g_fullH " NoActivate" )
   RedrawScrollbar()
 }
 
@@ -305,8 +398,14 @@ Close()
   global g_activeWindow
   global g_wheelPendingSteps
   global g_wheelFlushScheduled
+  global g_shrinkBtn
+  global g_expandBtn
   g_activeWindow  := unset
   g_tabScrollHwnd := 0
+  g_shrinkBtn     := ""
+  g_expandBtn     := ""
+  SaveWindowPos()
+  OnMessage( 0x0003, OnWindowMove, 0 )  ; WM_MOVE
   OnMessage( 0x0115, VScroll, 0 )
   RemoveWheelHook()
   g_guiHwndRaw := 0
@@ -792,6 +891,39 @@ TrackActiveWindow()
   }
 
   g_activeWindow := hwnd
+}
+
+; ── Window position persistence ─────────────────────────────────
+
+LoadWindowPos()
+{
+  global g_iniPath
+  try
+  {
+    x := IniRead( g_iniPath, "Window", "X" )
+    y := IniRead( g_iniPath, "Window", "Y" )
+    return "x" x " y" y
+  }
+  return ""
+}
+
+SaveWindowPos()
+{
+  global g_gui
+  global g_iniPath
+  if( !IsObject( g_gui ) )
+  {
+    return
+  }
+  WinGetPos( &x, &y, , , g_gui )
+  IniWrite( x, g_iniPath, "Window", "X" )
+  IniWrite( y, g_iniPath, "Window", "Y" )
+}
+
+OnWindowMove( wParam, lParam, msg, hwnd )
+{
+  ; Debounce: coalesce rapid move messages into one write 500 ms after the last one.
+  SetTimer( SaveWindowPos, -500 )
 }
 
 SymbolClick( action, ctrl, * )

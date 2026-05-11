@@ -282,7 +282,7 @@ class TabPage
       }
 
       x   := sym.x
-      y   := sym.y
+      y   := sym.y + 5
       w   := sym.w
       h   := sym.h
       tip := tip

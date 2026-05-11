@@ -28,6 +28,13 @@ g_LV_ROW_COUNT      := 12
 g_HEADER_BG_COLOR   := "4B3621"
 g_HEADER_TEXT_COLOR := "FFFFFF"
 
+g_fullW             := 0
+g_fullH             := 0
+g_shrinkBtn         := ""
+g_expandBtn         := ""
+
+g_iniPath           := A_ScriptDir "\HenksHotkeys.ini"
+
 g_uiTabs := [ SymbolsTabPage(),
               EmojisTabPage(),
               CommentsTabPage(),
