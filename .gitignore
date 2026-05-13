@@ -261,3 +261,7 @@ __pycache__/
 *.pyc
 /Demos_Samples
 git-tf-2.0.3.20131219
+
+
+**/twemoji-main/
+HenksHotkeys.ini

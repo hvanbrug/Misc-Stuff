@@ -294,9 +294,14 @@ class TabPage
       }
       btn := gui.AddButton( opt, this.NormalizeDisplayText( sym.char ) )
       btn.SetFont( this.m_fontSize, this.m_fontName )
+      filename := ""
       if( this.m_useEmojiImages )
       {
-        ApplyEmojiBitmapToButton( btn, sym.char, Round( this.m_symBtnSizeX * dpiScale ) )
+        filename := ApplyEmojiBitmapToButton( btn, sym.char, Round( this.m_symBtnSizeX * dpiScale * 0.8 ) )
+        if( filename != "" )
+        {
+          tip := tip "`nU+" filename
+        }
       }
       sym.ctrl := btn
       if( IsSet( tip ) )

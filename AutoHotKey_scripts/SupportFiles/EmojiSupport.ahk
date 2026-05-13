@@ -57,12 +57,16 @@ EmojiSupport_Shutdown()
 
 ; Convert an emoji character (may be a surrogate-pair sequence) to its Twemoji
 ; PNG filename stem.  e.g.  "😀" → "1f600",  "👨‍👩‍👧" → "1f468-200d-1f469-200d-1f467"
-; Variation selector U+FE0F is stripped; ZWJ U+200D is kept.
+; Variation selector U+FE0F is stripped for standalone emoji but kept inside ZWJ
+; sequences — Twemoji filenames follow the same rule:
+;   standalone:  2639.png  (not 2639-fe0f.png)
+;   ZWJ seq:     1f468-200d-2642-fe0f.png  (FE0F retained)
 EmojiToTwemojiFilename( char )
 {
-  parts := []
-  i     := 1
-  len   := StrLen( char )
+  parts  := []
+  i      := 1
+  len    := StrLen( char )
+  hasZWJ := InStr( char, Chr( 0x200D ) ) > 0
 
   while( i <= len )
   {
@@ -79,7 +83,7 @@ EmojiToTwemojiFilename( char )
       }
     }
 
-    if( cu != 0xFE0F )   ; strip variation selector-16
+    if( hasZWJ || cu != 0xFE0F )   ; strip FE0F only in non-ZWJ sequences
     {
       parts.Push( Format( "{:x}", cu ) )
     }
@@ -116,13 +120,15 @@ _EmojiLoadGdipImageFromFile( path )
 }
 
 ; Load a PNG from an RT_RCDATA exe resource into a GDI+ image.  Returns the GpImage* or 0.
-; The resource must have been embedded via @Ahk2Exe-AddResource with resName as its name.
+; The resource must have been embedded via @Ahk2Exe-AddResource with the name "E" + stem.
+; The "E" prefix ensures Ahk2Exe always stores the name as a string (not an integer ID),
+; even for stems that are purely decimal digits (e.g. "2639" → resource name "E2639").
 _EmojiLoadGdipImageFromResource( resName )
 {
-  hMod     := DllCall( "GetModuleHandleW", "Ptr",  0,       "Ptr" )
+  hMod     := DllCall( "GetModuleHandleW", "Ptr",  0,  "Ptr" )
   hResInfo := DllCall( "FindResourceW",    "Ptr",  hMod,
-                                           "WStr", resName,
-                                           "Ptr",  10,       "Ptr" )   ; RT_RCDATA = 10
+                                           "WStr", "E" resName,
+                                           "Ptr",  10, "Ptr" )   ; RT_RCDATA = 10
   if( !hResInfo )
   {
     return 0
@@ -169,12 +175,8 @@ _EmojiGdipImageToBitmap( pImage, w, h )
   DllCall( "gdiplus\GdipGetImageGraphicsContext", "Ptr", pScaled, "Ptr*", &pGraphics )
   DllCall( "gdiplus\GdipSetInterpolationMode",    "Ptr", pGraphics, "Int", 7 )  ; HighQualityBicubic
 
-  ; Fill the background with the system button-face colour so alpha blends cleanly.
-  btnColor := DllCall( "GetSysColor", "Int", 15, "UInt" )   ; COLOR_BTNFACE = 15
-  r        := ( btnColor        & 0xFF )
-  g        := ( (btnColor >> 8) & 0xFF )
-  b        := ( (btnColor >> 16) & 0xFF )
-  argb     := 0xFF000000 | (r << 16) | (g << 8) | b
+  ; Fill the background with a medium-dark grey so the emoji colours pop.
+  argb := 0xFF404040
   pBrush   := 0
   DllCall( "gdiplus\GdipCreateSolidFill",  "UInt", argb, "Ptr*", &pBrush )
   DllCall( "gdiplus\GdipFillRectangleI",   "Ptr",  pGraphics, "Ptr", pBrush,
@@ -211,7 +213,7 @@ ApplyEmojiBitmapToButton( btn, char, pixelSize )
   filename := EmojiToTwemojiFilename( char )
   if( filename = "" )
   {
-    return
+    return ""
   }
 
   pImage := 0
@@ -227,7 +229,7 @@ ApplyEmojiBitmapToButton( btn, char, pixelSize )
 
   if( !pImage )
   {
-    return   ; Fallback: leave button text (emoji character) unchanged.
+    return filename   ; Fallback: leave button text (emoji character) unchanged.
   }
 
   hBitmap := _EmojiGdipImageToBitmap( pImage, pixelSize, pixelSize )
@@ -235,7 +237,7 @@ ApplyEmojiBitmapToButton( btn, char, pixelSize )
 
   if( !hBitmap )
   {
-    return   ; Fallback: leave button text unchanged.
+    return filename   ; Fallback: leave button text unchanged.
   }
 
   g_emojiBitmaps.Push( hBitmap )   ; keep alive for the button's lifetime
@@ -246,6 +248,8 @@ ApplyEmojiBitmapToButton( btn, char, pixelSize )
   DllCall( "SetWindowLong", "Ptr", btn.Hwnd, "Int", GWL_STYLE, "Int", style | 0x80 )  ; BS_BITMAP
   btn.Text := ""
   SendMessage( 0x00F7, 0, hBitmap, btn.Hwnd )   ; BM_SETIMAGE, IMAGE_BITMAP = 0
+
+  return filename   ; Fallback: leave button text unchanged.
 }
 
 ; ── Auto-initialise on #Include ──────────────────────────────────────────────
