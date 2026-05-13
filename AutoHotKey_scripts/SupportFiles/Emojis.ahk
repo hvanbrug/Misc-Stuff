@@ -13,6 +13,7 @@ class EmojisTabPage extends TabPage
     super.m_symBtnSizeX := 50
     super.m_symBtnSizeY := 50
 
+    super.m_useEmojiImages := true
     super.SetRowsOf( 12 )
     this .RegisterButtons()
     super.RecalcSizes()

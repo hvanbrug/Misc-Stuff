@@ -11,6 +11,13 @@ A_MaxHotkeysPerInterval := 400
 #Include "SupportFiles\CommentSupport.ahk"
 #Include "SupportFiles\Sensitive.ahk"
 #Include "SupportFiles\Misc.ahk"
+#Include "SupportFiles\EmojiSupport.ahk"
+#Include "SupportFiles\EmojiResources.ahk"
 #Include "SupportFiles\UITabPage.ahk"
 #Include "SupportFiles\UI.ahk"
 #Include "SupportFiles\UIConstants.ahk"
+
+
+;@Ahk2Exe-SetMainIcon Images\HenksHotkeys.ico
+;@Ahk2Exe-SetVersion  "2.3"
+;@Ahk2Exe-SetName     "Henk's Hotkeys"

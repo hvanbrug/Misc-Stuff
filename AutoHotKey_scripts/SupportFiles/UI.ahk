@@ -39,6 +39,7 @@ ShowWindow( startTab )
   global g_fullH
   global g_shrinkBtn
   global g_expandBtn
+  global g_iniPath
 
   g_activeWindow := WinActive( "A" )
 
@@ -286,6 +287,12 @@ ShowWindow( startTab )
   RedrawScrollbar()
 
   OnMessage( 0x0003, OnWindowMove )  ; WM_MOVE
+
+  ; Restore collapsed state last, after everything is laid out.
+  if( IniRead( g_iniPath, "Window", "Collapsed", "0" ) = "1" )
+  {
+    ShrinkWindow()
+  }
 }
 
 ShrinkWindow()
@@ -296,6 +303,7 @@ ShrinkWindow()
   global g_fullH
   global g_shrinkBtn
   global g_expandBtn
+  global g_iniPath
 
   if( !IsObject( g_gui ) )
   {
@@ -310,6 +318,7 @@ ShrinkWindow()
   ; GetSystemMetrics(31) = SM_CYCAPTION (title bar height).
   titleH := DllCall( "GetSystemMetrics", "Int", 31, "Int" )
   g_gui.Show( "w150 h" titleH " NoActivate" )
+  IniWrite( 1, g_iniPath, "Window", "Collapsed" )
 }
 
 ExpandWindow()
@@ -321,6 +330,7 @@ ExpandWindow()
   global g_fullH
   global g_shrinkBtn
   global g_expandBtn
+  global g_iniPath
 
   if( !IsObject( g_gui ) )
   {
@@ -350,6 +360,7 @@ ExpandWindow()
   }
 
   g_gui.Show( "w" g_fullW " h" g_fullH " NoActivate" )
+  IniWrite( 0, g_iniPath, "Window", "Collapsed" )
   RedrawScrollbar()
 }
 
@@ -898,13 +909,13 @@ TrackActiveWindow()
 LoadWindowPos()
 {
   global g_iniPath
-  try
+  x := IniRead( g_iniPath, "Window", "X", "" )
+  y := IniRead( g_iniPath, "Window", "Y", "" )
+  if( x = "" || y = "" )
   {
-    x := IniRead( g_iniPath, "Window", "X" )
-    y := IniRead( g_iniPath, "Window", "Y" )
-    return "x" x " y" y
+    return ""
   }
-  return ""
+  return "x" x " y" y
 }
 
 SaveWindowPos()

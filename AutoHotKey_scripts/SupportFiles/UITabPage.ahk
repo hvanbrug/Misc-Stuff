@@ -33,6 +33,7 @@ class TabPage
     this.m_subclassCallback := 0
     this.m_scrollFlushMs    := 16
     this.m_scrollFlushFn    := ObjBindMethod( this, "OnScrollFlush" )
+    this.m_useEmojiImages   := false
   }
 
   SetColsOf( maxRows )
@@ -293,6 +294,10 @@ class TabPage
       }
       btn := gui.AddButton( opt, this.NormalizeDisplayText( sym.char ) )
       btn.SetFont( this.m_fontSize, this.m_fontName )
+      if( this.m_useEmojiImages )
+      {
+        ApplyEmojiBitmapToButton( btn, sym.char, Round( this.m_symBtnSizeX * dpiScale ) )
+      }
       sym.ctrl := btn
       if( IsSet( tip ) )
       {
