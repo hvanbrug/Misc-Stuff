@@ -21,6 +21,12 @@ class PromptsTabPage extends TabPage
 
   RegisterButtons()
   {
+    super.RegisterSymbolX( 1, "A semi-realistic digital illustration of ", "Semi-realistic",                            unset, unset, "left" )
+    super.RegisterSymbolX( 1, "no speckled noise, random particles, or visual artifacts", "Semi-realistic",             unset, unset, "left" )
+    super.RegisterSymbolX( 1, "Clean up all speckled noise, random particles, and visual artifacts.", "Semi-realistic", unset, unset, "left" )
+    super.RegisterSpace()
+
+    super.ShiftLineByThird()
     super.RegisterSymbolX( 1, "abc of def - score - DC `n", "Daily Challenge description",     "^+1", unset, "left" )
     super.RegisterSymbolX( 1, "abc of def (ghi) - score`n", "Community Challenge description", "^+2", unset, "left" )
   }
