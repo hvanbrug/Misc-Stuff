@@ -50,7 +50,7 @@ ShowWindow( startTab )
     return
   }
 
-  g_gui := Gui( "+AlwaysOnTop -Resize -MinimizeBox -MaximizeBox", windowTitle )
+  g_gui := Gui( "+AlwaysOnTop +ToolWindow -Resize -MinimizeBox -MaximizeBox", windowTitle )
 
   ; Prevent the GUI from painting its background over child button areas during scroll.
   WS_CLIPCHILDREN := 0x02000000
