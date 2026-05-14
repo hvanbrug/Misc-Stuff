@@ -2,10 +2,37 @@
 ; A collection of hotkeys for sensitive information like passwords and email addresses.
 
 ; Ctrl + Shift + Wnd + F?? => secret passwords and email addresses
-^+#F6::SendInput( "MyDogIs1Cut3Puppy" )
-^+#F7::SendInput( "buildprogrammer.geo@microsurvey.com" )
-^+#F8::SendInput( "MS2023bp{!}run" )
-^+#F9::SendInput( "henk.vanbruggen@microsurvey.com" )
-^+#F10::SendInput( "H{!}Pircotha29" )
-^+#F11::SendInput( "henk.vanbruggen@microsurvey.onmicrosoft.com" )
-^+#F12::SendInput( "HVB13{#}dvlp{@}" )
+
+class SensitiveTabPage extends TabPage
+{
+  __New()
+  {
+    super.__New( "Sensitive" )
+
+    super.m_fontSize    := "s10"
+    super.m_symBtnSizeX := 190
+    super.m_symBtnSizeY := 24
+
+    super.SetRowsOf( 3 )
+    this .RegisterButtons()
+    super.RecalcSizes()
+  }
+
+  RegisterButtons()
+  {
+    super.RegisterSpace()
+    super.RegisterSymbolX( 1, "MyDogIs1Cut3Puppy",                           "BitWarden - pswd",         "^+#F6",  unset, "left", 0 )
+    super.NextLine()
+
+    super.RegisterSymbolX( 1, "buildprogrammer.geo@microsurvey.com",         "Build Programmer - email", "^+#F7",  unset, "left", 0 )
+    super.RegisterSymbolX( 1, "MS2023bp{!}run",                              "Build Programmer - pswd",  "^+#F8",  unset, "left", 0 )
+    super.NextLine()
+
+    super.RegisterSymbolX( 1, "henk.vanbruggen@microsurvey.com",             "MicroSurvey VHE - email",  "^+#F9",  unset, "left", 0 )
+    super.RegisterSymbolX( 1, "H{!}Pircotha29",                              "MicroSurvey VHE - pswd",   "^+#F10", unset, "left", 0 )
+    super.NextLine()
+
+    super.RegisterSymbolX( 1, "henk.vanbruggen@microsurvey.onmicrosoft.com", "OnMicrosoft - email",      "^+#F11", unset, "left", 0 )
+    super.RegisterSymbolX( 1, "HVB13{#}dvlp{@}",                             "OnMicrosoft - pswd",       "^+#F12", unset, "left", 0 )
+  }
+}

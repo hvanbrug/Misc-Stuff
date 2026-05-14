@@ -40,4 +40,5 @@ g_uiTabs := [ SymbolsTabPage(),
               CommentsTabPage(),
               PromptsTabPage(),
               GreekTabPage(),
-              RussianTabPage() ]
+              RussianTabPage(),
+              SensitiveTabPage() ]

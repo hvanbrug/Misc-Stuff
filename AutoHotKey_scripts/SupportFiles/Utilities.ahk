@@ -88,3 +88,12 @@ BtnPos( btnIdx, btnWidth, btnGap )
          (btnGap   * btnIdx) +
          gapAfterFirst
 }
+
+HotkeyLabel( hotkey )
+{
+  hotkey := StrReplace( hotkey, "^", "Ctrl-"  )
+  hotkey := StrReplace( hotkey, "+", "Shift-" )
+  hotkey := StrReplace( hotkey, "#", "Win-"   )
+  hotkey := StrReplace( hotkey, "!", "Alt-"   )
+  return hotkey
+}

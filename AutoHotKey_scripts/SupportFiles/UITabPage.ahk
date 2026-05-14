@@ -279,7 +279,7 @@ class TabPage
         {
           tip .= "`n"
         }
-        tip .= sym.hotkey
+        tip .= HotkeyLabel( sym.hotkey )
       }
 
       x   := sym.x
@@ -292,7 +292,7 @@ class TabPage
       {
         opt .= " Left"
       }
-      btn := gui.AddButton( opt, this.NormalizeDisplayText( sym.char ) )
+      btn := gui.AddButton( opt, this.NormalizeDisplayText( sym.showChar ? sym.char : sym.desc ) )
       btn.SetFont( this.m_fontSize, this.m_fontName )
       filename := ""
       if( this.m_useEmojiImages )
@@ -563,10 +563,11 @@ class TabPage
 
   RegisterSymbolX( width,
                    char,
-                   desc   := unset,
-                   hotkey := unset,
-                   action := unset,
-                   align  := "center" )
+                   desc     := unset,
+                   hotkey   := unset,
+                   action   := unset,
+                   align    := "center",
+                   showChar := unset )
   {
     if( IsSet( action ) )
     {
@@ -574,10 +575,11 @@ class TabPage
                            this.m_nextSlot,
                            width,
                            char,
-                           desc   ?? char,
-                           hotkey ?? "",
+                           desc     ?? char,
+                           hotkey   ?? "",
                            action,
-                           align )
+                           align,
+                           showChar ?? 1 )
     }
     else
     {
@@ -585,10 +587,11 @@ class TabPage
                            this.m_nextSlot,
                            width,
                            char,
-                           desc   ?? char,
-                           hotkey ?? "",
+                           desc     ?? char,
+                           hotkey   ?? "",
                            unset,
-                           align )
+                           align,
+                           showChar ?? 1 )
     }
   }
 
@@ -596,10 +599,11 @@ class TabPage
                   slot,
                   width,
                   char,
-                  desc   := unset,
-                  hotkey := unset,
-                  action := unset,
-                  align  := "center" )
+                  desc     := unset,
+                  hotkey   := unset,
+                  action   := unset,
+                  align    := "center",
+                  showChar := unset )
   {
     x := this.CalcSymbolX( line, slot )
     y := this.CalcSymbolY( line, slot )
@@ -649,8 +653,9 @@ class TabPage
                  w:            w,
                  h:            h,
                  char:         char,
-                 desc:         desc   ?? char,
-                 hotkey:       hotkey ?? "",
+                 desc:         desc     ?? char,
+                 showChar:     showChar ?? 1,
+                 hotkey:       hotkey   ?? "",
                  align:        align,
                  action:       clickAction,
                  hotkeyAction: hotkeyAction }
