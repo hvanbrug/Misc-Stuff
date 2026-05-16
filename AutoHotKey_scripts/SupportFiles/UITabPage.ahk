@@ -275,18 +275,19 @@ class TabPage
       }
       if( sym.hotkey != "" )
       {
-        if( tip != "" )
-        {
-          tip .= "`n"
-        }
+        if( tip != "" ) tip .= "`n"
         tip .= HotkeyLabel( sym.hotkey )
+      }
+      if( sym.tipChar )
+      {
+        if( tip != "" ) tip .= "`n"
+        tip .= sym.char
       }
 
       x   := sym.x
       y   := sym.y + 5
       w   := sym.w
       h   := sym.h
-      tip := tip
       opt := "x" x " y" y " w" w " h" h " Hidden"
       if( sym.align = "left" )
       {
@@ -300,7 +301,8 @@ class TabPage
         filename := ApplyEmojiBitmapToButton( btn, sym.char, Round( this.m_symBtnSizeX * dpiScale * 0.8 ) )
         if( filename != "" )
         {
-          tip := tip "`nU+" filename
+          if( tip != "" ) tip .= "`n"
+          tip .= "U+" filename
         }
       }
       sym.ctrl := btn
@@ -567,7 +569,8 @@ class TabPage
                    hotkey   := unset,
                    action   := unset,
                    align    := "center",
-                   showChar := unset )
+                   showChar := unset,
+                   tipChar  := unset )
   {
     if( IsSet( action ) )
     {
@@ -579,7 +582,8 @@ class TabPage
                            hotkey   ?? "",
                            action,
                            align,
-                           showChar ?? 1 )
+                           showChar ?? 1,
+                           tipChar  ?? 0  )
     }
     else
     {
@@ -591,7 +595,8 @@ class TabPage
                            hotkey   ?? "",
                            unset,
                            align,
-                           showChar ?? 1 )
+                           showChar ?? 1,
+                           tipChar  ?? 0  )
     }
   }
 
@@ -603,7 +608,8 @@ class TabPage
                   hotkey   := unset,
                   action   := unset,
                   align    := "center",
-                  showChar := unset )
+                  showChar := unset,
+                  tipChar  := unset )
   {
     x := this.CalcSymbolX( line, slot )
     y := this.CalcSymbolY( line, slot )
@@ -655,6 +661,7 @@ class TabPage
                  char:         char,
                  desc:         desc     ?? char,
                  showChar:     showChar ?? 1,
+                 tipChar:      tipChar  ?? 0,
                  hotkey:       hotkey   ?? "",
                  align:        align,
                  action:       clickAction,

@@ -14,6 +14,8 @@ class PromptsTabPage extends TabPage
     super.m_symBtnSizeX := 320
     super.m_symBtnSizeY := 24
 
+    this.LoadLargePrompts()
+
     super.SetRowsOf( 2 )
     this .RegisterButtons()
     super.RecalcSizes()
@@ -21,32 +23,60 @@ class PromptsTabPage extends TabPage
 
   RegisterButtons()
   {
-    super.RegisterSymbolX( 1, "A semi-realistic digital illustration of ", "Semi-realistic",                            unset, unset, "left" )
-    super.RegisterSymbolX( 1, "no speckled noise, random particles, or visual artifacts", "Semi-realistic",             unset, unset, "left" )
-    super.RegisterSymbolX( 1, "Clean up all speckled noise, random particles, and visual artifacts.", "Semi-realistic", unset, unset, "left" )
+
+    super.RegisterSymbolX( 1, "no speckled noise, random particles, or visual artifacts",             "Avoid noise and artifacts",  unset, unset, "left", 0, 1 )
+    super.RegisterSymbolX( 1, "Clean up all speckled noise, random particles, and visual artifacts.", "Remove noise and artifacts", unset, unset, "left", 0, 1 )
+    super.RegisterSymbolX( 1, "A semi-realistic digital illustration of ",                            "Semi-realistic",             unset, unset, "left", 0, 1 )
     super.RegisterSpace()
 
     super.ShiftLineByThird()
-    super.RegisterSymbolX( 1, "abc of def - score - DC `n", "Daily Challenge description",     "^+1", unset, "left" )
-    super.RegisterSymbolX( 1, "abc of def (ghi) - score`n", "Community Challenge description", "^+2", unset, "left" )
+    super.RegisterSymbolX( 1, this.GPT2LowUpscalePrompt,                            "GPT 2 Low - Upscale",         unset, unset, "left", 0, 1 )
+    super.RegisterSymbolX( 1, this.GPT2LowUpscalePainterly,                         "GPT 2 Low - Painterly addon", unset, unset, "left", 0, 1 )
+    super.RegisterSpace()
+    super.RegisterSymbolX( 1, this.GPT2LowUpscaleRealistic,                         "GPT 2 Low - Realistic addon", unset, unset, "left", 0, 1 )
+
+    super.ShiftLineByThird()
+    super.RegisterSymbolX( 1, "abc of def - score - DC `n", "Daily Challenge description",     unset, unset, "left", 0, 1 )
+    super.RegisterSymbolX( 1, "abc of def (ghi) - score`n", "Community Challenge description", unset, unset, "left", 0, 1 )
+  }
+
+  LoadLargePrompts()
+  {
+    this.GPT2LowUpscalePrompt := "Upscale and refine this image while preserving the original "
+    this.GPT2LowUpscalePrompt .= "composition, character identity, pose, camera angle, lighting, "
+    this.GPT2LowUpscalePrompt .= "colors, clothing, and overall artistic style.`n`n"
+    this.GPT2LowUpscalePrompt .= "Clean up compression artifacts, noise, pixelation, blurry "
+    this.GPT2LowUpscalePrompt .= "details, jagged edges, muddy textures, and low-resolution "
+    this.GPT2LowUpscalePrompt .= "defects. Improve fine detail, edge definition, skin texture, "
+    this.GPT2LowUpscalePrompt .= "hair strands, fabric texture, metallic surfaces, and "
+    this.GPT2LowUpscalePrompt .= "environmental detail while keeping the image natural and "
+    this.GPT2LowUpscalePrompt .= "cohesive.`n`n"
+    this.GPT2LowUpscalePrompt .= "Correct malformed anatomy, warped fingers, distorted eyes, "
+    this.GPT2LowUpscalePrompt .= "asymmetry, duplicated features, and small rendering defects "
+    this.GPT2LowUpscalePrompt .= "without redesigning the scene.`n`n"
+    this.GPT2LowUpscalePrompt .= "Preserve the original mood and framing exactly. Do not change "
+    this.GPT2LowUpscalePrompt .= "the scene layout, add new objects, alter proportions, crop "
+    this.GPT2LowUpscalePrompt .= "the image, or reinterpret the art style.`n`n"
+    this.GPT2LowUpscalePrompt .= "High clarity, clean detail, polished rendering, coherent "
+    this.GPT2LowUpscalePrompt .= "textures, subtle natural sharpening, artifact-free image, "
+    this.GPT2LowUpscalePrompt .= "professional quality."
+
+    this.GPT2LowUpscalePainterly := "Maintain painterly texture and natural artistic brushwork. "
+    this.GPT2LowUpscalePainterly .= "Avoid plastic smoothing or photorealistic conversion."
+
+    this.GPT2LowUpscaleRealistic := "Maintain realistic skin texture, pores, and natural "
+    this.GPT2LowUpscaleRealistic .= "imperfections. Avoid waxy or overprocessed surfaces."
   }
 }
 
-;; Ctrl + Shift + 1 => Daily Challenge description template
-;RegisterAction( "Ctrl+Shift+1", "Daily Challenge description", DailyChallengeDescription )
-;^+1::DailyChallengeDescription()
-;DailyChallengeDescription()
-;{
-;  DoSendText( "abc of def - score - DC `n" )
-;}
 
-; Ctrl + Shift + 2 => Community Challenge description template
-RegisterAction( "Ctrl+Shift+2", "Community Challenge description", CommunityChallengeDescription )
-^+2::CommunityChallengeDescription()
-CommunityChallengeDescription()
-{
-  DoSendText( "abc of def (ghi) - score`n" )
-}
+
+
+
+
+
+
+
 
 ; Ctrl + Shift + 3 => Basic prompt template
 RegisterAction( "Ctrl+Shift+3", "Basic prompt template", PromptBasicTemplate )

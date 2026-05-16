@@ -2,10 +2,7 @@
 ; Ctrl + Shift + / => Show Help Menu with all available hotkeys
 ; ═══════════════════════════════════════════════════════════════
 ^+a::ListHotkeys
-^+z::ShowWindow( 1 ) ; Start on the special characters tab
 ^+x::ShowWindow( 2 ) ; Start on the emojis tab
-^+c::ShowWindow( 3 ) ; Start on the comments tab
-
 
 ShowWindow( startTab )
 {
@@ -50,7 +47,7 @@ ShowWindow( startTab )
     return
   }
 
-  g_gui := Gui( "+AlwaysOnTop +ToolWindow -Resize -MinimizeBox -MaximizeBox", windowTitle )
+  g_gui := Gui( "+AlwaysOnTop +ToolWindow -Caption -Resize -MinimizeBox -MaximizeBox", windowTitle )
 
   ; Prevent the GUI from painting its background over child button areas during scroll.
   WS_CLIPCHILDREN := 0x02000000
@@ -58,7 +55,7 @@ ShowWindow( startTab )
   DllCall( "SetWindowLong", "ptr", g_gui.Hwnd, "int", -16, "int", guiStyle | WS_CLIPCHILDREN )
 
   tabList := []
-  tabContentWidth  := g_LV_WIDTH
+  tabContentWidth  := 0
   tabContentHeight := 0
   for tab in g_uiTabs
   {
@@ -80,20 +77,6 @@ ShowWindow( startTab )
   if( maxTabContentHeight < TAB_VIEWPORT_MIN_HEIGHT )
   {
     maxTabContentHeight := TAB_VIEWPORT_MIN_HEIGHT
-  }
-  if( tabContentHeight > maxTabContentHeight )
-  {
-    tabContentHeight := maxTabContentHeight
-  }
-
-  HOTKEYS_TAB := tabList.Length + 1
-  tabList.Push( "Hotkey Help" )
-
-  ; Use the larger of symbol area or hotkey list area
-  LV_AREA_HEIGHT := g_hdrHeight + (g_LV_ROW_COUNT * 20) + 10
-  if LV_AREA_HEIGHT > tabContentHeight
-  {
-    tabContentHeight := LV_AREA_HEIGHT
   }
   if( tabContentHeight > maxTabContentHeight )
   {
@@ -184,37 +167,9 @@ ShowWindow( startTab )
   SetTimer( HoverCheck, 100 )
   SetTimer( TrackActiveWindow, 100 )
 
-
-  ; Colored header bar using a Progress control as background
-  g_tabs.UseTab( HOTKEYS_TAB )
-  HEADER_FULL_WIDTH := g_COL_HOTKEY_WIDTH + g_COL_DESC_WIDTH + g_RESIZE_H_MARGIN
-  g_HeaderBg := g_gui.AddProgress( "x15 y35 w" HEADER_FULL_WIDTH " h" g_hdrHeight
-                                   " Background" g_HEADER_BG_COLOR " c" g_HEADER_BG_COLOR, 100 )
-
-  g_gui.SetFont( g_fontSize " bold", g_fontName )
-  g_HeaderHotkey := g_gui.AddText( "x15 y35 w" g_COL_HOTKEY_WIDTH " h" g_hdrHeight
-                                   " BackgroundTrans c" g_HEADER_TEXT_COLOR " +0x200",
-                                   "  Hotkey" )
-  g_HeaderDesc := g_gui.AddText( "x+0 yp w" (g_COL_DESC_WIDTH + g_RESIZE_H_MARGIN) " h" g_hdrHeight
-                                 " BackgroundTrans c" g_HEADER_TEXT_COLOR " +0x200",
-                                 "  Description" )
-  g_gui.SetFont( g_fontSize " norm", g_fontName )
-
-  g_LV := g_gui.AddListView( "x15 y+0 r" g_LV_ROW_COUNT " w" g_LV_WIDTH " Grid -Hdr",
-                             ["Hotkey", "Description"] )
-  g_LV.ModifyCol( 1, g_COL_HOTKEY_WIDTH )
-  g_LV.ModifyCol( 2, g_COL_DESC_WIDTH )
-
-  for item in g_HelpActions
-  {
-    g_LV.Add( , item.hotkey, item.desc )
-  }
-
-
-  g_LV.OnEvent(   "DoubleClick", RowAction      )
-  g_gui.OnEvent(  "Escape",      (*) => Close() )
-  g_gui.OnEvent(  "Close",       (*) => Close() )
-  g_tabs.OnEvent( "Change",      TabChanged     )
+  g_gui.OnEvent(  "Escape", (*) => Close() )
+  g_gui.OnEvent(  "Close",  (*) => Close() )
+  g_tabs.OnEvent( "Change", TabChanged     )
 
   g_guiHwndRaw := g_gui.Hwnd
   InstallWheelHook()
@@ -266,13 +221,13 @@ ShowWindow( startTab )
 
   g_shrinkBtn := CreateButton( "▼", "Shrink window",
                                "Segoe UI Symbol", "s14",
-                               55, 0, btnWth, btnHgt,
+                               15, 0, btnWth, btnHgt,
                                (*) => ShrinkWindow() )
   g_shrinkBtn.Opt( "-Hidden" )
 
   g_expandBtn := CreateButton( "▲", "Expand window",
                                "Segoe UI Symbol", "s14",
-                               55, 0, btnWth, btnHgt,
+                               15, 0, btnWth, btnHgt,
                                (*) => ExpandWindow() )
   g_expandBtn.Opt( "Hidden" )
 
@@ -314,10 +269,7 @@ ShrinkWindow()
   g_shrinkBtn.Opt( "Hidden" )
   g_expandBtn.Opt( "-Hidden" )
 
-  ; Shrink to just the title bar + button strip (no client area).
-  ; GetSystemMetrics(31) = SM_CYCAPTION (title bar height).
-  titleH := DllCall( "GetSystemMetrics", "Int", 31, "Int" )
-  g_gui.Show( "w150 h" titleH " NoActivate" )
+  g_gui.Show( "w70 h24 NoActivate" )
   IniWrite( 1, g_iniPath, "Window", "Collapsed" )
 }
 
@@ -417,12 +369,12 @@ Close()
   g_expandBtn     := ""
   SaveWindowPos()
   OnMessage( 0x0003, OnWindowMove, 0 )  ; WM_MOVE
-  OnMessage( 0x0115, VScroll, 0 )
+  OnMessage( 0x0115, VScroll,      0 )
   RemoveWheelHook()
   g_guiHwndRaw := 0
-  g_wheelPendingSteps := 0
+  g_wheelPendingSteps   := 0
   g_wheelFlushScheduled := false
-  SetTimer( HoverCheck, 0 )
+  SetTimer( HoverCheck,        0 )
   SetTimer( TrackActiveWindow, 0 )
   ToolTip()
   if g_gui
@@ -638,30 +590,6 @@ UpdateScrollInfo()
   RedrawScrollbar()
 }
 
-WheelUpHandler( * )
-{
-  if( IsCursorOverGuiRoot() )
-  {
-    QueueWheel( -1 )
-    return
-  }
-
-  ; Cursor is not over our GUI — re-send so the target window gets it.
-  ; Synthetic events at SendLevel 0 won't retrigger our InputLevel 0 hotkey.
-  Send( "{WheelUp}" )
-}
-
-WheelDownHandler( * )
-{
-  if( IsCursorOverGuiRoot() )
-  {
-    QueueWheel( 1 )
-    return
-  }
-
-  Send( "{WheelDown}" )
-}
-
 QueueWheel( stepDelta )
 {
   global g_wheelPendingSteps
@@ -692,27 +620,6 @@ FlushQueuedWheel()
   }
 
   DoWheel( stepDelta )
-}
-
-IsCursorOverGuiRoot()
-{
-  global g_gui
-  if( !IsSet( g_gui ) || !IsObject( g_gui ) )
-  {
-    return false
-  }
-
-  ; Get both the window and control under cursor as HWNDs.
-  MouseGetPos( , , &winHwnd, &ctrlHwnd, 2 )
-  hitHwnd := ctrlHwnd ? ctrlHwnd : winHwnd
-  if( !hitHwnd )
-  {
-    return false
-  }
-
-  GA_ROOT := 2
-  rootHwnd := DllCall( "GetAncestor", "Ptr", hitHwnd, "UInt", GA_ROOT, "Ptr" )
-  return (rootHwnd = g_gui.Hwnd)
 }
 
 InstallWheelHook()
@@ -935,31 +842,4 @@ OnWindowMove( wParam, lParam, msg, hwnd )
 {
   ; Debounce: coalesce rapid move messages into one write 500 ms after the last one.
   SetTimer( SaveWindowPos, -500 )
-}
-
-SymbolClick( action, ctrl, * )
-{
-  Close()
-  Sleep( 150 )
-  action.Call()
-}
-
-RowAction( ctrl, rowNum )
-{
-  global g_HelpActions
-  if rowNum = 0
-  {
-    return
-  }
-  entry := g_HelpActions[rowNum]
-  if entry.action = ""
-  {
-    MsgBox( "This action can only be triggered via its hotkey.",
-            "Not available from menu",
-            "Icon!" )
-    return
-  }
-  Close()
-  Sleep( 150 )
-  entry.action.Call()
 }

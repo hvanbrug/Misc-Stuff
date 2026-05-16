@@ -25,23 +25,36 @@ class CommentsTabPage extends TabPage
     super.RegisterSymbolX( 1, "Thanks 😊.",                       unset, "#!1", unset, "left" )
     super.RegisterSymbolX( 1, "Thank you 😊.",                    unset, "#!2", unset, "left" )
 
+    super.RegisterSymbolX( 1, "Thank you kindly 😀.",             unset, unset, unset, "left" )
+    super.RegisterSymbolX( 1, "Thanks a lot 😀.",                 unset, unset, unset, "left" )
+
     super.RegisterSymbolX( 1, "Thank you very much 🤗.",          unset, "#!3", unset, "left" )
     super.RegisterSymbolX( 1, "Thank you so much 🤗.",            unset, "#!4", unset, "left" )
 
-    super.RegisterSymbolX( 1, "Thank you kindly 😀.",             unset, unset, unset, "left" )
-    super.RegisterSymbolX( 1, " 😀.",            unset, unset, unset, "left" )
+    super.ShiftLineByThird()
+    super.RegisterSymbolX( 1, "Thanks. I appreciate it 😁.",      unset, "#!5", unset, "left" )
+    super.RegisterSymbolX( 1, "Thanks. I'm glad you like it 😁.", unset, "#!6", unset, "left" )
 
-    super.RegisterSymbolX( 1, "Thanks, I appreciate it 😁.",      unset, "#!5", unset, "left" )
-    super.RegisterSymbolX( 1, "Thanks, I'm glad you like it 😁.", unset, "#!6", unset, "left" )
+    super.RegisterSymbolX( 1, "Thank you. I appreciate it 😁.",      unset, unset, unset, "left" )
+    super.RegisterSymbolX( 1, "Thank you. I'm glad you like it 😁.", unset, unset, unset, "left" )
+
+    super.RegisterSymbolX( 1, "Thank you very much. I appreciate it 😁.",      unset, unset, unset, "left" )
+    super.RegisterSymbolX( 1, "Thank you very much. I'm glad you like it 😁.", unset, unset, unset, "left" )
+
+    super.RegisterSymbolX( 1, "Thank you so much. I appreciate it 😁.",      unset, unset, unset, "left" )
+    super.RegisterSymbolX( 1, "Thank you so much. I'm glad you like it 😁.", unset, unset, unset, "left" )
 
     super.ShiftLineByThird()
     super.RegisterSymbolX( 1, "Thanks for the tip 🥰.",           unset, "#!7", unset, "left" )
     super.RegisterSymbolX( 1, "`b, and thanks for the tip 🥰.",   unset, "#!8", unset, "left" )
 
-    super.RegisterSymbolX( 1, "Thanks 😁, I appreciate the tip 🥰.",     unset, unset, unset, "left" )
-    super.RegisterSymbolX( 1, "Thank you very much, I appreciate it 😁.", unset, unset, unset, "left" )
-    super.RegisterSymbolX( 1, "Thank you so much, I appreciate it 😁.",   unset, unset, unset, "left" )
-    super.RegisterSymbolX( 1, "Thanks, I appreciate the tip 🥰.",         unset, unset, unset, "left" )
+    super.RegisterSymbolX( 1, "Thank you for the tip 🥰.",           unset, unset, unset, "left" )
+    super.RegisterSpace()
+    super.RegisterSymbolX( 1, "Thank you very much for the tip 😁.", unset, unset, unset, "left" )
+    super.RegisterSpace()
+    super.RegisterSymbolX( 1, "Thank you so much for the tip 😁.",   unset, unset, unset, "left" )
+    super.RegisterSpace()
+    super.RegisterSymbolX( 1, "Thanks, I appreciate the tip 🥰.",    unset, unset, unset, "left" )
     super.RegisterSpace()
 
     super.ShiftLineByThird()
