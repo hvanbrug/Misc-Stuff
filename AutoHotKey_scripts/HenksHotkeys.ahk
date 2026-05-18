@@ -15,6 +15,7 @@ A_MaxHotkeysPerInterval := 400
 #Include "EmojiResources.ahk"
 #Include "SupportFiles\UITabPage.ahk"
 #Include "SupportFiles\UI.ahk"
+#Include "SupportFiles\UIScrolling.ahk"
 #Include "SupportFiles\UIConstants.ahk"
 
 

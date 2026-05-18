@@ -30,10 +30,10 @@ class PromptsTabPage extends TabPage
     super.RegisterSpace()
 
     super.ShiftLineByThird()
-    super.RegisterSymbolX( 1, this.GPT2LowUpscalePrompt,                            "GPT 2 Low - Upscale",         unset, unset, "left", 0, 1 )
-    super.RegisterSymbolX( 1, this.GPT2LowUpscalePainterly,                         "GPT 2 Low - Painterly addon", unset, unset, "left", 0, 1 )
-    super.RegisterSpace()
-    super.RegisterSymbolX( 1, this.GPT2LowUpscaleRealistic,                         "GPT 2 Low - Realistic addon", unset, unset, "left", 0, 1 )
+    super.RegisterSymbolX( 1, this.GPT2UpscalePromptSoft, "GPT 2 - Soft Upscale",            unset, unset, "left", 0, 1 )
+    super.RegisterSymbolX( 1, this.GPT2UpscalePainterly,  "GPT 2 - Painterly Upscale addon", unset, unset, "left", 0, 1 )
+    super.RegisterSymbolX( 1, this.GPT2UpscalePromptHard, "GPT 2 - Hard Upscale",            unset, unset, "left", 0, 1 )
+    super.RegisterSymbolX( 1, this.GPT2UpscaleRealistic,  "GPT 2 - Realistic Upscale addon", unset, unset, "left", 0, 1 )
 
     super.ShiftLineByThird()
     super.RegisterSymbolX( 1, "abc of def - score - DC `n", "Daily Challenge description",     unset, unset, "left", 0, 1 )
@@ -42,30 +42,44 @@ class PromptsTabPage extends TabPage
 
   LoadLargePrompts()
   {
-    this.GPT2LowUpscalePrompt := "Upscale and refine this image while preserving the original "
-    this.GPT2LowUpscalePrompt .= "composition, character identity, pose, camera angle, lighting, "
-    this.GPT2LowUpscalePrompt .= "colors, clothing, and overall artistic style.`n`n"
-    this.GPT2LowUpscalePrompt .= "Clean up compression artifacts, noise, pixelation, blurry "
-    this.GPT2LowUpscalePrompt .= "details, jagged edges, muddy textures, and low-resolution "
-    this.GPT2LowUpscalePrompt .= "defects. Improve fine detail, edge definition, skin texture, "
-    this.GPT2LowUpscalePrompt .= "hair strands, fabric texture, metallic surfaces, and "
-    this.GPT2LowUpscalePrompt .= "environmental detail while keeping the image natural and "
-    this.GPT2LowUpscalePrompt .= "cohesive.`n`n"
-    this.GPT2LowUpscalePrompt .= "Correct malformed anatomy, warped fingers, distorted eyes, "
-    this.GPT2LowUpscalePrompt .= "asymmetry, duplicated features, and small rendering defects "
-    this.GPT2LowUpscalePrompt .= "without redesigning the scene.`n`n"
-    this.GPT2LowUpscalePrompt .= "Preserve the original mood and framing exactly. Do not change "
-    this.GPT2LowUpscalePrompt .= "the scene layout, add new objects, alter proportions, crop "
-    this.GPT2LowUpscalePrompt .= "the image, or reinterpret the art style.`n`n"
-    this.GPT2LowUpscalePrompt .= "High clarity, clean detail, polished rendering, coherent "
-    this.GPT2LowUpscalePrompt .= "textures, subtle natural sharpening, artifact-free image, "
-    this.GPT2LowUpscalePrompt .= "professional quality."
+    this.GPT2UpscalePromptSoft := "Refine and lightly upscale this image while preserving the "
+    this.GPT2UpscalePromptSoft .= "original composition, character identity, pose, lighting, "
+    this.GPT2UpscalePromptSoft .= "colors, and artistic style.`n`n"
+    this.GPT2UpscalePromptSoft .= "Clean up minor noise, compression artifacts, blurry edges, "
+    this.GPT2UpscalePromptSoft .= "low-resolution defects, and small rendering inconsistencies. "
+    this.GPT2UpscalePromptSoft .= "Improve overall clarity, texture definition, and detail "
+    this.GPT2UpscalePromptSoft .= "cohesion while keeping the image natural and faithful to the "
+    this.GPT2UpscalePromptSoft .= "original.`n`n"
+    this.GPT2UpscalePromptSoft .= "Correct subtle anatomy or rendering issues only where "
+    this.GPT2UpscalePromptSoft .= "necessary. Do not redesign characters, alter proportions, "
+    this.GPT2UpscalePromptSoft .= "change the scene layout, or reinterpret the image.`n`n"
+    this.GPT2UpscalePromptSoft .= "Natural detail, coherent textures, soft clean rendering, "
+    this.GPT2UpscalePromptSoft .= "subtle sharpening, consistent quality."
 
-    this.GPT2LowUpscalePainterly := "Maintain painterly texture and natural artistic brushwork. "
-    this.GPT2LowUpscalePainterly .= "Avoid plastic smoothing or photorealistic conversion."
+    this.GPT2UpscalePromptHard := "Upscale and refine this image while preserving the original "
+    this.GPT2UpscalePromptHard .= "composition, character identity, pose, camera angle, lighting, "
+    this.GPT2UpscalePromptHard .= "colors, clothing, and overall artistic style.`n`n"
+    this.GPT2UpscalePromptHard .= "Clean up compression artifacts, noise, pixelation, blurry "
+    this.GPT2UpscalePromptHard .= "details, jagged edges, muddy textures, and low-resolution "
+    this.GPT2UpscalePromptHard .= "defects. Improve fine detail, edge definition, skin texture, "
+    this.GPT2UpscalePromptHard .= "hair strands, fabric texture, metallic surfaces, and "
+    this.GPT2UpscalePromptHard .= "environmental detail while keeping the image natural and "
+    this.GPT2UpscalePromptHard .= "cohesive.`n`n"
+    this.GPT2UpscalePromptHard .= "Correct malformed anatomy, warped fingers, distorted eyes, "
+    this.GPT2UpscalePromptHard .= "asymmetry, duplicated features, and small rendering defects "
+    this.GPT2UpscalePromptHard .= "without redesigning the scene.`n`n"
+    this.GPT2UpscalePromptHard .= "Preserve the original mood and framing exactly. Do not change "
+    this.GPT2UpscalePromptHard .= "the scene layout, add new objects, alter proportions, crop "
+    this.GPT2UpscalePromptHard .= "the image, or reinterpret the art style.`n`n"
+    this.GPT2UpscalePromptHard .= "High clarity, clean detail, polished rendering, coherent "
+    this.GPT2UpscalePromptHard .= "textures, subtle natural sharpening, artifact-free image, "
+    this.GPT2UpscalePromptHard .= "professional quality."
 
-    this.GPT2LowUpscaleRealistic := "Maintain realistic skin texture, pores, and natural "
-    this.GPT2LowUpscaleRealistic .= "imperfections. Avoid waxy or overprocessed surfaces."
+    this.GPT2UpscalePainterly := "Maintain painterly texture and natural artistic brushwork. "
+    this.GPT2UpscalePainterly .= "Avoid plastic smoothing or photorealistic conversion."
+
+    this.GPT2UpscaleRealistic := "Maintain realistic skin texture, pores, and natural "
+    this.GPT2UpscaleRealistic .= "imperfections. Avoid waxy or overprocessed surfaces."
   }
 }
 

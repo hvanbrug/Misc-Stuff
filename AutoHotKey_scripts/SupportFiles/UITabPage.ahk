@@ -540,6 +540,12 @@ class TabPage
     this.m_nextSlot := 1
   }
 
+  ForceNextSlot( line, slot )
+  {
+    this.m_nextLine := line
+    this.m_nextSlot := slot
+  }
+
   ShiftLineByHalf( num := 1 )
   {
     this.ShiftLineByFraction( num, 2 )
@@ -576,6 +582,7 @@ class TabPage
     {
       this.RegisterSymbol( this.m_nextLine,
                            this.m_nextSlot,
+                           1,
                            width,
                            char,
                            desc     ?? char,
@@ -589,6 +596,7 @@ class TabPage
     {
       this.RegisterSymbol( this.m_nextLine,
                            this.m_nextSlot,
+                           1,
                            width,
                            char,
                            desc     ?? char,
@@ -602,6 +610,7 @@ class TabPage
 
   RegisterSymbol( line,
                   slot,
+                  advanceBy,
                   width,
                   char,
                   desc     := unset,
@@ -617,7 +626,7 @@ class TabPage
     h := this.m_symBtnSizeY
 
     ; Visual width does not affect logical fill order.
-    this.AdvanceSlot( 1 )
+    this.AdvanceSlot( advanceBy )
 
     ; Resolve optional actions only when already callable.
     resolvedAction := unset
