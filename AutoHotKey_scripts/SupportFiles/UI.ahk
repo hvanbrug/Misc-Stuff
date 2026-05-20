@@ -2,12 +2,27 @@
 ^+x::ToggleUI
 
 
-A_TrayMenu.Delete()
-A_TrayMenu.Add( "Open UI",  ShowUI )
-A_TrayMenu.Add( "Close UI", HideUI )
-A_TrayMenu.Add()
-A_TrayMenu.Add( "Exit", (*) => ExitApp() )
-A_TrayMenu.Default := "Open UI"
+
+Startup()
+
+Startup()
+{
+  A_TrayMenu.Delete()
+  A_TrayMenu.Add( "Open UI",  ShowUI )
+  A_TrayMenu.Add( "Close UI", HideUI )
+  A_TrayMenu.Add()
+  A_TrayMenu.Add( "Exit", (*) => ExitApp() )
+  A_TrayMenu.Default := "Open UI"
+
+  global g_iniPath
+  isWndOpen := IniRead( g_iniPath, "Window", "WndOpen", 0 )
+  if( isWndOpen = "1" )
+  {
+    ShowUI()
+  }
+}
+
+
 
 
 ToggleUI( * )
@@ -36,12 +51,14 @@ ShowUI( * )
   {
     ShowWindow( 2 ) ; Start on the emojis tab
   }
+  IniWrite( 1, g_iniPath, "Window", "WndOpen" )
 }
 
 HideUI( * )
 {
   global g_gui
   g_gui.Hide()
+  IniWrite( 0, g_iniPath, "Window", "WndOpen" )
 }
 
 
@@ -89,6 +106,8 @@ ShowWindow( startTab )
   }
 
   g_gui := Gui( "+AlwaysOnTop +ToolWindow -Caption -Resize -MinimizeBox -MaximizeBox", windowTitle )
+
+  IniWrite( 1, g_iniPath, "Window", "WndOpen" )
 
   ; Prevent the GUI from painting its background over child button areas during scroll.
   WS_CLIPCHILDREN := 0x02000000
@@ -208,7 +227,8 @@ ShowWindow( startTab )
   SetTimer( HoverCheck, 100 )
   SetTimer( TrackActiveWindow, 100 )
 
-  OnMessage( 0x201, WM_LBUTTONDOWN )
+  OnMessage( 0x201, OnLButtonDown )
+  OnMessage( 0x205, OnRButtonUp   )  ; WM_RBUTTONUP
   g_gui.OnEvent(  "Escape", (*) => Close() )
   g_gui.OnEvent(  "Close",  (*) => Close() )
   g_tabs.OnEvent( "Change", TabChanged     )
@@ -243,6 +263,11 @@ ShowWindow( startTab )
   btnGap    := 2
   btnWth    := 40
   btnHgt    := 24
+
+  CreateButton( "⌫.", "Back 3, Replace with period",
+                "Segoe UI Symbol", "s10",
+                rightEdge - BtnPos( 3, btnWth, btnGap ), 0, btnWth, btnHgt,
+                (*) => DoSendText( "`b`b`b. " ) )
 
   CreateBtnWithStyle( "⇚,", "Back 3, Insert Comma",
                       "Segoe UI Symbol", "s16",
@@ -292,7 +317,8 @@ ShowWindow( startTab )
     ExpandWindow()
   }
 
-  OnMessage( 0x0003, OnWindowMove )  ; WM_MOVE
+  OnMessage( 0x0003, OnWindowMove   )  ; WM_MOVE
+  OnMessage( 0x0216, OnWindowMoving )  ; WM_MOVING
 
   ; Restore collapsed state last, after everything is laid out.
   if( IniRead( g_iniPath, "Window", "Collapsed", "0" ) = "1" )
@@ -303,7 +329,27 @@ ShowWindow( startTab )
 
 
 
-WM_LBUTTONDOWN( wParam, lParam, msg, hwnd )
+OnLButtonDown( wParam, lParam, msg, hwnd )
+{
+  global g_gui
+  global g_dragOffset
+
+  if( hwnd != g_gui.Hwnd )
+  {
+    return
+  }
+
+  ; Record how far the cursor is below the window top at grab time.
+  pt := Buffer( 8 )
+  DllCall( "GetCursorPos", "Ptr", pt )
+  cursorY := NumGet( pt, 4, "Int" )
+  WinGetPos( , &winY, , , g_gui )
+  g_dragOffset := cursorY - winY
+
+  PostMessage( 0xA1, 2,,, "ahk_id " hwnd )
+}
+
+OnRButtonUp( wParam, lParam, msg, hwnd )
 {
   global g_gui
 
@@ -312,7 +358,70 @@ WM_LBUTTONDOWN( wParam, lParam, msg, hwnd )
     return
   }
 
-  PostMessage( 0xA1, 2,,, "ahk_id " hwnd )
+  contextMenu := Menu()
+  contextMenu.Add( "Open UI",  ShowUI )
+  contextMenu.Add( "Close UI", HideUI )
+  contextMenu.Add()
+  contextMenu.Add( "Exit", (*) => ExitApp() )
+  contextMenu.Show()
+}
+
+OnWindowMove( wParam, lParam, msg, hwnd )
+{
+  ; Debounce: coalesce rapid move messages into one write 500 ms after the last one.
+  SetTimer( SaveWindowPos, -500 )
+}
+
+OnWindowMoving( wParam, lParam, msg, hwnd )
+{
+  global g_gui
+  global g_snappedToTop
+  global g_dragOffset
+
+  static SNAP_THRESHOLD    := 5
+  static RELEASE_THRESHOLD := 20
+
+  if( hwnd != g_gui.Hwnd )
+  {
+    return
+  }
+
+  top := NumGet( lParam, 4, "Int" )
+
+  if( g_snappedToTop )
+  {
+    ; Already snapped: release only when the implied window top moves far enough below 0.
+    ; Use screen coordinates so the check works regardless of CoordMode setting.
+    pt := Buffer( 8 )
+    DllCall( "GetCursorPos", "Ptr", pt )
+    cursorY := NumGet( pt, 4, "Int" )
+    impliedTop := cursorY - g_dragOffset
+    if( impliedTop >= RELEASE_THRESHOLD )
+    {
+      ; Release: rewrite the rect to the implied position so the window doesn't
+      ; stay at top=0 and immediately re-snap on the next WM_MOVING.
+      g_snappedToTop := false
+      h := NumGet( lParam, 12, "Int" ) - top
+      NumPut( "Int", impliedTop,     lParam,  4 ) ; top    = impliedTop
+      NumPut( "Int", impliedTop + h, lParam, 12 ) ; bottom = impliedTop + h
+      return 1
+    }
+    ; Keep snapped.
+    h := NumGet( lParam, 12, "Int" ) - top
+    NumPut( "Int", 0, lParam,  4 ) ; top    = 0
+    NumPut( "Int", h, lParam, 12 ) ; bottom = h
+    return 1
+  }
+
+  ; Not snapped: snap if the window top is within the snap zone.
+  if( top <= SNAP_THRESHOLD )
+  {
+    g_snappedToTop := true
+    h := NumGet( lParam, 12, "Int" ) - top
+    NumPut( "Int", 0, lParam,  4 ) ; top    = 0
+    NumPut( "Int", h, lParam, 12 ) ; bottom = h
+    return 1
+  }
 }
 
 ShrinkWindow()
@@ -424,18 +533,24 @@ Close()
   global g_wheelFlushScheduled
   global g_shrinkBtn
   global g_expandBtn
+
   g_activeWindow  := unset
   g_tabScrollHwnd := 0
   g_shrinkBtn     := ""
   g_expandBtn     := ""
+
   SaveWindowPos()
   OnMessage( 0x0003, OnWindowMove,   0 )
+  OnMessage( 0x0216, OnWindowMoving, 0 )
   OnMessage( 0x0115, VScroll,        0 )
-  OnMessage( 0x0201, WM_LBUTTONDOWN, 0 )
+  OnMessage( 0x0201, OnLButtonDown,  0 )
+  OnMessage( 0x0205, OnRButtonUp,    0 )
   RemoveWheelHook()
+
   g_guiHwndRaw := 0
   g_wheelPendingSteps   := 0
   g_wheelFlushScheduled := false
+
   SetTimer( HoverCheck,        0 )
   SetTimer( TrackActiveWindow, 0 )
   ToolTip()
@@ -516,10 +631,4 @@ SaveWindowPos()
   WinGetPos( &g_wndX, &g_wndY, , , g_gui )
   IniWrite( g_wndX, g_iniPath, "Window", "X" )
   IniWrite( g_wndY, g_iniPath, "Window", "Y" )
-}
-
-OnWindowMove( wParam, lParam, msg, hwnd )
-{
-  ; Debounce: coalesce rapid move messages into one write 500 ms after the last one.
-  SetTimer( SaveWindowPos, -500 )
 }

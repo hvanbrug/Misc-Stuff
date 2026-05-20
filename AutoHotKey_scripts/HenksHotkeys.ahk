@@ -2,6 +2,7 @@
 #SingleInstance Force
 A_MaxHotkeysPerInterval := 400
 
+#Include "SupportFiles\UIConstants.ahk"
 #Include "SupportFiles\Utilities.ahk"
 #Include "SupportFiles\Symbols.ahk"
 #Include "SupportFiles\Emojis.ahk"
@@ -16,7 +17,6 @@ A_MaxHotkeysPerInterval := 400
 #Include "SupportFiles\UITabPage.ahk"
 #Include "SupportFiles\UI.ahk"
 #Include "SupportFiles\UIScrolling.ahk"
-#Include "SupportFiles\UIConstants.ahk"
 
 
 ;@Ahk2Exe-SetMainIcon Images\HenksHotkeys.ico
