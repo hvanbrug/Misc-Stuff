@@ -10,6 +10,7 @@ A_MaxHotkeysPerInterval := 400
 #Include "SupportFiles\Greek.ahk"
 #Include "SupportFiles\PromptHelpers.ahk"
 #Include "SupportFiles\CommentSupport.ahk"
+#Include "SupportFiles\Tools.ahk"
 #Include "SupportFiles\Sensitive.ahk"
 #Include "SupportFiles\Misc.ahk"
 #Include "SupportFiles\EmojiSupport.ahk"
