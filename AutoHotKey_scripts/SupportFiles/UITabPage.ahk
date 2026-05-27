@@ -293,7 +293,16 @@ class TabPage
       {
         opt .= " Left"
       }
-      btn := gui.AddButton( opt, this.NormalizeDisplayText( sym.showChar ? sym.char : sym.desc ) )
+      buttonText := this.NormalizeDisplayText( sym.showChar ? sym.char : sym.desc )
+      if( sym.hotkey != "" )
+      {
+        buttonText := "• " . buttonText
+      }
+      if( sym.align = "left" )
+      {
+        buttonText := " " . buttonText
+      }
+      btn := gui.AddButton( opt, buttonText )
       btn.SetFont( this.m_fontSize, this.m_fontName )
       filename := ""
       if( this.m_useEmojiImages )

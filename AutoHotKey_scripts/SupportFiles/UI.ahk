@@ -592,7 +592,7 @@ TrackActiveWindow()
     return
   }
 
-  if( IsObject( g_gui ) && hwnd = g_gui.Hwnd )
+  if( IsObject( g_gui ) && (hwnd = g_gui.Hwnd) )
   {
     return
   }

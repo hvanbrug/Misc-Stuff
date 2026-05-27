@@ -41,9 +41,9 @@ class PromptsTabPage extends TabPage
     super.RegisterSpace()
 
     super.ShiftLineByThird()
-    super.RegisterSymbolX( 1, "abc of def - score - DC `n", "Daily Challenge description",     unset, unset, "left", 0, 1 )
+    super.RegisterSymbolX( 1, "abc of def - score - DC `n", "Daily Challenge description", unset, unset, "left", 0, 1 )
     super.NextLine()
-    super.RegisterSymbolX( 1, "abc of def (ghi) - score`n", "Community Challenge description", unset, unset, "left", 0, 1 )
+    super.RegisterSymbolX( 1, "abc of def (ghi) - score`n", "Community Challenge desc.",   unset, unset, "left", 0, 1 )
   }
 
 
