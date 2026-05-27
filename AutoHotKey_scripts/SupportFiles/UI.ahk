@@ -11,6 +11,9 @@ Startup()
   A_TrayMenu.Add( "Open UI",  ShowUI )
   A_TrayMenu.Add( "Close UI", HideUI )
   A_TrayMenu.Add()
+  A_TrayMenu.Add( "Set favourite spot",     (*) => SetFavouriteSpot()    )
+  A_TrayMenu.Add( "Move to favourite spot", (*) => MoveToFavouriteSpot() )
+  A_TrayMenu.Add()
   A_TrayMenu.Add( "Exit", (*) => ExitApp() )
   A_TrayMenu.Default := "Open UI"
 
@@ -332,19 +335,22 @@ ShowWindow( startTab )
 OnLButtonDown( wParam, lParam, msg, hwnd )
 {
   global g_gui
-  global g_dragOffset
+  global g_dragOffsetX
+  global g_dragOffsetY
 
   if( hwnd != g_gui.Hwnd )
   {
     return
   }
 
-  ; Record how far the cursor is below the window top at grab time.
+  ; Record how far the cursor is from the window top-left at grab time.
   pt := Buffer( 8 )
   DllCall( "GetCursorPos", "Ptr", pt )
+  cursorX := NumGet( pt, 0, "Int" )
   cursorY := NumGet( pt, 4, "Int" )
-  WinGetPos( , &winY, , , g_gui )
-  g_dragOffset := cursorY - winY
+  WinGetPos( &winX, &winY, , , g_gui )
+  g_dragOffsetX := cursorX - winX
+  g_dragOffsetY := cursorY - winY
 
   PostMessage( 0xA1, 2,,, "ahk_id " hwnd )
 }
@@ -362,6 +368,9 @@ OnRButtonUp( wParam, lParam, msg, hwnd )
   contextMenu.Add( "Open UI",  ShowUI )
   contextMenu.Add( "Close UI", HideUI )
   contextMenu.Add()
+  contextMenu.Add( "Set favourite spot",     (*) => SetFavouriteSpot()    )
+  contextMenu.Add( "Move to favourite spot", (*) => MoveToFavouriteSpot() )
+  contextMenu.Add()
   contextMenu.Add( "Exit", (*) => ExitApp() )
   contextMenu.Show()
 }
@@ -376,7 +385,11 @@ OnWindowMoving( wParam, lParam, msg, hwnd )
 {
   global g_gui
   global g_snappedToTop
-  global g_dragOffset
+  global g_snappedToFav
+  global g_dragOffsetX
+  global g_dragOffsetY
+  global g_favX
+  global g_favY
 
   static SNAP_THRESHOLD    := 5
   static RELEASE_THRESHOLD := 20
@@ -386,28 +399,74 @@ OnWindowMoving( wParam, lParam, msg, hwnd )
     return
   }
 
-  top := NumGet( lParam, 4, "Int" )
+  left := NumGet( lParam,  0, "Int" )
+  top  := NumGet( lParam,  4, "Int" )
+  w    := NumGet( lParam,  8, "Int" ) - left
+  h    := NumGet( lParam, 12, "Int" ) - top
 
+  ; ── Favourite spot snap (highest priority) ──
+  haveFav := (g_favX != "" && g_favY != "")
+  if( haveFav )
+  {
+    favX := Integer( g_favX )
+    favY := Integer( g_favY )
+
+    if( g_snappedToFav )
+    {
+      ; Already snapped to fav: release when cursor implies position far enough away.
+      pt := Buffer( 8 )
+      DllCall( "GetCursorPos", "Ptr", pt )
+      cursorX     := NumGet( pt, 0, "Int" )
+      cursorY     := NumGet( pt, 4, "Int" )
+      impliedLeft := cursorX - g_dragOffsetX
+      impliedTop  := cursorY - g_dragOffsetY
+      if( Abs( impliedLeft - favX ) >= RELEASE_THRESHOLD ||
+          Abs( impliedTop  - favY ) >= RELEASE_THRESHOLD )
+      {
+        g_snappedToFav := false
+        NumPut( "Int", impliedLeft,     lParam,  0 )
+        NumPut( "Int", impliedTop,      lParam,  4 )
+        NumPut( "Int", impliedLeft + w, lParam,  8 )
+        NumPut( "Int", impliedTop  + h, lParam, 12 )
+        return 1
+      }
+      ; Keep snapped to fav.
+      NumPut( "Int", favX,     lParam,  0 )
+      NumPut( "Int", favY,     lParam,  4 )
+      NumPut( "Int", favX + w, lParam,  8 )
+      NumPut( "Int", favY + h, lParam, 12 )
+      return 1
+    }
+
+    ; Not snapped to fav: check if within snap zone of favourite.
+    if( Abs( left - favX ) <= SNAP_THRESHOLD && Abs( top - favY ) <= SNAP_THRESHOLD )
+    {
+      g_snappedToFav := true
+      g_snappedToTop := false
+      NumPut( "Int", favX,       lParam,  0 )
+      NumPut( "Int", favY,       lParam,  4 )
+      NumPut( "Int", favX + w,   lParam,  8 )
+      NumPut( "Int", favY + h,   lParam, 12 )
+      return 1
+    }
+  }
+
+  ; ── Top-of-screen snap (y=0) ──
   if( g_snappedToTop )
   {
     ; Already snapped: release only when the implied window top moves far enough below 0.
-    ; Use screen coordinates so the check works regardless of CoordMode setting.
     pt := Buffer( 8 )
     DllCall( "GetCursorPos", "Ptr", pt )
     cursorY := NumGet( pt, 4, "Int" )
-    impliedTop := cursorY - g_dragOffset
+    impliedTop := cursorY - g_dragOffsetY
     if( impliedTop >= RELEASE_THRESHOLD )
     {
-      ; Release: rewrite the rect to the implied position so the window doesn't
-      ; stay at top=0 and immediately re-snap on the next WM_MOVING.
       g_snappedToTop := false
-      h := NumGet( lParam, 12, "Int" ) - top
       NumPut( "Int", impliedTop,     lParam,  4 ) ; top    = impliedTop
       NumPut( "Int", impliedTop + h, lParam, 12 ) ; bottom = impliedTop + h
       return 1
     }
     ; Keep snapped.
-    h := NumGet( lParam, 12, "Int" ) - top
     NumPut( "Int", 0, lParam,  4 ) ; top    = 0
     NumPut( "Int", h, lParam, 12 ) ; bottom = h
     return 1
@@ -417,7 +476,6 @@ OnWindowMoving( wParam, lParam, msg, hwnd )
   if( top <= SNAP_THRESHOLD )
   {
     g_snappedToTop := true
-    h := NumGet( lParam, 12, "Int" ) - top
     NumPut( "Int", 0, lParam,  4 ) ; top    = 0
     NumPut( "Int", h, lParam, 12 ) ; bottom = h
     return 1
@@ -606,10 +664,14 @@ LoadWindowPos()
 {
   global g_wndX
   global g_wndY
+  global g_favX
+  global g_favY
   global g_iniPath
 
   g_wndX := IniRead( g_iniPath, "Window", "X", "0" )
   g_wndY := IniRead( g_iniPath, "Window", "Y", "0" )
+  g_favX := IniRead( g_iniPath, "Window", "FavX", "" )
+  g_favY := IniRead( g_iniPath, "Window", "FavY", "" )
   if( g_wndX = "" || g_wndY = "" )
   {
     return ""
@@ -631,4 +693,41 @@ SaveWindowPos()
   WinGetPos( &g_wndX, &g_wndY, , , g_gui )
   IniWrite( g_wndX, g_iniPath, "Window", "X" )
   IniWrite( g_wndY, g_iniPath, "Window", "Y" )
+}
+
+SetFavouriteSpot()
+{
+  global g_gui
+  global g_favX
+  global g_favY
+  global g_iniPath
+
+  if( !IsObject( g_gui ) )
+  {
+    return
+  }
+
+  WinGetPos( &x, &y, , , g_gui )
+  g_favX := x
+  g_favY := y
+  IniWrite( g_favX, g_iniPath, "Window", "FavX" )
+  IniWrite( g_favY, g_iniPath, "Window", "FavY" )
+}
+
+MoveToFavouriteSpot()
+{
+  global g_gui
+  global g_favX
+  global g_favY
+
+  if( !IsObject( g_gui ) )
+  {
+    return
+  }
+  if( g_favX = "" || g_favY = "" )
+  {
+    return
+  }
+  WinMove( Integer( g_favX ), Integer( g_favY ), , , g_gui )
+  SaveWindowPos()
 }

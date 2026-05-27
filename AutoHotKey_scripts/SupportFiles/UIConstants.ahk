@@ -22,8 +22,12 @@ g_fullW        := 0
 g_fullH        := 0
 g_shrinkBtn    := ""
 g_expandBtn    := ""
-g_snappedToTop := false
-g_dragOffset   := 0
+g_snappedToTop  := false
+g_snappedToFav  := false
+g_dragOffsetX   := 0
+g_dragOffsetY   := 0
+g_favX          := ""
+g_favY          := ""
 
 g_iniPath := A_ScriptDir "\HenksHotkeys.ini"
 
