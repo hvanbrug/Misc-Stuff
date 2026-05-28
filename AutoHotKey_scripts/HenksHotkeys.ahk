@@ -23,3 +23,5 @@ A_MaxHotkeysPerInterval := 400
 #Include "SupportFiles\UITabPage.ahk"
 #Include "SupportFiles\UI.ahk"
 #Include "SupportFiles\UIScrolling.ahk"
+#Include "SupportFiles\IniFile.ahk"
+#Include "SupportFiles\Startup.ahk"

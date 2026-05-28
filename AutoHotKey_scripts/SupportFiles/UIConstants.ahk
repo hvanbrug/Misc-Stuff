@@ -16,18 +16,20 @@ g_mouseWheelHookProc  := 0
 g_fontSize := "s10"
 g_fontName := "Segoe UI"
 
-g_wndX         := 0
-g_wndY         := 0
-g_fullW        := 0
-g_fullH        := 0
-g_shrinkBtn    := ""
-g_expandBtn    := ""
+g_wndX          := 0
+g_wndY          := 0
+g_fullW         := 0
+g_fullH         := 0
+g_shrinkBtn     := ""
+g_expandBtn     := ""
 g_snappedToTop  := false
 g_snappedToFav  := false
 g_dragOffsetX   := 0
 g_dragOffsetY   := 0
 g_favX          := ""
 g_favY          := ""
+g_useClipSend   := false
+g_clipIndicator := ""
 
 g_iniPath := A_ScriptDir "\HenksHotkeys.ini"
 

@@ -19,6 +19,12 @@ RegisterAction( hotkey, desc, action )
 
 DoSendText( msg )
 {
+  global g_useClipSend
+  if( g_useClipSend )
+  {
+    DoSendViaClipboard( msg )
+    return
+  }
   if( IsSet( g_activeWindow ) )
   {
     WinActivate( g_activeWindow )
@@ -29,6 +35,80 @@ DoSendText( msg )
   {
     SendInput( msg )
   }
+}
+
+DoSendViaClipboard( rawText )
+{
+  backup := ClipboardAll()
+  A_Clipboard := rawText
+  if( IsSet( g_activeWindow ) )
+  {
+    WinActivate( g_activeWindow )
+    Sleep( 100 )
+  }
+  Send( "^v" )
+  Sleep( 150 )
+  A_Clipboard := backup
+}
+
+ToggleClipboardSendMode()
+{
+  global g_useClipSend
+  global g_tipMap
+  g_useClipSend := !g_useClipSend
+  state := g_useClipSend ? "ON" : "OFF"
+  SetShowClipBulletState( g_useClipSend )
+  ToolTip( "Clipboard send mode: " state )
+  SetTimer( (*) => ToolTip(), -2000 )
+}
+
+SetShowShrinkBtnState( enabled )
+{
+  global g_shrinkBtn
+  global g_expandBtn
+
+  OutputDebug( "Setting shrink/expand button state: " enabled ? "SHRINK" : "EXPAND" )
+  if( !IsObject( g_shrinkBtn ) ||
+      !IsObject( g_expandBtn ) )
+  {
+    OutputDebug( "Shrink/expand buttons not initialized yet." )
+    return
+  }
+
+  if( enabled )
+  {
+    g_shrinkBtn.Opt( "-Hidden" )
+    g_expandBtn.Opt( "Hidden"  )
+    OutputDebug( "Showing SHRINK button, hiding EXPAND button." )
+  }
+  else
+  {
+    g_shrinkBtn.Opt( "Hidden"  )
+    g_expandBtn.Opt( "-Hidden" )
+    OutputDebug( "Hiding SHRINK button, showing EXPAND button." )
+  }
+}
+
+SetShowClipBulletState( enabled )
+{
+  global g_clipIndicator
+  global g_tipMap
+
+  OutputDebug( "Setting clip bullet state: " (enabled ? "ON" : "OFF" ) )
+  if( !IsObject( g_clipIndicator ) )
+  {
+    OutputDebug( "Clip indicator control not initialized yet." )
+    return
+  }
+  g_clipIndicator.Text := enabled ? "●" : "○"
+  g_tipMap[g_clipIndicator.Hwnd]  := "Clipboard send mode: " (enabled ? "ON" : "OFF")
+  OutputDebug( "Updated clip bullet state: " (enabled ? "ON" : "OFF") )
+}
+
+IsClipControl( hwnd )
+{
+  global g_clipIndicator
+  return IsObject( g_clipIndicator ) && (hwnd = g_clipIndicator.Hwnd)
 }
 
 GetSelectedTextThroughClipboard()
@@ -169,4 +249,41 @@ MoveWindowElevated( hwnd, x, y, w, h )
   try FileDelete( tmpFile )
   FileAppend( script, tmpFile )
   Run( '*RunAs "' A_AhkPath '" "' tmpFile '"' )
+}
+
+IsWindowVisible( hwnd )
+{
+  state := GetWindowState( hwnd )
+  isVisible := state.hwnd != 0 &&
+               state.visible   &&
+              !state.cloaked   &&
+              !state.minimized
+  OutputDebug( "IsWindowVisible check for hwnd " hwnd ": " isVisible )
+  return isVisible
+}
+
+GetWindowState( hwnd := WinExist( "A" ) )
+{
+  OutputDebug( "Getting window state for hwnd: " hwnd )
+  if( !hwnd )
+  {
+    OutputDebug( "Invalid hwnd, returning empty state." )
+    return { hwnd: 0 }
+  }
+
+  visible   := !! DllCall( "IsWindowVisible", "Ptr", hwnd )
+  minimized := !! DllCall( "IsIconic",        "Ptr", hwnd )
+  maximized := !! DllCall( "IsZoomed",        "Ptr", hwnd )
+
+  ; DWM cloaked (UWP / remote desktop windows)
+  cloakedBuf := Buffer( 4, 0 )
+  DllCall( "dwmapi\DwmGetWindowAttribute", "Ptr", hwnd, "UInt", 14, "Ptr", cloakedBuf.Ptr, "UInt", 4 )
+  cloaked := NumGet( cloakedBuf, 0, "UInt" ) != 0
+  OutputDebug( "Window state - Visible: " visible ", Minimized: " minimized ", Maximized: " maximized ", Cloaked: " cloaked )
+
+  return { hwnd:      hwnd,
+           visible:   visible,
+           minimized: minimized,
+           maximized: maximized,
+           cloaked:   cloaked }
 }

@@ -1,69 +1,3 @@
-^+a::ListHotkeys
-^+x::ToggleUI
-
-
-
-Startup()
-
-Startup()
-{
-  A_TrayMenu.Delete()
-  A_TrayMenu.Add( "Open UI",  ShowUI )
-  A_TrayMenu.Add( "Close UI", HideUI )
-  A_TrayMenu.Add()
-  A_TrayMenu.Add( "Set favourite spot",     (*) => SetFavouriteSpot()    )
-  A_TrayMenu.Add( "Move to favourite spot", (*) => MoveToFavouriteSpot() )
-  A_TrayMenu.Add()
-  A_TrayMenu.Add( "Exit", (*) => ExitApp() )
-  A_TrayMenu.Default := "Open UI"
-
-  global g_iniPath
-  isWndOpen := IniRead( g_iniPath, "Window", "WndOpen", 0 )
-  if( isWndOpen = "1" )
-  {
-    ShowUI()
-  }
-}
-
-
-
-
-ToggleUI( * )
-{
-  global g_gui
-  if( IsObject( g_gui ) )
-  {
-    g_gui.Show()
-    WinActivate( "ahk_id " g_gui.Hwnd )
-  }
-  else
-  {
-    ShowWindow( 2 ) ; Start on the emojis tab
-  }
-}
-
-ShowUI( * )
-{
-  global g_gui
-  if( IsObject( g_gui ) )
-  {
-    g_gui.Show()
-    WinActivate( "ahk_id " g_gui.Hwnd )
-  }
-  else
-  {
-    ShowWindow( 2 ) ; Start on the emojis tab
-  }
-  IniWrite( 1, g_iniPath, "Window", "WndOpen" )
-}
-
-HideUI( * )
-{
-  global g_gui
-  g_gui.Hide()
-  IniWrite( 0, g_iniPath, "Window", "WndOpen" )
-}
-
 
 ShowWindow( startTab )
 {
@@ -97,7 +31,7 @@ ShowWindow( startTab )
   global g_fullH
   global g_shrinkBtn
   global g_expandBtn
-  global g_iniPath
+  global g_clipIndicator
 
   g_activeWindow := WinActive( "A" )
 
@@ -110,7 +44,7 @@ ShowWindow( startTab )
 
   g_gui := Gui( "+AlwaysOnTop +ToolWindow -Caption -Resize -MinimizeBox -MaximizeBox", windowTitle )
 
-  IniWrite( 1, g_iniPath, "Window", "WndOpen" )
+  INI_SetWndOpen( true )
 
   ; Prevent the GUI from painting its background over child button areas during scroll.
   WS_CLIPCHILDREN := 0x02000000
@@ -301,6 +235,18 @@ ShowWindow( startTab )
                                (*) => ExpandWindow() )
   g_expandBtn.Opt( "Hidden" )
 
+  ; Clipboard-mode indicator (click to toggle). Always visible to the left of
+  ; the shrink/expand buttons so it's easy to see in either mode.
+  clipW := 12
+  clipH := 14
+  clipX := 2
+  clipY := 2
+  g_gui.SetFont( "s10", "Segoe UI Symbol" )
+  g_clipIndicator := g_gui.AddText( "x" clipX " y" clipY " w" clipW " h" clipH, "○" )
+  g_tipMap[g_clipIndicator.Hwnd] := "Clipboard send mode: OFF"
+  g_gui.SetFont( g_fontSize " norm", g_fontName )
+  SetShowClipBulletState( g_useClipSend )
+
   ; Explicit window size based on tab control dimensions.
   ; Prevents AHK from auto-sizing to include hidden buttons at large Y offsets.
   showW   := tabContentWidth + TAB_SCROLL_W + 14 + 14
@@ -324,7 +270,7 @@ ShowWindow( startTab )
   OnMessage( 0x0216, OnWindowMoving )  ; WM_MOVING
 
   ; Restore collapsed state last, after everything is laid out.
-  if( IniRead( g_iniPath, "Window", "Collapsed", "0" ) = "1" )
+  if( INI_IsCollapsed() )
   {
     ShrinkWindow()
   }
@@ -340,6 +286,10 @@ OnLButtonDown( wParam, lParam, msg, hwnd )
 
   if( hwnd != g_gui.Hwnd )
   {
+    if( IsClipControl( hwnd ) )
+    {
+      ToggleClipboardSendMode()
+    }
     return
   }
 
@@ -361,17 +311,14 @@ OnRButtonUp( wParam, lParam, msg, hwnd )
 
   if( hwnd != g_gui.Hwnd )
   {
-    return
+    if( !IsClipControl( hwnd ) )
+    {
+      return
+    }
   }
 
   contextMenu := Menu()
-  contextMenu.Add( "Open UI",  ShowUI )
-  contextMenu.Add( "Close UI", HideUI )
-  contextMenu.Add()
-  contextMenu.Add( "Set favourite spot",     (*) => SetFavouriteSpot()    )
-  contextMenu.Add( "Move to favourite spot", (*) => MoveToFavouriteSpot() )
-  contextMenu.Add()
-  contextMenu.Add( "Exit", (*) => ExitApp() )
+  FillTrayMenu( contextMenu )
   contextMenu.Show()
 }
 
@@ -396,7 +343,10 @@ OnWindowMoving( wParam, lParam, msg, hwnd )
 
   if( hwnd != g_gui.Hwnd )
   {
-    return
+    if( !IsClipControl( hwnd ) )
+    {
+      return
+    }
   }
 
   left := NumGet( lParam,  0, "Int" )
@@ -490,20 +440,18 @@ ShrinkWindow()
   global g_fullH
   global g_shrinkBtn
   global g_expandBtn
-  global g_iniPath
 
   if( !IsObject( g_gui ) )
   {
     return
   }
 
-  g_tabs     .Opt( "Hidden" )
-  g_shrinkBtn.Opt( "Hidden" )
-  g_expandBtn.Opt( "-Hidden" )
+  g_tabs.Opt( "Hidden" )
+  SetShowShrinkBtnState( false )
 
   savedPos := LoadWindowPos()
   g_gui.Show( "w70 h24 NoActivate" savedPos )
-  IniWrite( 1, g_iniPath, "Window", "Collapsed" )
+  INI_SetCollapsed( true )
 }
 
 ExpandWindow()
@@ -515,16 +463,14 @@ ExpandWindow()
   global g_fullH
   global g_shrinkBtn
   global g_expandBtn
-  global g_iniPath
 
   if( !IsObject( g_gui ) )
   {
     return
   }
 
-  g_tabs     .Opt( "-Hidden" )
-  g_shrinkBtn.Opt( "-Hidden" )
-  g_expandBtn.Opt( "Hidden" )
+  g_tabs.Opt( "-Hidden" )
+  SetShowShrinkBtnState( true )
 
   ; Hiding the tab control also hides its child clip panels.
   ; Re-show the active tab's clip panel so buttons reappear.
@@ -546,14 +492,13 @@ ExpandWindow()
 
   savedPos := LoadWindowPos()
   g_gui.Show( "w" g_fullW " h" g_fullH " NoActivate" savedPos )
-  IniWrite( 0, g_iniPath, "Window", "Collapsed" )
+  INI_SetCollapsed( false )
   RedrawScrollbar()
 }
 
 IsCollapsed()
 {
-  global g_iniPath
-  return IniRead( g_iniPath, "Window", "Collapsed", "0" ) = "1"
+  return INI_IsCollapsed()
 }
 
 ForceRepaint()
@@ -596,6 +541,7 @@ Close()
   g_tabScrollHwnd := 0
   g_shrinkBtn     := ""
   g_expandBtn     := ""
+  g_clipIndicator := ""
 
   SaveWindowPos()
   OnMessage( 0x0003, OnWindowMove,   0 )
@@ -666,12 +612,11 @@ LoadWindowPos()
   global g_wndY
   global g_favX
   global g_favY
-  global g_iniPath
 
-  g_wndX := IniRead( g_iniPath, "Window", "X", "0" )
-  g_wndY := IniRead( g_iniPath, "Window", "Y", "0" )
-  g_favX := IniRead( g_iniPath, "Window", "FavX", "" )
-  g_favY := IniRead( g_iniPath, "Window", "FavY", "" )
+  g_wndX := INI_WndPosX()
+  g_wndY := INI_WndPosY()
+  g_favX := INI_WndFavX()
+  g_favY := INI_WndFavY()
   if( g_wndX = "" || g_wndY = "" )
   {
     return ""
@@ -684,15 +629,14 @@ SaveWindowPos()
   global g_gui
   global g_wndX
   global g_wndY
-  global g_iniPath
 
   if( !IsObject( g_gui ) )
   {
     return
   }
   WinGetPos( &g_wndX, &g_wndY, , , g_gui )
-  IniWrite( g_wndX, g_iniPath, "Window", "X" )
-  IniWrite( g_wndY, g_iniPath, "Window", "Y" )
+  INI_SetWndPosX( g_wndX )
+  INI_SetWndPosY( g_wndY )
 }
 
 SetFavouriteSpot()
@@ -700,7 +644,6 @@ SetFavouriteSpot()
   global g_gui
   global g_favX
   global g_favY
-  global g_iniPath
 
   if( !IsObject( g_gui ) )
   {
@@ -710,8 +653,8 @@ SetFavouriteSpot()
   WinGetPos( &x, &y, , , g_gui )
   g_favX := x
   g_favY := y
-  IniWrite( g_favX, g_iniPath, "Window", "FavX" )
-  IniWrite( g_favY, g_iniPath, "Window", "FavY" )
+  INI_SetWndFavX( g_favX )
+  INI_SetWndFavY( g_favY )
 }
 
 MoveToFavouriteSpot()
@@ -724,10 +667,14 @@ MoveToFavouriteSpot()
   {
     return
   }
+
+  g_favX := INI_WndFavX()
+  g_favY := INI_WndFavY()
   if( g_favX = "" || g_favY = "" )
   {
     return
   }
+
   WinMove( Integer( g_favX ), Integer( g_favY ), , , g_gui )
   SaveWindowPos()
 }
