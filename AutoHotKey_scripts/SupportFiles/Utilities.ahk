@@ -162,7 +162,8 @@ CreateBtnWithStyle( text, tip,
 
 BtnPos( btnIdx, btnWidth, btnGap )
 {
-  gapAfterFirst := btnIdx > 0 ? btnWidth / 2 : 0
+  ;gapAfterFirst := btnIdx > 0 ? btnWidth / 2 : 0
+  gapAfterFirst := 0
   return btnWidth +
          (btnWidth * btnIdx) +
          (btnGap   * btnIdx) +

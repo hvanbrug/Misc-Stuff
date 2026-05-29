@@ -203,25 +203,25 @@ ShowWindow( startTab )
 
   CreateButton( "⌫.", "Back 3, Replace with period",
                 "Segoe UI Symbol", "s10",
-                rightEdge - BtnPos( 3, btnWth, btnGap ), 0, btnWth, btnHgt,
+                rightEdge - BtnPos( 2, btnWth, btnGap ), 0, btnWth, btnHgt,
                 (*) => DoSendText( "`b`b`b. " ) )
 
   CreateBtnWithStyle( "⇚,", "Back 3, Insert Comma",
                       "Segoe UI Symbol", "s16",
                       0x0F00, 0x0800, ; BS_BOTTOM (0x0800) — push baseline up so the tall glyph isn't clipped.
-                      rightEdge - BtnPos( 2, btnWth, btnGap ), 0, btnWth, btnHgt,
+                      rightEdge - BtnPos( 1, btnWth, btnGap ), 0, btnWth, btnHgt,
                       (*) => DoSendText( "{Left}{Left}{Left}, " ) )
 
   CreateButton( "↩", "Enter / Newline",
                 "Segoe UI Symbol", "s14",
-                rightEdge - BtnPos( 1, btnWth, btnGap ), 0, btnWth, btnHgt,
+                rightEdge - BtnPos( 0, btnWth, btnGap ), 0, btnWth, btnHgt,
                 (*) => DoSendText( "`n" ) )
 
 ; 🔄⏎
-  CreateButton( "", "Repaint / Refresh",
-                "Segoe UI Symbol", "s10",
-                rightEdge - BtnPos( 0, btnWth, btnGap ), 0, btnWth, btnHgt,
-                (*) => ForceRepaint() )
+;  CreateButton( "", "Repaint / Refresh",
+;                "Segoe UI Symbol", "s10",
+;                rightEdge - BtnPos( 0, btnWth, btnGap ), 0, btnWth, btnHgt,
+;                (*) => ForceRepaint() )
 
   g_shrinkBtn := CreateButton( "▼", "Shrink window",
                                "Segoe UI Symbol", "s14",
