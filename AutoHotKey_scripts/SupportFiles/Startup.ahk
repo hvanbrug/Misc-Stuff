@@ -69,7 +69,7 @@ ShowUI( * )
   else
   {
     OutputDebug( "UI object does not exist. Creating new window." )
-    ShowWindow( 2 ) ; Start on the emojis tab
+    ShowWindow() ; Start on the emojis tab
   }
   OutputDebug( "UI is now visible." )
   INI_SetWndOpen( true )

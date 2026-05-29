@@ -1,5 +1,5 @@
 
-ShowWindow( startTab )
+ShowWindow()
 {
   global g_uiTabs
   global g_activeWindow
@@ -15,18 +15,6 @@ ShowWindow( startTab )
   global g_fontName
 
   global g_HelpActions
-  global g_RESIZE_H_MARGIN
-  global g_LV
-  global g_LV_WIDTH
-  global g_LV_ROW_COUNT
-  global g_HEADER_BG_COLOR
-  global g_HEADER_TEXT_COLOR
-  global g_hdrHeight
-  global g_COL_HOTKEY_WIDTH
-  global g_COL_DESC_WIDTH
-  global g_HeaderHotkey
-  global g_HeaderDesc
-  global g_HeaderBg
   global g_fullW
   global g_fullH
   global g_shrinkBtn
@@ -173,11 +161,7 @@ ShowWindow( startTab )
   g_guiHwndRaw := g_gui.Hwnd
   InstallWheelHook()
 
-  if( (startTab < 1) ||
-      (startTab > tabList.Length) )
-  {
-    startTab := 1
-  }
+  startTab     := INI_LastTab()
   g_tabs.Value := startTab
 
   ; Show the clip panel for the active start tab.

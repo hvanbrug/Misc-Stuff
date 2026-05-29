@@ -21,6 +21,7 @@ TabChanged( ctrl, * )
   global g_tabScrollHwnd
 
   tabIndex := ctrl.Value
+  INI_SetLastTab( tabIndex )
 
   ; Show only the active tab's clip panel; hide all others.
   for idx, tab in g_uiTabs

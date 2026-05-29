@@ -90,3 +90,31 @@ INI_SetWndFavY( y )
   IniWrite( y, g_iniPath, "Window", "FavY" )
   OutputDebug( "Updated INI file with window favourite Y position: " y )
 }
+
+INI_LastTab()
+{
+  global g_iniPath
+  global g_tabs
+
+  TCM_GETITEMCOUNT := 0x1304
+  hwnd  := g_tabs.Hwnd
+  count := DllCall("SendMessageW", "Ptr", hwnd, "UInt", TCM_GETITEMCOUNT, "Ptr", 0, "Ptr", 0, "Int")
+
+  lastTabIdx := IniRead( g_iniPath, "Window", "LastTab", 1 )
+  OutputDebug( "Read last active tab from INI file: " (lastTabIdx != "" ? lastTabIdx : "not set") )
+  if( (lastTabIdx < 1) ||
+      (lastTabIdx > count) )
+  {
+    OutputDebug( "Last active tab index from INI file is out of bounds (" lastTabIdx " > " count "). Defaulting to 1." )
+    lastTabIdx := 1
+  }
+
+  return lastTabIdx
+}
+
+INI_SetLastTab( tabIdx )
+{
+  global g_iniPath
+  IniWrite( tabIdx, g_iniPath, "Window", "LastTab" )
+  OutputDebug( "Updated INI file with last active tab: " tabIdx )
+}
