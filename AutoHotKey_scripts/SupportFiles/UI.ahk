@@ -226,9 +226,10 @@ ShowWindow()
   clipX := 2
   clipY := 2
   g_gui.SetFont( "s10", "Segoe UI Symbol" )
-  g_clipIndicator := g_gui.AddText( "x" clipX " y" clipY " w" clipW " h" clipH, "○" )
+  g_clipIndicator := g_gui.AddText( "x" clipX " y" clipY " w" clipW " h" clipH " +0x100", "○" )
   g_tipMap[g_clipIndicator.Hwnd] := "Clipboard send mode: OFF"
   g_gui.SetFont( g_fontSize " norm", g_fontName )
+  g_useClipSend := INI_IsClipSendMode()
   SetShowClipBulletState( g_useClipSend )
 
   ; Explicit window size based on tab control dimensions.
