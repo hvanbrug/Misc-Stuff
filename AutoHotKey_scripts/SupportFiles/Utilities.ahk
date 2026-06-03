@@ -75,30 +75,29 @@ ToggleClipboardSendMode()
   SetTimer( (*) => ToolTip(), -2000 )
 }
 
-SetShowShrinkBtnState( enabled )
+SetToggleSizeBtnState( collapsed )
 {
-  global g_shrinkBtn
-  global g_expandBtn
+  global g_toggleSizeBtn
+  global g_tipMap
 
-  OutputDebug( "Setting shrink/expand button state: " enabled ? "SHRINK" : "EXPAND" )
-  if( !IsObject( g_shrinkBtn ) ||
-      !IsObject( g_expandBtn ) )
+  OutputDebug( "Setting toggle-size button state: " (collapsed ? "COLLAPSED" : "EXPANDED") )
+  if( !IsObject( g_toggleSizeBtn ) )
   {
-    OutputDebug( "Shrink/expand buttons not initialized yet." )
+    OutputDebug( "Toggle-size button not initialized yet." )
     return
   }
 
-  if( enabled )
+  if( collapsed )
   {
-    g_shrinkBtn.Opt( "-Hidden" )
-    g_expandBtn.Opt( "Hidden"  )
-    OutputDebug( "Showing SHRINK button, hiding EXPAND button." )
+    ; Window is collapsed: clicking will expand it.
+    g_toggleSizeBtn.Text := "▲"
+    g_tipMap[g_toggleSizeBtn.Hwnd] := "Expand window"
   }
   else
   {
-    g_shrinkBtn.Opt( "Hidden"  )
-    g_expandBtn.Opt( "-Hidden" )
-    OutputDebug( "Hiding SHRINK button, showing EXPAND button." )
+    ; Window is expanded: clicking will collapse it.
+    g_toggleSizeBtn.Text := "▼"
+    g_tipMap[g_toggleSizeBtn.Hwnd] := "Shrink window"
   }
 }
 
@@ -122,6 +121,12 @@ IsClipControl( hwnd )
 {
   global g_clipIndicator
   return IsObject( g_clipIndicator ) && (hwnd = g_clipIndicator.Hwnd)
+}
+
+IsToggleSizeBtn( hwnd )
+{
+  global g_toggleSizeBtn
+  return IsObject( g_toggleSizeBtn ) && (hwnd = g_toggleSizeBtn.Hwnd)
 }
 
 GetSelectedTextThroughClipboard()

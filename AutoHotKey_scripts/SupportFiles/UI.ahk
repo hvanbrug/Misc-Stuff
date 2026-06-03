@@ -17,8 +17,7 @@ ShowWindow()
   global g_HelpActions
   global g_fullW
   global g_fullH
-  global g_shrinkBtn
-  global g_expandBtn
+  global g_toggleSizeBtn
   global g_clipIndicator
 
   g_activeWindow := WinActive( "A" )
@@ -207,17 +206,10 @@ ShowWindow()
 ;                rightEdge - BtnPos( 0, btnWth, btnGap ), 0, btnWth, btnHgt,
 ;                (*) => ForceRepaint() )
 
-  g_shrinkBtn := CreateButton( "▼", "Shrink window",
-                               "Segoe UI Symbol", "s14",
-                               15, 0, btnWth, btnHgt,
-                               (*) => ShrinkWindow() )
-  g_shrinkBtn.Opt( "-Hidden" )
-
-  g_expandBtn := CreateButton( "▲", "Expand window",
-                               "Segoe UI Symbol", "s14",
-                               15, 0, btnWth, btnHgt,
-                               (*) => ExpandWindow() )
-  g_expandBtn.Opt( "Hidden" )
+  g_toggleSizeBtn := CreateButton( "▼", "Shrink window",
+                                   "Segoe UI Symbol", "s14",
+                                   15, 0, btnWth, btnHgt,
+                                   (*) => ToggleWindowSize() )
 
   ; Clipboard-mode indicator (click to toggle). Always visible to the left of
   ; the shrink/expand buttons so it's easy to see in either mode.
@@ -242,23 +234,13 @@ ShowWindow()
   ;g_gui.Show( "w" showW " h" showH " " savedPos )
   ;RedrawScrollbar()
 
-  if( IsCollapsed() )
-  {
-    ShrinkWindow()
-  }
-  else
-  {
-    ExpandWindow()
-  }
+  ToggleWindowSize( IsCollapsed() )
 
   OnMessage( 0x0003, OnWindowMove   )  ; WM_MOVE
   OnMessage( 0x0216, OnWindowMoving )  ; WM_MOVING
 
   ; Restore collapsed state last, after everything is laid out.
-  if( INI_IsCollapsed() )
-  {
-    ShrinkWindow()
-  }
+  ToggleWindowSize( INI_IsCollapsed() )
 }
 
 
@@ -296,7 +278,8 @@ OnRButtonUp( wParam, lParam, msg, hwnd )
 
   if( hwnd != g_gui.Hwnd )
   {
-    if( !IsClipControl( hwnd ) )
+    if( !IsClipControl(   hwnd ) &&
+        !IsToggleSizeBtn( hwnd ) )
     {
       return
     }
@@ -417,68 +400,63 @@ OnWindowMoving( wParam, lParam, msg, hwnd )
   }
 }
 
-ShrinkWindow()
-{
-  global g_gui
-  global g_tabs
-  global g_fullW
-  global g_fullH
-  global g_shrinkBtn
-  global g_expandBtn
-
-  if( !IsObject( g_gui ) )
-  {
-    return
-  }
-
-  g_tabs.Opt( "Hidden" )
-  SetShowShrinkBtnState( false )
-
-  savedPos := LoadWindowPos()
-  g_gui.Show( "w70 h24 NoActivate" savedPos )
-  INI_SetCollapsed( true )
-}
-
-ExpandWindow()
+; Single entry point for collapsing/expanding the window.
+; Pass true to collapse, false to expand, or omit to flip the current state.
+ToggleWindowSize( collapse := "" )
 {
   global g_gui
   global g_tabs
   global g_uiTabs
   global g_fullW
   global g_fullH
-  global g_shrinkBtn
-  global g_expandBtn
 
   if( !IsObject( g_gui ) )
   {
     return
   }
 
-  g_tabs.Opt( "-Hidden" )
-  SetShowShrinkBtnState( true )
-
-  ; Hiding the tab control also hides its child clip panels.
-  ; Re-show the active tab's clip panel so buttons reappear.
-  if( IsObject( g_uiTabs ) )
+  if( collapse = "" )
   {
-    tabIndex := g_tabs.Value
-    for idx, tab in g_uiTabs
-    {
-      if( idx = tabIndex )
-      {
-        tab.ShowClipPanel()
-      }
-      else
-      {
-        tab.HideClipPanel()
-      }
-    }
+    collapse := !INI_IsCollapsed()
   }
 
-  savedPos := LoadWindowPos()
-  g_gui.Show( "w" g_fullW " h" g_fullH " NoActivate" savedPos )
-  INI_SetCollapsed( false )
-  RedrawScrollbar()
+  if( collapse )
+  {
+    g_tabs.Opt( "Hidden" )
+    SetToggleSizeBtnState( true )
+
+    savedPos := LoadWindowPos()
+    g_gui.Show( "w70 h24 NoActivate" savedPos )
+    INI_SetCollapsed( true )
+  }
+  else
+  {
+    g_tabs.Opt( "-Hidden" )
+    SetToggleSizeBtnState( false )
+
+    ; Hiding the tab control also hides its child clip panels.
+    ; Re-show the active tab's clip panel so buttons reappear.
+    if( IsObject( g_uiTabs ) )
+    {
+      tabIndex := g_tabs.Value
+      for idx, tab in g_uiTabs
+      {
+        if( idx = tabIndex )
+        {
+          tab.ShowClipPanel()
+        }
+        else
+        {
+          tab.HideClipPanel()
+        }
+      }
+    }
+
+    savedPos := LoadWindowPos()
+    g_gui.Show( "w" g_fullW " h" g_fullH " NoActivate" savedPos )
+    INI_SetCollapsed( false )
+    RedrawScrollbar()
+  }
 }
 
 IsCollapsed()
@@ -519,13 +497,11 @@ Close()
   global g_activeWindow
   global g_wheelPendingSteps
   global g_wheelFlushScheduled
-  global g_shrinkBtn
-  global g_expandBtn
+  global g_toggleSizeBtn
 
   g_activeWindow  := unset
   g_tabScrollHwnd := 0
-  g_shrinkBtn     := ""
-  g_expandBtn     := ""
+  g_toggleSizeBtn := ""
   g_clipIndicator := ""
 
   SaveWindowPos()
