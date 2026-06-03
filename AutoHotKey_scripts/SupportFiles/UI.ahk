@@ -188,18 +188,18 @@ ShowWindow()
   CreateButton( "⌫.", "Back 3, Replace with period",
                 "Segoe UI Symbol", "s10",
                 rightEdge - BtnPos( 2, btnWth, btnGap ), 0, btnWth, btnHgt,
-                (*) => DoSendText( "`b`b`b. " ) )
+                (*) => DoSendInput( "`b`b`b. " ) )
 
   CreateBtnWithStyle( "⇚,", "Back 3, Insert Comma",
                       "Segoe UI Symbol", "s16",
                       0x0F00, 0x0800, ; BS_BOTTOM (0x0800) — push baseline up so the tall glyph isn't clipped.
                       rightEdge - BtnPos( 1, btnWth, btnGap ), 0, btnWth, btnHgt,
-                      (*) => DoSendText( "{Left}{Left}{Left}, " ) )
+                      (*) => DoSendInput( "{Left}{Left}{Left}, " ) )
 
   CreateButton( "↩", "Enter / Newline",
                 "Segoe UI Symbol", "s14",
                 rightEdge - BtnPos( 0, btnWth, btnGap ), 0, btnWth, btnHgt,
-                (*) => DoSendText( "`n" ) )
+                (*) => DoSendInput( "{Enter}" ) )
 
 ; 🔄⏎
 ;  CreateButton( "", "Repaint / Refresh",

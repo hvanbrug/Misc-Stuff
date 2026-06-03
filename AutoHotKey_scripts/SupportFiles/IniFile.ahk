@@ -31,6 +31,21 @@ INI_SetCollapsed( isCollapsed )
   OutputDebug( "Updated INI file to indicate window is: " (isCollapsed ? "COLLAPSED" : "EXPANDED") )
 }
 
+INI_IsClipSendMode()
+{
+  global g_iniPath
+  isOn := IniRead( g_iniPath, "Window", "ClipSendMode", 0 ) = 1
+  OutputDebug( "Checked INI file for clipboard send mode: " (isOn ? "ON" : "OFF") )
+  return isOn
+}
+
+INI_SetClipSendMode( isOn )
+{
+  global g_iniPath
+  IniWrite( isOn ? 1 : 0, g_iniPath, "Window", "ClipSendMode" )
+  OutputDebug( "Updated INI file to indicate clipboard send mode: " (isOn ? "ON" : "OFF") )
+}
+
 INI_WndPosX()
 {
   global g_iniPath

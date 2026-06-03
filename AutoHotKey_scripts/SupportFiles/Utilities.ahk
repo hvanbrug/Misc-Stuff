@@ -37,6 +37,18 @@ DoSendText( msg )
   }
 }
 
+; Send a key/combo via Send, bypassing clipboard mode.
+; Use for keys like {Enter} that must be input events, not pasted text.
+DoSendInput( msg )
+{
+  if( IsSet( g_activeWindow ) )
+  {
+    WinActivate( g_activeWindow )
+    Sleep( 100 )
+  }
+  Send( msg )
+}
+
 DoSendViaClipboard( rawText )
 {
   backup := ClipboardAll()
@@ -58,6 +70,7 @@ ToggleClipboardSendMode()
   g_useClipSend := !g_useClipSend
   state := g_useClipSend ? "ON" : "OFF"
   SetShowClipBulletState( g_useClipSend )
+  INI_SetClipSendMode( g_useClipSend )
   ToolTip( "Clipboard send mode: " state )
   SetTimer( (*) => ToolTip(), -2000 )
 }
