@@ -46,6 +46,21 @@ INI_SetClipSendMode( isOn )
   OutputDebug( "Updated INI file to indicate clipboard send mode: " (isOn ? "ON" : "OFF") )
 }
 
+INI_IsStripCommentEmojis()
+{
+  global g_iniPath
+  isOn := IniRead( g_iniPath, "Window", "StripCommentEmojis", 0 ) = 1
+  OutputDebug( "Checked INI file for strip-comment-emojis mode: " (isOn ? "ON" : "OFF") )
+  return isOn
+}
+
+INI_SetStripCommentEmojis( isOn )
+{
+  global g_iniPath
+  IniWrite( isOn ? 1 : 0, g_iniPath, "Window", "StripCommentEmojis" )
+  OutputDebug( "Updated INI file to indicate strip-comment-emojis mode: " (isOn ? "ON" : "OFF") )
+}
+
 INI_WndPosX()
 {
   global g_iniPath

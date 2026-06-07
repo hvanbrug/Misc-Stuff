@@ -30,6 +30,9 @@ g_favY          := ""
 g_useClipSend   := false
 g_clipIndicator := ""
 
+g_stripSendEmojis      := false
+g_stripEmojisIndicator := ""
+
 g_iniPath := A_ScriptDir "\HenksHotkeys.ini"
 
 g_uiTabs := [ SymbolsTabPage(),

@@ -11,9 +11,10 @@ class CommentsTabPage extends TabPage
   {
     super.__New( "Comments" )
 
-    super.m_fontSize    := "s10"
-    super.m_symBtnSizeX := 320
-    super.m_symBtnSizeY := 24
+    super.m_fontSize        := "s10"
+    super.m_symBtnSizeX     := 320
+    super.m_symBtnSizeY     := 24
+    super.enableStripEmojis := true
 
     super.SetRowsOf( 2 )
     this .RegisterButtons()

@@ -19,6 +19,8 @@ ShowWindow()
   global g_fullH
   global g_toggleSizeBtn
   global g_clipIndicator
+  global g_stripEmojisIndicator
+  global g_stripSendEmojis
 
   g_activeWindow := WinActive( "A" )
 
@@ -211,6 +213,21 @@ ShowWindow()
                                    15, 0, btnWth, btnHgt,
                                    (*) => ToggleWindowSize() )
 
+  ; Strip-emojis-from-comments indicator (click to toggle): sits immediately
+  ; to the right of the shrink/expand button, mirroring the clipboard-mode
+  ; indicator on the left. State is persisted to INI and only affects the
+  ; Comments tab via CommentsTabPage.TransformSendText.
+  stripW := 14
+  stripH := 16
+  stripX := 14 + btnWth + 2
+  stripY := 3
+  g_gui.SetFont( "s10", "Segoe UI Symbol" )
+  g_stripEmojisIndicator := g_gui.AddText( "x" stripX " y" stripY " w" stripW " h" stripH " +0x100", "☺" )
+  g_tipMap[g_stripEmojisIndicator.Hwnd] := "Strip emojis from comments: OFF"
+  g_gui.SetFont( g_fontSize " norm", g_fontName )
+  g_stripSendEmojis := INI_IsStripCommentEmojis()
+  SetStripEmojisIndicatorState( g_stripSendEmojis )
+
   ; Clipboard-mode indicator (click to toggle). Always visible to the left of
   ; the shrink/expand buttons so it's easy to see in either mode.
   clipW := 12
@@ -257,6 +274,10 @@ OnLButtonDown( wParam, lParam, msg, hwnd )
     {
       ToggleClipboardSendMode()
     }
+    else if( IsStripEmojisControl( hwnd ) )
+    {
+      ToggleStripSendEmojis()
+    }
     return
   }
 
@@ -278,8 +299,9 @@ OnRButtonUp( wParam, lParam, msg, hwnd )
 
   if( hwnd != g_gui.Hwnd )
   {
-    if( !IsClipControl(   hwnd ) &&
-        !IsToggleSizeBtn( hwnd ) )
+    if( !IsClipControl(        hwnd ) &&
+        !IsToggleSizeBtn(      hwnd ) &&
+        !IsStripEmojisControl( hwnd ) )
     {
       return
     }
@@ -311,7 +333,8 @@ OnWindowMoving( wParam, lParam, msg, hwnd )
 
   if( hwnd != g_gui.Hwnd )
   {
-    if( !IsClipControl( hwnd ) )
+    if( !IsClipControl(        hwnd ) &&
+        !IsStripEmojisControl( hwnd ) )
     {
       return
     }

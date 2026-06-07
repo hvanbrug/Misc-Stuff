@@ -34,6 +34,7 @@ class TabPage
     this.m_scrollFlushMs    := 16
     this.m_scrollFlushFn    := ObjBindMethod( this, "OnScrollFlush" )
     this.m_useEmojiImages   := false
+    this.enableStripEmojis  := false
   }
 
   SetColsOf( maxRows )
@@ -662,14 +663,17 @@ class TabPage
     }
 
     ; Button click action: closure captures char by value, always callable with no args.
+    ; `self` is captured so the closure can route the text through this tab's
+    ; TransformSendText hook (used by the Comments tab to strip emojis).
     charCopy := char
+    self     := this
     if( IsSet( resolvedAction ) && this.IsAFunction( resolvedAction ) )
     {
       clickAction := resolvedAction
     }
     else
     {
-      clickAction := () => DoSendText( charCopy )
+      clickAction := () => DoSendText( self.TransformSendText( charCopy ) )
     }
 
     ; Hotkey action: closure captures char, accepts the hotkey-name arg via *.
@@ -680,7 +684,7 @@ class TabPage
     else
     {
       cc := charCopy
-      hotkeyAction := ( * ) => DoSendText( cc )
+      hotkeyAction := ( * ) => DoSendText( self.TransformSendText( cc ) )
     }
 
     element := { line:         line,
@@ -738,6 +742,16 @@ class TabPage
     ;Close()
     Sleep( 150 )
     action.Call()
+  }
+
+  TransformSendText( text )
+  {
+    global g_stripSendEmojis
+    if( g_stripSendEmojis && this.enableStripEmojis )
+    {
+      return StripEmojis( text )
+    }
+    return text
   }
 
   Destroy()

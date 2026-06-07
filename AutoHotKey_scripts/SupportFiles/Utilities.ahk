@@ -117,10 +117,56 @@ SetShowClipBulletState( enabled )
   OutputDebug( "Updated clip bullet state: " (enabled ? "ON" : "OFF") )
 }
 
+; Remove emoji codepoints from a string and tidy up the spaces left behind
+; before any trailing punctuation. Used by the Comments tab when strip-emoji
+; mode is enabled.
+; AHK's PCRE build is already UTF-aware, so codepoints > U+FFFF can be matched
+; directly with \x{...} — no (*UTF) verb needed (and it would be rejected).
+StripEmojis( text )
+{
+  emojiPattern := "[\x{1F000}-\x{1FFFF}\x{2600}-\x{27BF}\x{200D}\x{FE0F}\x{20E3}]"
+  result := RegExReplace( text,   emojiPattern,         ""  )
+  result := RegExReplace( result, "\s+([\.,;:!?])",     "$1" )
+  result := RegExReplace( result, "\s{2,}",             " "  )
+  return Trim( result )
+}
+
+ToggleStripSendEmojis()
+{
+  global g_stripSendEmojis
+  g_stripSendEmojis := !g_stripSendEmojis
+  state := g_stripSendEmojis ? "ON" : "OFF"
+  SetStripEmojisIndicatorState( g_stripSendEmojis )
+  INI_SetStripCommentEmojis( g_stripSendEmojis )
+  ToolTip( "Strip emojis from comments: " state )
+  SetTimer( (*) => ToolTip(), -2000 )
+}
+
+SetStripEmojisIndicatorState( enabled )
+{
+  global g_stripEmojisIndicator
+  global g_tipMap
+
+  OutputDebug( "Setting strip-emojis indicator state: " (enabled ? "ON" : "OFF") )
+  if( !IsObject( g_stripEmojisIndicator ) )
+  {
+    OutputDebug( "Strip-emojis indicator control not initialized yet." )
+    return
+  }
+  g_stripEmojisIndicator.Text := enabled ? "☻" : "☺"
+  g_tipMap[g_stripEmojisIndicator.Hwnd] := "Strip emojis from comments: " (enabled ? "ON" : "OFF")
+}
+
 IsClipControl( hwnd )
 {
   global g_clipIndicator
   return IsObject( g_clipIndicator ) && (hwnd = g_clipIndicator.Hwnd)
+}
+
+IsStripEmojisControl( hwnd )
+{
+  global g_stripEmojisIndicator
+  return IsObject( g_stripEmojisIndicator ) && (hwnd = g_stripEmojisIndicator.Hwnd)
 }
 
 IsToggleSizeBtn( hwnd )
