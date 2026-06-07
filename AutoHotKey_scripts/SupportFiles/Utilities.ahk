@@ -157,11 +157,36 @@ CreateButton( text, tip,
 
   g_gui.SetFont( fontSize, fontName )
   btn := g_gui.AddButton( "x" x " y" y " w" w " h" h, text )
+  DisableButtonWrap( btn )
   btn.OnEvent( "Click", func )
   g_tipMap[btn.Hwnd] := tip
   g_gui.SetFont( g_fontSize " norm", g_fontName )
 
   return btn
+}
+
+; Remove BS_MULTILINE from a button so long text never wraps onto a second
+; line. Buttons are created with this flag by default; we always want
+; single-line behaviour so layouts stay predictable.
+DisableButtonWrap( btn )
+{
+  static BS_MULTILINE := 0x2000
+  static GWL_STYLE    := -16
+
+  if( !IsObject( btn ) || !btn.HasProp( "Hwnd" ) || !btn.Hwnd )
+  {
+    return
+  }
+  hwnd  := btn.Hwnd
+  style := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int" )
+  if( !(style & BS_MULTILINE) )
+  {
+    return
+  }
+  DllCall( "SetWindowLong",
+           "Ptr", hwnd, "Int", GWL_STYLE,
+           "Int", style & ~BS_MULTILINE )
+  DllCall( "InvalidateRect", "Ptr", hwnd, "Ptr", 0, "Int", 1 )
 }
 
 CreateBtnWithStyle( text, tip,
@@ -176,6 +201,147 @@ CreateBtnWithStyle( text, tip,
                        func )
   style := DllCall( "GetWindowLong", "Ptr", btn.Hwnd, "Int", -16, "Int" )
            DllCall( "SetWindowLong", "Ptr", btn.Hwnd, "Int", -16, "Int", (style & ~styleMask) | styleBits )
+}
+
+; Measure the rendered width (in device pixels) of `text` when drawn into `hdc`
+; with the font currently selected into that DC.
+MeasureTextWidth( hdc, text )
+{
+  size := Buffer( 8, 0 )
+  DllCall( "GetTextExtentPoint32W",
+           "Ptr",  hdc,
+           "WStr", text,
+           "Int",  StrLen( text ),
+           "Ptr",  size )
+  return NumGet( size, 0, "Int" )
+}
+
+; Build a word-boundary truncation of `fullText` that fits within `maxWidth`
+; when rendered with the font selected into `hdc`, appending `ellipsis`.
+; Falls back to per-character truncation when no full word fits. Any leading
+; whitespace in `fullText` is preserved so left-aligned padding survives.
+TruncateTextWithEllipsis( hdc, fullText, maxWidth, ellipsis := "..." )
+{
+  leading := ""
+  if( RegExMatch( fullText, "^\s+", &leadMatch ) )
+  {
+    leading := leadMatch[0]
+  }
+  body := SubStr( fullText, StrLen( leading ) + 1 )
+
+  bestFit  := ""
+  fitFound := false
+
+  words     := StrSplit( body, " " )
+  candidate := leading
+  loop words.Length
+  {
+    word := words[A_Index]
+    next := (candidate = leading) ? candidate . word
+                                  : candidate . " " . word
+    if( MeasureTextWidth( hdc, next . ellipsis ) <= maxWidth )
+    {
+      candidate := next
+      bestFit   := candidate
+      fitFound  := true
+    }
+    else
+    {
+      break
+    }
+  }
+
+  if( !fitFound )
+  {
+    candidate := leading
+    chars     := StrSplit( body )
+    loop chars.Length
+    {
+      ch   := chars[A_Index]
+      next := candidate . ch
+      if( MeasureTextWidth( hdc, next . ellipsis ) <= maxWidth )
+      {
+        candidate := next
+        bestFit   := candidate
+      }
+      else
+      {
+        break
+      }
+    }
+  }
+
+  if( bestFit = "" )
+  {
+    bestFit := leading
+  }
+  return bestFit . ellipsis
+}
+
+; Clip a button's text at a word boundary, appending "..." when it doesn't fit
+; within the button's client width. Assumes BS_MULTILINE has already been
+; removed at button creation (see DisableButtonWrap). No-op for empty text.
+ApplyEllipsisToButton( btn, padding := 10 )
+{
+  static WM_GETFONT := 0x31
+
+  if( !IsObject( btn ) || !btn.HasProp( "Hwnd" ) )
+  {
+    return
+  }
+  hwnd := btn.Hwnd
+  if( !hwnd )
+  {
+    return
+  }
+
+  fullText := btn.Text
+  if( fullText = "" )
+  {
+    return
+  }
+
+  hdc := DllCall( "GetDC", "Ptr", hwnd, "Ptr" )
+  if( !hdc )
+  {
+    return
+  }
+
+  hFont   := DllCall( "SendMessageW",
+                      "Ptr",  hwnd,
+                      "UInt", WM_GETFONT,
+                      "Ptr",  0,
+                      "Ptr",  0,
+                      "Ptr" )
+  oldFont := hFont ? DllCall( "SelectObject", "Ptr", hdc, "Ptr", hFont, "Ptr" ) : 0
+
+  try
+  {
+    rect := Buffer( 16, 0 )
+    DllCall( "GetClientRect", "Ptr", hwnd, "Ptr", rect )
+    clientWidth := NumGet( rect, 8, "Int" ) - NumGet( rect, 0, "Int" )
+    maxWidth    := clientWidth - padding
+    if( maxWidth < 1 )
+    {
+      return
+    }
+
+    if( MeasureTextWidth( hdc, fullText ) <= maxWidth )
+    {
+      return
+    }
+
+    truncated := TruncateTextWithEllipsis( hdc, fullText, maxWidth )
+    DllCall( "SetWindowTextW", "Ptr", hwnd, "WStr", truncated )
+  }
+  finally
+  {
+    if( oldFont )
+    {
+      DllCall( "SelectObject", "Ptr", hdc, "Ptr", oldFont )
+    }
+    DllCall( "ReleaseDC", "Ptr", hwnd, "Ptr", hdc )
+  }
 }
 
 BtnPos( btnIdx, btnWidth, btnGap )

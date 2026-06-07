@@ -312,6 +312,7 @@ class TabPage
         buttonText := " " . buttonText
       }
       btn := gui.AddButton( opt, buttonText )
+      DisableButtonWrap( btn )
       btn.SetFont( this.m_fontSize, this.m_fontName )
       filename := ""
       if( this.m_useEmojiImages )
@@ -322,6 +323,10 @@ class TabPage
           if( tip != "" ) tip .= "`n"
           tip .= "U+" filename
         }
+      }
+      if( btn.Text != "" )
+      {
+        ApplyEllipsisToButton( btn )
       }
       sym.ctrl := btn
       if( IsSet( tip ) )
