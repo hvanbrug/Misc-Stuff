@@ -235,6 +235,29 @@ DisableButtonWrap( btn )
   DllCall( "InvalidateRect", "Ptr", hwnd, "Ptr", 0, "Int", 1 )
 }
 
+; Add BS_NOTIFY to a button so its parent receives BN_DBLCLK (and BN_SETFOCUS,
+; BN_KILLFOCUS) WM_COMMAND notifications. We use this on tab-page buttons so
+; double-click can append a newline after the normal single-click text send.
+EnableButtonDoubleClick( btn )
+{
+  static BS_NOTIFY := 0x4000
+  static GWL_STYLE := -16
+
+  if( !IsObject( btn ) || !btn.HasProp( "Hwnd" ) || !btn.Hwnd )
+  {
+    return
+  }
+  hwnd  := btn.Hwnd
+  style := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int" )
+  if( style & BS_NOTIFY )
+  {
+    return
+  }
+  DllCall( "SetWindowLong",
+           "Ptr", hwnd, "Int", GWL_STYLE,
+           "Int", style | BS_NOTIFY )
+}
+
 CreateBtnWithStyle( text, tip,
                     fontName, fontSize,
                     styleMask, styleBits,

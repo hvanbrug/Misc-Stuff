@@ -17,6 +17,7 @@ ShowWindow()
   global g_HelpActions
   global g_fullW
   global g_fullH
+  global g_frmSize
   global g_toggleSizeBtn
   global g_clipIndicator
   global g_stripEmojisIndicator
@@ -35,10 +36,23 @@ ShowWindow()
 
   INI_SetWndOpen( true )
 
-  ; Prevent the GUI from painting its background over child button areas during scroll.
+  g_frmSize := 8
+
+  ; Add WS_CLIPCHILDREN so the GUI doesn't paint over child button areas during
+  ; scroll, and WS_THICKFRAME so the OS will actually let us resize the window
+  ; via WM_NCHITTEST. With -Caption, WS_THICKFRAME would normally add a small
+  ; visible sizing border; we suppress that frame entirely in OnNcCalcSize so
+  ; the client area stays flush with the window edges.
   WS_CLIPCHILDREN := 0x02000000
+  WS_THICKFRAME   := 0x00040000
   guiStyle := DllCall( "GetWindowLong", "ptr", g_gui.Hwnd, "int", -16, "int" )
-  DllCall( "SetWindowLong", "ptr", g_gui.Hwnd, "int", -16, "int", guiStyle | WS_CLIPCHILDREN )
+  DllCall( "SetWindowLong", "ptr", g_gui.Hwnd, "int", -16, "int",
+           guiStyle | WS_CLIPCHILDREN | WS_THICKFRAME )
+  ; SWP_FRAMECHANGED forces the OS to recalculate the non-client area now that
+  ; WS_THICKFRAME has been added.
+  DllCall( "SetWindowPos", "ptr", g_gui.Hwnd, "ptr", 0,
+           "int", 0, "int", 0, "int", 0, "int", 0,
+           "uint", 0x0001 | 0x0002 | 0x0004 | 0x0020 )  ; SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED
 
   tabList := []
   tabContentWidth  := 0
@@ -69,9 +83,13 @@ ShowWindow()
     tabContentHeight := maxTabContentHeight
   }
 
-  TAB_SCROLL_W := 18
+  tabScrlW := 18
+  tabLeft  := 5  + g_frmSize
+  tabTop   := 24 + g_frmSize
+  tabWth   := tabContentWidth  + tabScrlW + 14
+  tabHgt   := tabContentHeight + 30
 
-  g_tabs := g_gui.AddTab3( "x5 y24 w" (tabContentWidth + TAB_SCROLL_W + 14) " h" (tabContentHeight + 30), tabList )
+  g_tabs := g_gui.AddTab3( "x" tabLeft " y" tabTop " w" tabWth " h" tabHgt, tabList )
 
   ; WS_CLIPSIBLINGS: prevents the tab control from painting over sibling windows
   ; (the utility buttons) that sit above it in z-order.  Set once here so we
@@ -107,9 +125,13 @@ ShowWindow()
   dispGuiRight  := NumGet( ptBottomRight, 0, "Int" )
   dispGuiBottom := NumGet( ptBottomRight, 4, "Int" )
 
-  tabScrollX := dispGuiRight - TAB_SCROLL_W
+  tabScrollX := dispGuiRight - tabScrlW
   tabScrollY := dispGuiTop
   tabScrollH := dispGuiBottom - dispGuiTop
+
+  ; Cache the scrollbar's GUI-client X for use by RelayoutForHeight.
+  global g_tabScrollX
+  g_tabScrollX := tabScrollX
 
   ; Detach from tab context so the scrollbar is a window-level control visible on all tabs.
   g_tabs.UseTab( 0 )
@@ -122,7 +144,7 @@ ShowWindow()
                               "UInt", 0x50000001,
                               "Int",  tabScrollX,
                               "Int",  tabScrollY,
-                              "Int",  TAB_SCROLL_W,
+                              "Int",  tabScrlW,
                               "Int",  tabScrollH,
                               "Ptr",  g_gui.Hwnd,
                               "Ptr",  0,
@@ -133,7 +155,12 @@ ShowWindow()
   ; Force classic scrollbar appearance so it stays visible instead of auto-hiding.
   DllCall( "uxtheme\SetWindowTheme", "Ptr", g_tabScrollHwnd, "Str", "", "Str", "" )
 
-  OnMessage( 0x0115, VScroll )  ; WM_VSCROLL
+  OnMessage( 0x0115, VScroll             )  ; WM_VSCROLL
+  OnMessage( 0x0111, OnButtonDoubleClick )  ; WM_COMMAND       (for BN_DBLCLK)
+  OnMessage( 0x0083, OnNcCalcSize        )  ; WM_NCCALCSIZE    (suppress frame)
+  OnMessage( 0x0084, OnNcHitTest         )  ; WM_NCHITTEST     (vertical-only resize hit-test)
+  OnMessage( 0x0024, OnGetMinMaxInfo     )  ; WM_GETMINMAXINFO (height bounds)
+  OnMessage( 0x0005, OnWindowSize        )  ; WM_SIZE          (relayout on height change)
 
   for tabIndex, tab in g_uiTabs
   {
@@ -181,25 +208,26 @@ ShowWindow()
 
   ; Utility buttons in top-right corner (outside tab context).
   g_tabs.UseTab( 0 )
-  rightEdge := tabContentWidth + TAB_SCROLL_W + 16
+  btnTop    := 0 + g_frmSize
   btnGap    := 2
   btnWth    := 40
   btnHgt    := 24
+  rightEdge := tabContentWidth + tabScrlW + 16 + g_frmSize
 
   CreateButton( "⌫.", "Back 3, Replace with period",
                 "Segoe UI Symbol", "s10",
-                rightEdge - BtnPos( 2, btnWth, btnGap ), 0, btnWth, btnHgt,
+                rightEdge - BtnPos( 2, btnWth, btnGap ), btnTop, btnWth, btnHgt,
                 (*) => DoSendInput( "`b`b`b. " ) )
 
   CreateBtnWithStyle( "⇚,", "Back 3, Insert Comma",
                       "Segoe UI Symbol", "s16",
                       0x0F00, 0x0800, ; BS_BOTTOM (0x0800) — push baseline up so the tall glyph isn't clipped.
-                      rightEdge - BtnPos( 1, btnWth, btnGap ), 0, btnWth, btnHgt,
+                      rightEdge - BtnPos( 1, btnWth, btnGap ), btnTop, btnWth, btnHgt,
                       (*) => DoSendInput( "{Left}{Left}{Left}, " ) )
 
   CreateButton( "↩", "Enter / Newline",
                 "Segoe UI Symbol", "s14",
-                rightEdge - BtnPos( 0, btnWth, btnGap ), 0, btnWth, btnHgt,
+                rightEdge - BtnPos( 0, btnWth, btnGap ), btnTop, btnWth, btnHgt,
                 (*) => DoSendInput( "{Enter}" ) )
 
 ; 🔄⏎
@@ -210,7 +238,7 @@ ShowWindow()
 
   g_toggleSizeBtn := CreateButton( "▼", "Shrink window",
                                    "Segoe UI Symbol", "s14",
-                                   15, 0, btnWth, btnHgt,
+                                   25, btnTop, btnWth, btnHgt,
                                    (*) => ToggleWindowSize() )
 
   ; Strip-emojis-from-comments indicator (click to toggle): sits immediately
@@ -219,8 +247,8 @@ ShowWindow()
   ; Comments tab via CommentsTabPage.TransformSendText.
   stripW := 14
   stripH := 16
-  stripX := 14 + btnWth + 2
-  stripY := 3
+  stripX := 14 + btnWth + 2 + g_frmSize
+  stripY := 3 + g_frmSize
   g_gui.SetFont( "s10", "Segoe UI Symbol" )
   g_stripEmojisIndicator := g_gui.AddText( "x" stripX " y" stripY " w" stripW " h" stripH " +0x100", "☺" )
   g_tipMap[g_stripEmojisIndicator.Hwnd] := "Strip emojis from comments: OFF"
@@ -232,8 +260,8 @@ ShowWindow()
   ; the shrink/expand buttons so it's easy to see in either mode.
   clipW := 12
   clipH := 14
-  clipX := 2
-  clipY := 2
+  clipX := 2 + g_frmSize
+  clipY := 2 + g_frmSize
   g_gui.SetFont( "s10", "Segoe UI Symbol" )
   g_clipIndicator := g_gui.AddText( "x" clipX " y" clipY " w" clipW " h" clipH " +0x100", "○" )
   g_tipMap[g_clipIndicator.Hwnd] := "Clipboard send mode: OFF"
@@ -243,10 +271,21 @@ ShowWindow()
 
   ; Explicit window size based on tab control dimensions.
   ; Prevents AHK from auto-sizing to include hidden buttons at large Y offsets.
-  showW   := tabContentWidth + TAB_SCROLL_W + 14 + 14
+  showW   := tabContentWidth + tabScrlW + 14 + 14
   showH   := tabContentHeight + 30 + 14 + 14
   g_fullW := showW
-  g_fullH := showH
+
+  ; Apply the user's saved height (from a previous resize). Falls back to the
+  ; computed default if no persisted value or the value is out of range.
+  savedH := INI_WndHeight()
+  if( savedH != "" && savedH >= 140 && savedH <= A_ScreenHeight )
+  {
+    g_fullH := Integer( savedH )
+  }
+  else
+  {
+    g_fullH := showH
+  }
   ;savedPos := LoadWindowPos()
   ;g_gui.Show( "w" showW " h" showH " " savedPos )
   ;RedrawScrollbar()
@@ -258,6 +297,172 @@ ShowWindow()
 
   ; Restore collapsed state last, after everything is laid out.
   ToggleWindowSize( INI_IsCollapsed() )
+}
+
+
+
+; WM_COMMAND handler that fires for any button with BS_NOTIFY set (we apply
+; that style only to tab-page symbol buttons via EnableButtonDoubleClick).
+; On a double-click the OS sends BN_CLICKED first (so the normal Click handler
+; runs and the symbol's text is sent through DoSendText as usual) and then
+; BN_DBLCLK on the second click. We can't send the newline directly here:
+; the Click handler sleeps briefly before sending, so BN_DBLCLK arrives while
+; that send is still pending and the Enter would race ahead. Instead we just
+; raise a flag — SymbolClick sends the newline after action.Call() returns.
+OnButtonDoubleClick( wParam, lParam, msg, hwnd )
+{
+  static BN_DBLCLK := 5
+
+  notifyCode := (wParam >> 16) & 0xFFFF
+  if( notifyCode != BN_DBLCLK )
+  {
+    return
+  }
+
+  global g_pendingNewline
+  g_pendingNewline := true
+}
+
+
+
+; WM_NCCALCSIZE handler. WS_THICKFRAME normally inserts a small sizing border
+; around the whole window. Returning 0 with wParam=TRUE tells the OS that the
+; proposed window rect is the new client rect verbatim — i.e. no non-client
+; area at all — so the visual layout stays exactly as it was before we added
+; WS_THICKFRAME, while the OS still treats the window as resizable.
+OnNcCalcSize( wParam, lParam, msg, hwnd )
+{
+  global g_gui
+  if( !IsObject( g_gui ) || hwnd != g_gui.Hwnd )
+  {
+    return
+  }
+  return 0
+}
+
+; WM_NCHITTEST handler. Default hit-testing on a window with WS_THICKFRAME
+; returns HTTOPLEFT / HTLEFT / HTRIGHT / etc. near the edges, which would
+; show horizontal/diagonal resize cursors. We override every hit-test for
+; this window: only the top and bottom edge zones return resize codes; all
+; other positions are reported as HTCLIENT, which keeps the cursor as the
+; normal arrow and prevents the OS from initiating a horizontal resize.
+OnNcHitTest( wParam, lParam, msg, hwnd )
+{
+  static RESIZE_ZONE := 6
+  static HTCLIENT    := 1
+  static HTTOP       := 12
+  static HTBOTTOM    := 15
+
+  global g_gui
+  if( !IsObject( g_gui ) || hwnd != g_gui.Hwnd )
+  {
+    return
+  }
+  if( INI_IsCollapsed() )
+  {
+    return HTCLIENT
+  }
+
+  ; lParam packs cursor screen coords as two signed 16-bit ints.
+  cx := lParam & 0xFFFF
+  if( cx & 0x8000 )
+  {
+    cx -= 0x10000
+  }
+  cy := (lParam >> 16) & 0xFFFF
+  if( cy & 0x8000 )
+  {
+    cy -= 0x10000
+  }
+
+  rect := Buffer( 16, 0 )
+  DllCall( "GetWindowRect", "Ptr", hwnd, "Ptr", rect )
+  top    := NumGet( rect, 4,  "Int" )
+  bottom := NumGet( rect, 12, "Int" )
+
+  if( cy - top < RESIZE_ZONE )
+  {
+    return HTTOP
+  }
+  if( bottom - cy < RESIZE_ZONE )
+  {
+    return HTBOTTOM
+  }
+  return HTCLIENT
+}
+
+; WM_GETMINMAXINFO handler. Clamp the window to a sensible vertical range
+; so the user can't drag-resize it to nothing or beyond the screen. Width is
+; also clamped to the current physical width so a horizontal drag-resize is
+; rejected by the OS even if hit-testing somehow let one through. The clamp
+; is bypassed while ToggleWindowSize is calling Show() so collapse/expand
+; can change the width.
+OnGetMinMaxInfo( wParam, lParam, msg, hwnd )
+{
+  global g_gui
+  global g_allowWidthChange
+  if( !IsObject( g_gui ) || hwnd != g_gui.Hwnd )
+  {
+    return
+  }
+  if( INI_IsCollapsed() )
+  {
+    return
+  }
+  if( g_allowWidthChange )
+  {
+    return
+  }
+
+  static MIN_HEIGHT := 140
+
+  ; Lock width: read current physical-pixel width and use it for both min and
+  ; max track sizes so any horizontal change is rejected by the OS even if
+  ; some future code path were to request one.
+  rect := Buffer( 16, 0 )
+  DllCall( "GetWindowRect", "Ptr", hwnd, "Ptr", rect )
+  curWidth := NumGet( rect, 8, "Int" ) - NumGet( rect, 0, "Int" )
+
+  ; MINMAXINFO layout (offsets in bytes):
+  ;    0  POINT ptReserved
+  ;    8  POINT ptMaxSize
+  ;   16  POINT ptMaxPosition
+  ;   24  POINT ptMinTrackSize
+  ;   32  POINT ptMaxTrackSize
+  NumPut( "Int", curWidth,         lParam, 24 )  ; ptMinTrackSize.x
+  NumPut( "Int", MIN_HEIGHT,       lParam, 28 )  ; ptMinTrackSize.y
+  NumPut( "Int", curWidth,         lParam, 32 )  ; ptMaxTrackSize.x
+  NumPut( "Int", A_ScreenHeight,   lParam, 36 )  ; ptMaxTrackSize.y
+  return 0
+}
+
+; WM_SIZE handler. Reflow the tab control, scrollbar and clip panels so the
+; new height is actually used. The collapsed state is skipped because the
+; tab control is hidden then and its size must stay at its full configured
+; value so the next expand looks right.
+OnWindowSize( wParam, lParam, msg, hwnd )
+{
+  global g_gui
+  if( !IsObject( g_gui ) || hwnd != g_gui.Hwnd )
+  {
+    return
+  }
+  if( INI_IsCollapsed() )
+  {
+    return
+  }
+
+  static SIZE_MINIMIZED := 1
+  if( wParam = SIZE_MINIMIZED )
+  {
+    return
+  }
+
+  RelayoutForHeight()
+
+  ; Persist the new height (debounced) so it's restored next time the script
+  ; runs. SaveWindowHeight reads g_fullH that RelayoutForHeight just updated.
+  SetTimer( SaveWindowHeight, -500 )
 }
 
 
@@ -432,6 +637,7 @@ ToggleWindowSize( collapse := "" )
   global g_uiTabs
   global g_fullW
   global g_fullH
+  global g_allowWidthChange
 
   if( !IsObject( g_gui ) )
   {
@@ -443,48 +649,148 @@ ToggleWindowSize( collapse := "" )
     collapse := !INI_IsCollapsed()
   }
 
-  if( collapse )
+  ; Allow OnGetMinMaxInfo to skip its width clamp for the duration of the
+  ; Show() call — we are intentionally changing the width here.
+  g_allowWidthChange := true
+  try
   {
-    g_tabs.Opt( "Hidden" )
-    SetToggleSizeBtnState( true )
-
-    savedPos := LoadWindowPos()
-    g_gui.Show( "w70 h24 NoActivate" savedPos )
-    INI_SetCollapsed( true )
-  }
-  else
-  {
-    g_tabs.Opt( "-Hidden" )
-    SetToggleSizeBtnState( false )
-
-    ; Hiding the tab control also hides its child clip panels.
-    ; Re-show the active tab's clip panel so buttons reappear.
-    if( IsObject( g_uiTabs ) )
+    if( collapse )
     {
-      tabIndex := g_tabs.Value
-      for idx, tab in g_uiTabs
+      g_tabs.Opt( "Hidden" )
+      SetToggleSizeBtnState( true )
+
+      ; Update INI before Show() so the WM_SIZE handler sees the new state and
+      ; can correctly skip the relayout while collapsing.
+      INI_SetCollapsed( true )
+      savedPos := LoadWindowPos()
+      global g_frmSize
+      width  := 70 + g_frmSize
+      height := 24
+      g_gui.Show( "w" width " h" height " NoActivate" savedPos )
+    }
+    else
+    {
+      g_tabs.Opt( "-Hidden" )
+      SetToggleSizeBtnState( false )
+
+      ; Hiding the tab control also hides its child clip panels.
+      ; Re-show the active tab's clip panel so buttons reappear.
+      if( IsObject( g_uiTabs ) )
       {
-        if( idx = tabIndex )
+        tabIndex := g_tabs.Value
+        for idx, tab in g_uiTabs
         {
-          tab.ShowClipPanel()
-        }
-        else
-        {
-          tab.HideClipPanel()
+          if( idx = tabIndex )
+          {
+            tab.ShowClipPanel()
+          }
+          else
+          {
+            tab.HideClipPanel()
+          }
         }
       }
-    }
 
-    savedPos := LoadWindowPos()
-    g_gui.Show( "w" g_fullW " h" g_fullH " NoActivate" savedPos )
-    INI_SetCollapsed( false )
-    RedrawScrollbar()
+      ; Update INI before Show() so the WM_SIZE handler sees the expanded state
+      ; and runs the relayout instead of skipping it.
+      INI_SetCollapsed( false )
+      savedPos := LoadWindowPos()
+      g_gui.Show( "w" g_fullW " h" g_fullH " NoActivate" savedPos )
+      RedrawScrollbar()
+    }
+  }
+  finally
+  {
+    g_allowWidthChange := false
   }
 }
 
 IsCollapsed()
 {
   return INI_IsCollapsed()
+}
+
+; Resize the tab control, scrollbar, and each tab's clip panel to match the
+; current GUI client height. Called from OnWindowSize after the user drags
+; the top or bottom edge.
+RelayoutForHeight()
+{
+  global g_gui
+  global g_tabs
+  global g_uiTabs
+  global g_tabScrollHwnd
+  global g_tabScrollX
+  global g_fullH
+
+  if( !IsObject( g_gui ) || !IsObject( g_tabs ) )
+  {
+    return
+  }
+
+  ; Client size is in AHK-logical pixels (DPI-aware). Tab control top stays
+  ; at y=24 (room for the helper buttons) and we leave a small bottom margin.
+  g_gui.GetClientPos( , , &clientW, &clientH )
+  TAB_TOP    := 24
+  TAB_MARGIN := 14
+  newTabH    := clientH - TAB_TOP - TAB_MARGIN
+  if( newTabH < 60 )
+  {
+    newTabH := 60
+  }
+
+  g_tabs.Move( , , , newTabH )
+
+  ; Recompute the tab display rect (physical px) so the scrollbar and clip
+  ; panels can be repositioned to match the new tab height.
+  displayRect := Buffer( 16, 0 )
+  DllCall( "GetClientRect", "Ptr", g_tabs.Hwnd, "Ptr", displayRect.Ptr )
+  SendMessage( 0x1328, 0, displayRect.Ptr, g_tabs.Hwnd )  ; TCM_ADJUSTRECT
+  dispTop    := NumGet( displayRect, 4,  "Int" )
+  dispBottom := NumGet( displayRect, 12, "Int" )
+
+  ; Map dispTop / dispBottom from tab-client coords to GUI-client coords.
+  ptTL := Buffer( 8, 0 )
+  NumPut( "Int", 0,       ptTL, 0 )
+  NumPut( "Int", dispTop, ptTL, 4 )
+  DllCall( "ClientToScreen", "Ptr", g_tabs.Hwnd, "Ptr", ptTL.Ptr )
+  DllCall( "ScreenToClient", "Ptr", g_gui.Hwnd,  "Ptr", ptTL.Ptr )
+  guiTop := NumGet( ptTL, 4, "Int" )
+
+  ptBL := Buffer( 8, 0 )
+  NumPut( "Int", 0,          ptBL, 0 )
+  NumPut( "Int", dispBottom, ptBL, 4 )
+  DllCall( "ClientToScreen", "Ptr", g_tabs.Hwnd, "Ptr", ptBL.Ptr )
+  DllCall( "ScreenToClient", "Ptr", g_gui.Hwnd,  "Ptr", ptBL.Ptr )
+  guiBottom := NumGet( ptBL, 4, "Int" )
+
+  if( g_tabScrollHwnd )
+  {
+    scrollRect := Buffer( 16, 0 )
+    DllCall( "GetWindowRect", "Ptr", g_tabScrollHwnd, "Ptr", scrollRect )
+    scrollW := NumGet( scrollRect, 8, "Int" ) - NumGet( scrollRect, 0, "Int" )
+
+    DllCall( "SetWindowPos",
+             "Ptr",  g_tabScrollHwnd, "Ptr", 0,
+             "Int",  g_tabScrollX, "Int", guiTop,
+             "Int",  scrollW,      "Int", guiBottom - guiTop,
+             "UInt", 0x0004 | 0x0010 )  ; SWP_NOZORDER | SWP_NOACTIVATE
+  }
+
+  if( IsObject( g_uiTabs ) )
+  {
+    for tab in g_uiTabs
+    {
+      tab.ResizeClipPanel( g_gui, g_tabs )
+    }
+  }
+
+  ; Track the new full height so collapse → expand round-trips honour the
+  ; user's chosen size.
+  g_gui.GetPos( , , , &winH )
+  g_fullH := winH
+
+  UpdateScrollInfo()
+  RedrawScrollbar()
 }
 
 ForceRepaint()
@@ -621,6 +927,16 @@ SaveWindowPos()
   WinGetPos( &g_wndX, &g_wndY, , , g_gui )
   INI_SetWndPosX( g_wndX )
   INI_SetWndPosY( g_wndY )
+}
+
+SaveWindowHeight()
+{
+  global g_fullH
+  if( !g_fullH )
+  {
+    return
+  }
+  INI_SetWndHeight( g_fullH )
 }
 
 SetFavouriteSpot()

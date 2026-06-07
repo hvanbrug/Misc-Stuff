@@ -313,7 +313,8 @@ class TabPage
         buttonText := " " . buttonText
       }
       btn := gui.AddButton( opt, buttonText )
-      DisableButtonWrap( btn )
+      DisableButtonWrap(       btn )
+      EnableButtonDoubleClick( btn )
       btn.SetFont( this.m_fontSize, this.m_fontName )
       filename := ""
       if( this.m_useEmojiImages )
@@ -392,6 +393,50 @@ class TabPage
       DllCall( "RedrawWindow", "Ptr", this.m_clipPanelHwnd,
                "Ptr", 0, "Ptr", 0, "UInt", 0x0185 )
     }
+  }
+
+  ; Re-fit the clip panel to the tab control's current display rect after the
+  ; user has dragged the window's bottom or top edge. The content panel keeps
+  ; its full content height; the clip panel's smaller bounds do all the
+  ; clipping. Viewport height is recomputed so MaxScrollY / scroll clamping
+  ; track the new visible area.
+  ResizeClipPanel( gui, tabs )
+  {
+    if( !this.m_clipPanelHwnd )
+    {
+      return
+    }
+
+    displayRect := Buffer( 16, 0 )
+    DllCall( "GetClientRect", "Ptr", tabs.Hwnd, "Ptr", displayRect.Ptr )
+    SendMessage( 0x1328, 0, displayRect.Ptr, tabs.Hwnd )  ; TCM_ADJUSTRECT
+    dispLeft   := NumGet( displayRect, 0,  "Int" )
+    dispTop    := NumGet( displayRect, 4,  "Int" )
+    dispRight  := NumGet( displayRect, 8,  "Int" )
+    dispBottom := NumGet( displayRect, 12, "Int" )
+
+    clipW := dispRight  - dispLeft
+    clipH := dispBottom - dispTop
+    if( clipW < 1 || clipH < 1 )
+    {
+      return
+    }
+
+    dpi      := DllCall( "GetDpiForWindow", "Ptr", gui.Hwnd, "UInt" )
+    dpiScale := dpi / 96
+    this.m_viewportHeight := Round( clipH / dpiScale )
+
+    DllCall( "SetWindowPos",
+             "Ptr",  this.m_clipPanelHwnd, "Ptr", 0,
+             "Int",  dispLeft, "Int", dispTop,
+             "Int",  clipW,    "Int", clipH,
+             "UInt", 0x0004 | 0x0010 )  ; SWP_NOZORDER | SWP_NOACTIVATE
+
+    ; Re-clamp scroll positions so a previously-valid offset that is now
+    ; below MaxScrollY snaps back into range, then redraw at the new offset.
+    this.m_scrollTargetY := this.ClampScrollY( this.m_scrollTargetY )
+    this.m_scrollY       := this.ClampScrollY( this.m_scrollY )
+    this.ApplyScrollPosition()
   }
 
   MaxScrollY()
@@ -739,9 +784,18 @@ class TabPage
 
   SymbolClick( action, ctrl, * )
   {
+    global g_pendingNewline
     ;Close()
     Sleep( 150 )
     action.Call()
+
+    ; If a BN_DBLCLK fired while we were sending, append a newline now so it
+    ; always lands after the symbol's text.
+    if( g_pendingNewline )
+    {
+      g_pendingNewline := false
+      DoSendInput( "{Enter}" )
+    }
   }
 
   TransformSendText( text )

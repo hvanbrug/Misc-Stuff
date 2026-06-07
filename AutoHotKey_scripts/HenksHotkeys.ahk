@@ -25,9 +25,17 @@ A_MaxHotkeysPerInterval := 400
 #Include "SupportFiles\UIScrolling.ahk"
 #Include "SupportFiles\IniFile.ahk"
 #Include "SupportFiles\Startup.ahk"
-;
-;
-;
+; usage = 72% - 57% = 15%
+; credits spent = 249.8 + 155.6 + 364.4 = 769.8
+; total credits = (769.8 / 15)  = 5132
+;  100 credits  = (100  / 5132) =  1.95% of usage
+;  200 credits  = (200  / 5132) =  3.89% of usage
+;  300 credits  = (300  / 5132) =  5.84% of usage
+;  500 credits  = (500  / 5132) =  9.74% of usage
+; 1000 credits  = (1000 / 5132) = 19.48% of usage
+; 2000 credits  = (2000 / 5132) = 38.96% of usage
+; 3000 credits  = (3000 / 5132) = 58.44% of usage
+; 5000 credits  = (5000 / 5132) = 97.39% of usage
 ;
 ;
 ;

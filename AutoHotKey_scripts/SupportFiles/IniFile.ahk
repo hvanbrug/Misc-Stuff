@@ -61,6 +61,21 @@ INI_SetStripCommentEmojis( isOn )
   OutputDebug( "Updated INI file to indicate strip-comment-emojis mode: " (isOn ? "ON" : "OFF") )
 }
 
+INI_WndHeight()
+{
+  global g_iniPath
+  height := IniRead( g_iniPath, "Window", "Height", "" )
+  OutputDebug( "Read window height from INI file: " (height != "" ? height : "not set") )
+  return height
+}
+
+INI_SetWndHeight( height )
+{
+  global g_iniPath
+  IniWrite( height, g_iniPath, "Window", "Height" )
+  OutputDebug( "Updated INI file with window height: " height )
+}
+
 INI_WndPosX()
 {
   global g_iniPath
