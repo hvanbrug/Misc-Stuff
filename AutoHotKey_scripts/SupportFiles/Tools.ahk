@@ -21,8 +21,17 @@ class ToolsTabPage extends TabPage
 
   RegisterButtons()
   {
-    super.RegisterSymbolX( 1, "", "Move window to work area",   "^!m", (*) => MoveWindowToWorkArea(),    "left", 0, 1 )
-    super.RegisterSymbolX( 1, "", "Toggle clipboard send mode", "^!v", (*) => ToggleClipboardSendMode(), "left", 0, 1 )
+    super.RegisterSymbolX( 1, "", "Toggle clipboard send mode", "^!v",
+                           (*) => ToggleClipboardSendMode(), "left", 0, 1 )
+    super.NextLine()
+
+    super.RegisterSymbolX( 1, "", "Toggle strip emojis send mode", "^!e",
+                           (*) => ToggleStripSendEmojis(), "left", 0, 1 )
+    super.NextLine()
+    super.ShiftLineByThird()
+
+    super.RegisterSymbolX( 1, "", "Move window to work area", "^!w",
+                           (*) => MoveWindowToWorkArea(), "left", 0, 1 )
   }
 
 }

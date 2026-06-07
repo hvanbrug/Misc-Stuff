@@ -20,19 +20,19 @@ class SensitiveTabPage extends TabPage
 
   RegisterButtons()
   {
+    super.RegisterSymbolX( 1, "henk.vanbruggen@microsurvey.com",             "email - MicroSurvey VHE",  "^+#F9",  unset, "left", 0, 0 )
+    super.RegisterSymbolX( 1, "H{!}Pircotha29",                              "pswd - MicroSurvey VHE",   "^+#F10", unset, "left", 0, 0 )
+    super.NextLine()
+
+    super.RegisterSymbolX( 1, "henk.vanbruggen@microsurvey.onmicrosoft.com", "email - OnMicrosoft",      "^+#F11", unset, "left", 0, 0 )
+    super.RegisterSymbolX( 1, "HVB13{#}dvlp{@}",                             "pswd - OnMicrosoft",       "^+#F12", unset, "left", 0, 0 )
+    super.NextLine()
+
+    super.RegisterSymbolX( 1, "buildprogrammer.geo@microsurvey.com",         "email - Build Programmer", "^+#F7",  unset, "left", 0, 0 )
+    super.RegisterSymbolX( 1, "MS2023bp{!}run",                              "pswd - Build Programmer",  "^+#F8",  unset, "left", 0, 0 )
+    super.NextLine()
+
     super.RegisterSpace()
-    super.RegisterSymbolX( 1, "MyDogIs1Cut3Puppy",                           "BitWarden - pswd",         "^+#F6",  unset, "left", 0, 0 )
-    super.NextLine()
-
-    super.RegisterSymbolX( 1, "buildprogrammer.geo@microsurvey.com",         "Build Programmer - email", "^+#F7",  unset, "left", 0, 0 )
-    super.RegisterSymbolX( 1, "MS2023bp{!}run",                              "Build Programmer - pswd",  "^+#F8",  unset, "left", 0, 0 )
-    super.NextLine()
-
-    super.RegisterSymbolX( 1, "henk.vanbruggen@microsurvey.com",             "MicroSurvey VHE - email",  "^+#F9",  unset, "left", 0, 0 )
-    super.RegisterSymbolX( 1, "H{!}Pircotha29",                              "MicroSurvey VHE - pswd",   "^+#F10", unset, "left", 0, 0 )
-    super.NextLine()
-
-    super.RegisterSymbolX( 1, "henk.vanbruggen@microsurvey.onmicrosoft.com", "OnMicrosoft - email",      "^+#F11", unset, "left", 0, 0 )
-    super.RegisterSymbolX( 1, "HVB13{#}dvlp{@}",                             "OnMicrosoft - pswd",       "^+#F12", unset, "left", 0, 0 )
+    super.RegisterSymbolX( 1, "MyDogIs1Cut3Puppy",                           "pswd - BitWarden",         "^+#F6",  unset, "left", 0, 0 )
   }
 }

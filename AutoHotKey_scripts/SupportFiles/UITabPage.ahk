@@ -150,7 +150,16 @@ class TabPage
 
   NormalizeDisplayText( text )
   {
-    return StrReplace( text, "`b", "⌫" )
+    text := StrReplace( text, "`n",   "↵"  ) ; newline
+    text := StrReplace( text, "`r",   "␍"  ) ; carriage return
+    text := StrReplace( text, "`t",   "⇥"  ) ; tabs
+    text := StrReplace( text, "`b",   "⌫"  ) ; backspace
+    text := StrReplace( text, "`a",   "␇"  ) ; bell/alert
+    text := StrReplace( text, "`f",   "␌"  ) ; form feed
+    text := StrReplace( text, "`v",   "␋"  ) ; vertical tab
+    text := StrReplace( text, Chr( 27  ), "⎋" ) ; escape
+    text := StrReplace( text, Chr( 127 ), "⌦" ) ; delete
+    return text
   }
 
   RegisterHotkeyBinding( hk, hotkeyAction, fallbackChar := "" )

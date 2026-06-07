@@ -190,6 +190,7 @@ BtnPos( btnIdx, btnWidth, btnGap )
 
 HotkeyLabel( hotkey )
 {
+  hotkey := StrUpper(   hotkey )
   hotkey := StrReplace( hotkey, "^", "Ctrl-"  )
   hotkey := StrReplace( hotkey, "+", "Shift-" )
   hotkey := StrReplace( hotkey, "#", "Win-"   )
