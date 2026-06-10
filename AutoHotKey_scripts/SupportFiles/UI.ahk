@@ -231,15 +231,28 @@ ShowWindow()
                 (*) => DoSendInput( "{Enter}" ) )
 
 ; 🔄⏎
-;  CreateButton( "", "Repaint / Refresh",
-;                "Segoe UI Symbol", "s10",
-;                rightEdge - BtnPos( 0, btnWth, btnGap ), 0, btnWth, btnHgt,
-;                (*) => ForceRepaint() )
+  CreateButton( "", "Repaint / Refresh",
+                "Segoe UI Symbol", "s10",
+                rightEdge - BtnPos( 5, btnWth, btnGap ), btnTop, btnWth, btnHgt,
+                (*) => ForceRepaint() )
 
   g_toggleSizeBtn := CreateButton( "▼", "Shrink window",
                                    "Segoe UI Symbol", "s14",
                                    25, btnTop, btnWth, btnHgt,
                                    (*) => ToggleWindowSize() )
+
+  ; Clipboard-mode indicator (click to toggle). Always visible to the left of
+  ; the shrink/expand buttons so it's easy to see in either mode.
+  clipW := 12
+  clipH := 14
+  clipX := 2 + g_frmSize
+  clipY := 1 + g_frmSize
+  g_gui.SetFont( "s10", "Segoe UI Symbol" )
+  g_clipIndicator := g_gui.AddText( "x" clipX " y" clipY " w" clipW " h" clipH " +0x100", "○" )
+  g_tipMap[g_clipIndicator.Hwnd] := "Clipboard send mode: OFF"
+  g_gui.SetFont( g_fontSize " norm", g_fontName )
+  g_useClipSend := INI_IsClipSendMode()
+  SetShowClipBulletState( g_useClipSend )
 
   ; Strip-emojis-from-comments indicator (click to toggle): sits immediately
   ; to the right of the shrink/expand button, mirroring the clipboard-mode
@@ -255,19 +268,6 @@ ShowWindow()
   g_gui.SetFont( g_fontSize " norm", g_fontName )
   g_stripSendEmojis := INI_IsStripCommentEmojis()
   SetStripEmojisIndicatorState( g_stripSendEmojis )
-
-  ; Clipboard-mode indicator (click to toggle). Always visible to the left of
-  ; the shrink/expand buttons so it's easy to see in either mode.
-  clipW := 12
-  clipH := 14
-  clipX := 2 + g_frmSize
-  clipY := 1 + g_frmSize
-  g_gui.SetFont( "s10", "Segoe UI Symbol" )
-  g_clipIndicator := g_gui.AddText( "x" clipX " y" clipY " w" clipW " h" clipH " +0x100", "○" )
-  g_tipMap[g_clipIndicator.Hwnd] := "Clipboard send mode: OFF"
-  g_gui.SetFont( g_fontSize " norm", g_fontName )
-  g_useClipSend := INI_IsClipSendMode()
-  SetShowClipBulletState( g_useClipSend )
 
   ; Explicit window size based on tab control dimensions.
   ; Prevents AHK from auto-sizing to include hidden buttons at large Y offsets.
@@ -628,6 +628,43 @@ OnWindowMoving( wParam, lParam, msg, hwnd )
   }
 }
 
+; Position the utility controls (indicators and toggle button) accounting for frame offset.
+; includeFrame: true to add g_frmSize offset, false for no offset
+AdjustControlPositions( includeFrame )
+{
+  global g_toggleSizeBtn
+  global g_clipIndicator
+  global g_stripEmojisIndicator
+  global g_frmSize
+
+  ; Get control dimensions
+  g_clipIndicator.GetPos( , , &clipW, &clipH )
+  g_toggleSizeBtn.GetPos( , , &btnW,  &btnH  )
+  g_stripEmojisIndicator.GetPos( , , &stripW, &stripH )
+
+  ; Y positions with frame offset
+  yOffset := includeFrame ? g_frmSize : 0
+  btnY    := yOffset
+
+  ; Center the indicator controls vertically on the button
+  btnCenterY := btnY + btnH / 2         ; 0 + (24/2) = 12
+  clipY      := btnCenterY - clipH  / 2 - 3 ; 12 - (14/2) = 5 - 3 = 2 (there is an offset related to the font's character baseline on the statics)
+  stripY     := btnCenterY - stripH / 2 - 1 ; 12 - (16/2) = 4 - 1 = 3 (there is an offset related to the font's character baseline on the statics)
+
+  ; X positions: layout left-to-right with 2-pixel gaps
+  xOffset    := includeFrame ? g_frmSize : 0
+  edgeGap    := 2
+  controlGap := 1
+
+  clipX  := xOffset + edgeGap
+  btnX   := clipX + clipW + controlGap
+  stripX := btnX + btnW + controlGap
+
+  g_clipIndicator.Move( clipX, clipY )
+  g_toggleSizeBtn.Move( btnX,  btnY  )
+  g_stripEmojisIndicator.Move( stripX, stripY )
+}
+
 ; Single entry point for collapsing/expanding the window.
 ; Pass true to collapse, false to expand, or omit to flip the current state.
 ToggleWindowSize( collapse := "" )
@@ -638,6 +675,10 @@ ToggleWindowSize( collapse := "" )
   global g_fullW
   global g_fullH
   global g_allowWidthChange
+  global g_frmSize
+  global g_toggleSizeBtn
+  global g_clipIndicator
+  global g_stripEmojisIndicator
 
   if( !IsObject( g_gui ) )
   {
@@ -659,19 +700,43 @@ ToggleWindowSize( collapse := "" )
       g_tabs.Opt( "Hidden" )
       SetToggleSizeBtnState( true )
 
+      ; Remove WS_THICKFRAME to get the tool border back
+      static WS_THICKFRAME := 0x00040000
+      guiStyle := DllCall( "GetWindowLong", "ptr", g_gui.Hwnd, "int", -16, "int" )
+      DllCall( "SetWindowLong", "ptr", g_gui.Hwnd, "int", -16, "int",
+               guiStyle & ~WS_THICKFRAME )
+      DllCall( "SetWindowPos", "ptr", g_gui.Hwnd, "ptr", 0,
+               "int", 0, "int", 0, "int", 0, "int", 0,
+               "uint", 0x0001 | 0x0002 | 0x0004 | 0x0020 )
+
+      ; Adjust control positions to remove frame offset when collapsed
+      AdjustControlPositions( false )
+
+
       ; Update INI before Show() so the WM_SIZE handler sees the new state and
       ; can correctly skip the relayout while collapsing.
       INI_SetCollapsed( true )
       savedPos := LoadWindowPos()
-      global g_frmSize
-      width  := 70 + g_frmSize
-      height := 24
+      width    := 71
+      height   := 24
       g_gui.Show( "w" width " h" height " NoActivate" savedPos )
     }
     else
     {
       g_tabs.Opt( "-Hidden" )
       SetToggleSizeBtnState( false )
+
+      ; Re-add WS_THICKFRAME for the frame border
+      static WS_THICKFRAME := 0x00040000
+      guiStyle := DllCall( "GetWindowLong", "ptr", g_gui.Hwnd, "int", -16, "int" )
+      DllCall( "SetWindowLong", "ptr", g_gui.Hwnd, "int", -16, "int",
+               guiStyle | WS_THICKFRAME )
+      DllCall( "SetWindowPos", "ptr", g_gui.Hwnd, "ptr", 0,
+               "int", 0, "int", 0, "int", 0, "int", 0,
+               "uint", 0x0001 | 0x0002 | 0x0004 | 0x0020 )
+
+      ; Restore control positions with frame offset when expanding
+      AdjustControlPositions( true )
 
       ; Hiding the tab control also hides its child clip panels.
       ; Re-show the active tab's clip panel so buttons reappear.
