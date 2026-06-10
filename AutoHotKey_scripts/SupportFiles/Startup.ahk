@@ -33,6 +33,8 @@ FillTrayMenu( menu )
   menu.Add( "Set favourite spot",     (*) => SetFavouriteSpot()    )
   menu.Add( "Move to favourite spot", (*) => MoveToFavouriteSpot() )
   menu.Add()
+  menu.Add( "Test Function", (*) => TestFunction() )
+  menu.Add()
   menu.Add( "Exit", (*) => ExitApp() )
 }
 

@@ -208,7 +208,7 @@ ShowWindow()
 
   ; Utility buttons in top-right corner (outside tab context).
   g_tabs.UseTab( 0 )
-  btnTop    := 0 + g_frmSize
+  btnTop    := g_frmSize
   btnGap    := 2
   btnWth    := 40
   btnHgt    := 24
@@ -248,7 +248,7 @@ ShowWindow()
   stripW := 14
   stripH := 16
   stripX := 14 + btnWth + 2 + g_frmSize
-  stripY := 3 + g_frmSize
+  stripY := 1 + g_frmSize
   g_gui.SetFont( "s10", "Segoe UI Symbol" )
   g_stripEmojisIndicator := g_gui.AddText( "x" stripX " y" stripY " w" stripW " h" stripH " +0x100", "☺" )
   g_tipMap[g_stripEmojisIndicator.Hwnd] := "Strip emojis from comments: OFF"
@@ -261,7 +261,7 @@ ShowWindow()
   clipW := 12
   clipH := 14
   clipX := 2 + g_frmSize
-  clipY := 2 + g_frmSize
+  clipY := 1 + g_frmSize
   g_gui.SetFont( "s10", "Segoe UI Symbol" )
   g_clipIndicator := g_gui.AddText( "x" clipX " y" clipY " w" clipW " h" clipH " +0x100", "○" )
   g_tipMap[g_clipIndicator.Hwnd] := "Clipboard send mode: OFF"
