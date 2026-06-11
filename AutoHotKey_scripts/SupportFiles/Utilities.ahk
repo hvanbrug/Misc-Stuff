@@ -216,22 +216,16 @@ CreateButton( text, tip,
 ; single-line behaviour so layouts stay predictable.
 DisableButtonWrap( btn )
 {
-  static BS_MULTILINE := 0x2000
-  static GWL_STYLE    := -16
-
   if( !IsObject( btn ) || !btn.HasProp( "Hwnd" ) || !btn.Hwnd )
   {
     return
   }
-  hwnd  := btn.Hwnd
-  style := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int" )
-  if( !(style & BS_MULTILINE) )
+  hwnd := btn.Hwnd
+  if( !HasWindowStyle( hwnd, BS_MULTILINE ) )
   {
     return
   }
-  DllCall( "SetWindowLong",
-           "Ptr", hwnd, "Int", GWL_STYLE,
-           "Int", style & ~BS_MULTILINE )
+  RemoveWindowStyle( hwnd, BS_MULTILINE, false )
   DllCall( "InvalidateRect", "Ptr", hwnd, "Ptr", 0, "Int", 1 )
 }
 
@@ -240,22 +234,16 @@ DisableButtonWrap( btn )
 ; double-click can append a newline after the normal single-click text send.
 EnableButtonDoubleClick( btn )
 {
-  static BS_NOTIFY := 0x4000
-  static GWL_STYLE := -16
-
   if( !IsObject( btn ) || !btn.HasProp( "Hwnd" ) || !btn.Hwnd )
   {
     return
   }
-  hwnd  := btn.Hwnd
-  style := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int" )
-  if( style & BS_NOTIFY )
+  hwnd := btn.Hwnd
+  if( HasWindowStyle( hwnd, BS_NOTIFY ) )
   {
     return
   }
-  DllCall( "SetWindowLong",
-           "Ptr", hwnd, "Int", GWL_STYLE,
-           "Int", style | BS_NOTIFY )
+  AddWindowStyle( hwnd, BS_NOTIFY, false )
 }
 
 CreateBtnWithStyle( text, tip,
@@ -541,4 +529,103 @@ GetWindowState( hwnd := WinExist( "A" ) )
            minimized: minimized,
            maximized: maximized,
            cloaked:   cloaked }
+}
+
+; Force the OS to recalculate the window's non-client area after style changes.
+; Called by AddWindowStyle and RemoveWindowStyle when recalcFrame is true.
+RecalcWindowFrame( hwnd )
+{
+  static SWP_NOSIZE       := 0x0001
+  static SWP_NOMOVE       := 0x0002
+  static SWP_NOZORDER     := 0x0004
+  static SWP_FRAMECHANGED := 0x0020
+
+  if( !hwnd )
+  {
+    return
+  }
+
+  DllCall( "SetWindowPos", "Ptr", hwnd, "Ptr", 0,
+           "Int", 0, "Int", 0, "Int", 0, "Int", 0,
+           "UInt", SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED )
+}
+
+; Add a window style flag to the specified window.
+; styleFlag: the WS_* or other style flag to add (e.g., 0x00040000 for WS_THICKFRAME)
+; recalcFrame: if true, forces OS to recalculate the non-client area
+AddWindowStyle( hwnd, styleFlag, recalcFrame := true )
+{
+  static GWL_STYLE := -16
+
+  if( !hwnd )
+  {
+    return
+  }
+
+  currentStyle := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int" )
+  newStyle := currentStyle | styleFlag
+  DllCall( "SetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int", newStyle )
+
+  if( recalcFrame )
+  {
+    RecalcWindowFrame( hwnd )
+  }
+}
+
+; Remove a window style flag from the specified window.
+; styleFlag: the WS_* or other style flag to remove (e.g., 0x00040000 for WS_THICKFRAME)
+; recalcFrame: if true, forces OS to recalculate the non-client area
+RemoveWindowStyle( hwnd, styleFlag, recalcFrame := true )
+{
+  static GWL_STYLE := -16
+
+  if( !hwnd )
+  {
+    return
+  }
+
+  currentStyle := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int" )
+  newStyle := currentStyle & ~styleFlag
+  DllCall( "SetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int", newStyle )
+
+  if( recalcFrame )
+  {
+    RecalcWindowFrame( hwnd )
+  }
+}
+
+; ── Window Style Constants ──────────────────────────────────────────────
+; Common WS_* and button style flags for use with AddWindowStyle/RemoveWindowStyle
+global GWL_STYLE       := -16
+global WS_CLIPCHILDREN := 0x02000000
+global WS_THICKFRAME   := 0x00040000
+global WS_CLIPSIBLINGS := 0x04000000
+global BS_MULTILINE    := 0x2000
+global BS_NOTIFY       := 0x4000
+global BS_BITMAP       := 0x80
+
+; Test if all specified style flags are set on a window.
+; Returns true only if ALL bits in styleFlags are set in the window's style.
+HasWindowStyle( hwnd, styleFlags )
+{
+  if( !hwnd )
+  {
+    return false
+  }
+
+  currentStyle := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int" )
+  return (currentStyle & styleFlags) = styleFlags
+}
+
+; Test if any specified style flags are set on a window.
+; Returns true if ANY bit in styleFlags is set in the window's style.
+HasAnyWindowStyle( hwnd, styleFlags )
+{
+  if( !hwnd )
+  {
+    return false
+  }
+
+  currentStyle := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int" )
+  return (currentStyle & styleFlags) != 0
 }

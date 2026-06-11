@@ -43,16 +43,7 @@ ShowWindow()
   ; via WM_NCHITTEST. With -Caption, WS_THICKFRAME would normally add a small
   ; visible sizing border; we suppress that frame entirely in OnNcCalcSize so
   ; the client area stays flush with the window edges.
-  WS_CLIPCHILDREN := 0x02000000
-  WS_THICKFRAME   := 0x00040000
-  guiStyle := DllCall( "GetWindowLong", "ptr", g_gui.Hwnd, "int", -16, "int" )
-  DllCall( "SetWindowLong", "ptr", g_gui.Hwnd, "int", -16, "int",
-           guiStyle | WS_CLIPCHILDREN | WS_THICKFRAME )
-  ; SWP_FRAMECHANGED forces the OS to recalculate the non-client area now that
-  ; WS_THICKFRAME has been added.
-  DllCall( "SetWindowPos", "ptr", g_gui.Hwnd, "ptr", 0,
-           "int", 0, "int", 0, "int", 0, "int", 0,
-           "uint", 0x0001 | 0x0002 | 0x0004 | 0x0020 )  ; SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED
+  AddWindowStyle( g_gui.Hwnd, WS_CLIPCHILDREN | WS_THICKFRAME, true )
 
   tabList := []
   tabContentWidth  := 0
@@ -94,9 +85,7 @@ ShowWindow()
   ; WS_CLIPSIBLINGS: prevents the tab control from painting over sibling windows
   ; (the utility buttons) that sit above it in z-order.  Set once here so we
   ; never need to fiddle with z-order during shrink/expand.
-  WS_CLIPSIBLINGS := 0x04000000
-  tabStyle := DllCall( "GetWindowLong", "Ptr", g_tabs.Hwnd, "Int", -16, "Int" )
-              DllCall( "SetWindowLong", "Ptr", g_tabs.Hwnd, "Int", -16, "Int", tabStyle | WS_CLIPSIBLINGS )
+  AddWindowStyle( g_tabs.Hwnd, WS_CLIPSIBLINGS, false )
   ; Start from the tab's client rect, then shrink to the display area.
   displayRect := Buffer( 16, 0 )
   DllCall( "GetClientRect", "Ptr", g_tabs.Hwnd, "Ptr", displayRect.Ptr )
@@ -649,7 +638,7 @@ AdjustControlPositions( includeFrame )
   ; Center the indicator controls vertically on the button
   btnCenterY := btnY + btnH / 2         ; 0 + (24/2) = 12
   clipY      := btnCenterY - clipH  / 2 - 3 ; 12 - (14/2) = 5 - 3 = 2 (there is an offset related to the font's character baseline on the statics)
-  stripY     := btnCenterY - stripH / 2 - 1 ; 12 - (16/2) = 4 - 1 = 3 (there is an offset related to the font's character baseline on the statics)
+  stripY     := btnCenterY - stripH / 2 - 2 ; 12 - (16/2) = 4 - 2 = 2 (there is an offset related to the font's character baseline on the statics)
 
   ; X positions: layout left-to-right with 2-pixel gaps
   xOffset    := includeFrame ? g_frmSize : 0
@@ -701,13 +690,7 @@ ToggleWindowSize( collapse := "" )
       SetToggleSizeBtnState( true )
 
       ; Remove WS_THICKFRAME to get the tool border back
-      static WS_THICKFRAME := 0x00040000
-      guiStyle := DllCall( "GetWindowLong", "ptr", g_gui.Hwnd, "int", -16, "int" )
-      DllCall( "SetWindowLong", "ptr", g_gui.Hwnd, "int", -16, "int",
-               guiStyle & ~WS_THICKFRAME )
-      DllCall( "SetWindowPos", "ptr", g_gui.Hwnd, "ptr", 0,
-               "int", 0, "int", 0, "int", 0, "int", 0,
-               "uint", 0x0001 | 0x0002 | 0x0004 | 0x0020 )
+      RemoveWindowStyle( g_gui.Hwnd, WS_THICKFRAME, true )
 
       ; Adjust control positions to remove frame offset when collapsed
       AdjustControlPositions( false )
@@ -717,7 +700,7 @@ ToggleWindowSize( collapse := "" )
       ; can correctly skip the relayout while collapsing.
       INI_SetCollapsed( true )
       savedPos := LoadWindowPos()
-      width    := 71
+      width    := 72
       height   := 24
       g_gui.Show( "w" width " h" height " NoActivate" savedPos )
     }
@@ -727,13 +710,7 @@ ToggleWindowSize( collapse := "" )
       SetToggleSizeBtnState( false )
 
       ; Re-add WS_THICKFRAME for the frame border
-      static WS_THICKFRAME := 0x00040000
-      guiStyle := DllCall( "GetWindowLong", "ptr", g_gui.Hwnd, "int", -16, "int" )
-      DllCall( "SetWindowLong", "ptr", g_gui.Hwnd, "int", -16, "int",
-               guiStyle | WS_THICKFRAME )
-      DllCall( "SetWindowPos", "ptr", g_gui.Hwnd, "ptr", 0,
-               "int", 0, "int", 0, "int", 0, "int", 0,
-               "uint", 0x0001 | 0x0002 | 0x0004 | 0x0020 )
+      AddWindowStyle( g_gui.Hwnd, WS_THICKFRAME, true )
 
       ; Restore control positions with frame offset when expanding
       AdjustControlPositions( true )

@@ -243,9 +243,7 @@ ApplyEmojiBitmapToButton( btn, char, pixelSize )
   g_emojiBitmaps.Push( hBitmap )   ; keep alive for the button's lifetime
 
   ; Switch the button to bitmap-display mode and assign the image.
-  GWL_STYLE := -16
-  style     := DllCall( "GetWindowLong", "Ptr", btn.Hwnd, "Int", GWL_STYLE, "Int" )
-  DllCall( "SetWindowLong", "Ptr", btn.Hwnd, "Int", GWL_STYLE, "Int", style | 0x80 )  ; BS_BITMAP
+  AddWindowStyle( btn.Hwnd, BS_BITMAP, false )
   btn.Text := ""
   SendMessage( 0x00F7, 0, hBitmap, btn.Hwnd )   ; BM_SETIMAGE, IMAGE_BITMAP = 0
 
