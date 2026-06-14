@@ -66,55 +66,13 @@ DoSendViaClipboard( rawText )
 ToggleClipboardSendMode()
 {
   global g_useClipSend
-  global g_tipMap
+  global g_hotkeyWnd
   g_useClipSend := !g_useClipSend
   state := g_useClipSend ? "ON" : "OFF"
-  SetShowClipBulletState( g_useClipSend )
+  g_hotkeyWnd.SetShowClipBulletState( g_useClipSend )
   INI_SetClipSendMode( g_useClipSend )
   ToolTip( "Clipboard send mode: " state )
   SetTimer( (*) => ToolTip(), -2000 )
-}
-
-SetToggleSizeBtnState( collapsed )
-{
-  global g_toggleSizeBtn
-  global g_tipMap
-
-  OutputDebug( "Setting toggle-size button state: " (collapsed ? "COLLAPSED" : "EXPANDED") )
-  if( !IsObject( g_toggleSizeBtn ) )
-  {
-    OutputDebug( "Toggle-size button not initialized yet." )
-    return
-  }
-
-  if( collapsed )
-  {
-    ; Window is collapsed: clicking will expand it.
-    g_toggleSizeBtn.Text := "▲"
-    g_tipMap[g_toggleSizeBtn.Hwnd] := "Expand window"
-  }
-  else
-  {
-    ; Window is expanded: clicking will collapse it.
-    g_toggleSizeBtn.Text := "▼"
-    g_tipMap[g_toggleSizeBtn.Hwnd] := "Shrink window"
-  }
-}
-
-SetShowClipBulletState( enabled )
-{
-  global g_clipIndicator
-  global g_tipMap
-
-  OutputDebug( "Setting clip bullet state: " (enabled ? "ON" : "OFF" ) )
-  if( !IsObject( g_clipIndicator ) )
-  {
-    OutputDebug( "Clip indicator control not initialized yet." )
-    return
-  }
-  g_clipIndicator.Text := enabled ? "●" : "○"
-  g_tipMap[g_clipIndicator.Hwnd]  := "Clipboard send mode: " (enabled ? "ON" : "OFF")
-  OutputDebug( "Updated clip bullet state: " (enabled ? "ON" : "OFF") )
 }
 
 ; Remove emoji codepoints from a string and tidy up the spaces left behind
@@ -134,45 +92,13 @@ StripEmojis( text )
 ToggleStripSendEmojis()
 {
   global g_stripSendEmojis
+  global g_hotkeyWnd
   g_stripSendEmojis := !g_stripSendEmojis
   state := g_stripSendEmojis ? "ON" : "OFF"
-  SetStripEmojisIndicatorState( g_stripSendEmojis )
+  g_hotkeyWnd.SetStripEmojisIndicatorState( g_stripSendEmojis )
   INI_SetStripCommentEmojis( g_stripSendEmojis )
   ToolTip( "Strip emojis from comments: " state )
   SetTimer( (*) => ToolTip(), -2000 )
-}
-
-SetStripEmojisIndicatorState( enabled )
-{
-  global g_stripEmojisIndicator
-  global g_tipMap
-
-  OutputDebug( "Setting strip-emojis indicator state: " (enabled ? "ON" : "OFF") )
-  if( !IsObject( g_stripEmojisIndicator ) )
-  {
-    OutputDebug( "Strip-emojis indicator control not initialized yet." )
-    return
-  }
-  g_stripEmojisIndicator.Text := enabled ? "☻" : "☺"
-  g_tipMap[g_stripEmojisIndicator.Hwnd] := "Strip emojis from comments: " (enabled ? "ON" : "OFF")
-}
-
-IsClipControl( hwnd )
-{
-  global g_clipIndicator
-  return IsObject( g_clipIndicator ) && (hwnd = g_clipIndicator.Hwnd)
-}
-
-IsStripEmojisControl( hwnd )
-{
-  global g_stripEmojisIndicator
-  return IsObject( g_stripEmojisIndicator ) && (hwnd = g_stripEmojisIndicator.Hwnd)
-}
-
-IsToggleSizeBtn( hwnd )
-{
-  global g_toggleSizeBtn
-  return IsObject( g_toggleSizeBtn ) && (hwnd = g_toggleSizeBtn.Hwnd)
 }
 
 GetSelectedTextThroughClipboard()
@@ -189,26 +115,6 @@ GetSelectedTextThroughClipboard()
   txt := A_Clipboard
   A_Clipboard := backup
   return txt
-}
-
-CreateButton( text, tip,
-              fontName, fontSize,
-              x, y, w, h,
-              func )
-{
-  global g_gui
-  global g_tipMap
-  global g_fontSize
-  global g_fontName
-
-  g_gui.SetFont( fontSize, fontName )
-  btn := g_gui.AddButton( "x" x " y" y " w" w " h" h, text )
-  DisableButtonWrap( btn )
-  btn.OnEvent( "Click", func )
-  g_tipMap[btn.Hwnd] := tip
-  g_gui.SetFont( g_fontSize " norm", g_fontName )
-
-  return btn
 }
 
 ; Remove BS_MULTILINE from a button so long text never wraps onto a second
@@ -244,20 +150,6 @@ EnableButtonDoubleClick( btn )
     return
   }
   AddWindowStyle( hwnd, BS_NOTIFY, false )
-}
-
-CreateBtnWithStyle( text, tip,
-                    fontName, fontSize,
-                    styleMask, styleBits,
-                    x, y, w, h,
-                    func )
-{
-  btn := CreateButton( text, tip,
-                       fontName, fontSize,
-                       x, y, w, h,
-                       func )
-  style := DllCall( "GetWindowLong", "Ptr", btn.Hwnd, "Int", -16, "Int" )
-           DllCall( "SetWindowLong", "Ptr", btn.Hwnd, "Int", -16, "Int", (style & ~styleMask) | styleBits )
 }
 
 ; Measure the rendered width (in device pixels) of `text` when drawn into `hdc`

@@ -5,6 +5,7 @@
 - No space before opening paren; single space inside: if( x > 0 ), Func( a, b ).
 - Match existing project style.
 - Use descriptive variable and function names.
+- Class member variables should have the 'm_' prefix.
 
 Notes:
 - Workspace copy of agent memory `/memories/coding_standards.md`.

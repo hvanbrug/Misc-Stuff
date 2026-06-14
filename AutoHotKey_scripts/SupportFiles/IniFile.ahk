@@ -139,10 +139,10 @@ INI_SetWndFavY( y )
 INI_LastTab()
 {
   global g_iniPath
-  global g_tabs
+  global g_hotkeyWnd
 
   TCM_GETITEMCOUNT := 0x1304
-  hwnd  := g_tabs.Hwnd
+  hwnd  := g_hotkeyWnd.m_tabs.Hwnd
   count := DllCall("SendMessageW", "Ptr", hwnd, "UInt", TCM_GETITEMCOUNT, "Ptr", 0, "Ptr", 0, "Int")
 
   lastTabIdx := IniRead( g_iniPath, "Window", "LastTab", 1 )

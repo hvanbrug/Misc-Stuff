@@ -1,15 +1,17 @@
 
 RedrawScrollbar()
 {
-  global g_tabScrollHwnd
-  if( !g_tabScrollHwnd )
+  global g_hotkeyWnd
+
+  scrollHwnd := g_hotkeyWnd.m_tabScrollHwnd
+  if( !scrollHwnd )
   {
     return
   }
 
   ; RDW_INVALIDATE | RDW_FRAME | RDW_ERASE | RDW_UPDATENOW = 0x0109
   DllCall( "RedrawWindow",
-           "Ptr",  g_tabScrollHwnd,
+           "Ptr",  scrollHwnd,
            "Ptr",  0,
            "Ptr",  0,
            "UInt", 0x0109 )
@@ -18,7 +20,7 @@ RedrawScrollbar()
 TabChanged( ctrl, * )
 {
   global g_uiTabs
-  global g_tabScrollHwnd
+  global g_hotkeyWnd
 
   tabIndex := ctrl.Value
   INI_SetLastTab( tabIndex )
@@ -46,7 +48,7 @@ TabChanged( ctrl, * )
   ; Re-raise scrollbar above tab content that was just repainted.
   ; Use a short deferred timer because the tab control repaints asynchronously
   ; after the Change event, which can bury the scrollbar again.
-  if( g_tabScrollHwnd )
+  if( g_hotkeyWnd.m_tabScrollHwnd )
   {
     SetTimer( DeferredScrollbarRaise, -30 )
   }
@@ -54,14 +56,16 @@ TabChanged( ctrl, * )
 
 DeferredScrollbarRaise()
 {
-  global g_tabScrollHwnd
-  if( !g_tabScrollHwnd )
+  global g_hotkeyWnd
+
+  scrollHwnd := g_hotkeyWnd.m_tabScrollHwnd
+  if( !scrollHwnd )
   {
     return
   }
 
   SWP_NOMOVE := 0x0002, SWP_NOSIZE := 0x0001, SWP_NOACTIVATE := 0x0010
-  DllCall( "SetWindowPos", "Ptr", g_tabScrollHwnd, "Ptr", 0,
+  DllCall( "SetWindowPos", "Ptr", scrollHwnd, "Ptr", 0,
            "Int", 0, "Int", 0, "Int", 0, "Int", 0,
            "UInt", SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE )
   RedrawScrollbar()
@@ -71,35 +75,38 @@ DeferredScrollbarRaise()
 ; Used during wheel scrolling to avoid flash loops.
 ScrollbarRaiseOnly()
 {
-  global g_tabScrollHwnd
-  if( !g_tabScrollHwnd )
+  global g_hotkeyWnd
+
+  scrollHwnd := g_hotkeyWnd.m_tabScrollHwnd
+  if( !scrollHwnd )
   {
     return
   }
 
   SWP_NOMOVE := 0x0002, SWP_NOSIZE := 0x0001, SWP_NOACTIVATE := 0x0010, SWP_NOREDRAW := 0x0008
-  DllCall( "SetWindowPos", "Ptr", g_tabScrollHwnd, "Ptr", 0,
+  DllCall( "SetWindowPos", "Ptr", scrollHwnd, "Ptr", 0,
            "Int", 0, "Int", 0, "Int", 0, "Int", 0,
            "UInt", SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW )
 }
 
 VScroll( wParam, lParam, msg, hwnd )
 {
-  global g_tabs
   global g_uiTabs
-  global g_tabScrollHwnd
+  global g_hotkeyWnd
 
-  if( !g_tabScrollHwnd || (lParam != g_tabScrollHwnd) )
+  scrollHwnd := g_hotkeyWnd.m_tabScrollHwnd
+  if( !scrollHwnd || (lParam != scrollHwnd) )
   {
     return
   }
 
-  if( !IsSet( g_tabs ) || !IsObject( g_tabs ) )
+  tabCtrl := g_hotkeyWnd.m_tabs
+  if( !IsObject( tabCtrl ) )
   {
     return
   }
 
-  tabIndex := g_tabs.Value
+  tabIndex := tabCtrl.Value
   if( (tabIndex < 1) ||
       (tabIndex > g_uiTabs.Length) )
   {
@@ -144,7 +151,7 @@ VScroll( wParam, lParam, msg, hwnd )
     si := Buffer( 28, 0 )
     NumPut( "UInt", 28,           si, 0 )
     NumPut( "UInt", SIF_TRACKPOS, si, 4 )
-    DllCall( "GetScrollInfo", "Ptr", g_tabScrollHwnd, "Int", 2, "Ptr", si.Ptr )  ; SB_CTL = 2
+    DllCall( "GetScrollInfo", "Ptr", scrollHwnd, "Int", 2, "Ptr", si.Ptr )  ; SB_CTL = 2
     trackPos := NumGet( si, 24, "Int" )
     tab.SetScrollY( trackPos )
   }
@@ -168,11 +175,11 @@ VScroll( wParam, lParam, msg, hwnd )
 
 UpdateScrollInfo()
 {
-  global g_tabs
   global g_uiTabs
-  global g_tabScrollHwnd
+  global g_hotkeyWnd
 
-  if( !g_tabScrollHwnd )
+  scrollHwnd := g_hotkeyWnd.m_tabScrollHwnd
+  if( !scrollHwnd )
   {
     return
   }
@@ -184,9 +191,10 @@ UpdateScrollInfo()
   scrollY   := 0
   hasScroll := false
 
-  if( IsSet( g_tabs ) && IsObject( g_tabs ) && IsSet( g_uiTabs ) )
+  tabCtrl := g_hotkeyWnd.m_tabs
+  if( IsObject( tabCtrl ) && IsSet( g_uiTabs ) )
   {
-    tabIndex := g_tabs.Value
+    tabIndex := tabCtrl.Value
     if( (tabIndex >= 1) && (tabIndex <= g_uiTabs.Length) )
     {
       tab       := g_uiTabs[tabIndex]
@@ -218,7 +226,7 @@ UpdateScrollInfo()
   }
 
   ; SB_CTL = 2 (required for standalone scrollbar controls)
-  DllCall( "SetScrollInfo", "Ptr", g_tabScrollHwnd, "Int", 2, "Ptr", si.Ptr, "Int", true )
+  DllCall( "SetScrollInfo", "Ptr", scrollHwnd, "Int", 2, "Ptr", si.Ptr, "Int", true )
   RedrawScrollbar()
 }
 
@@ -299,7 +307,7 @@ RemoveWheelHook()
 
 LowLevelMouseProc( nCode, wParam, lParam )
 {
-  global g_guiHwndRaw
+  global g_hotkeyWnd
 
   if( nCode < 0 )
   {
@@ -307,7 +315,8 @@ LowLevelMouseProc( nCode, wParam, lParam )
   }
 
   WM_MOUSEWHEEL := 0x020A
-  if( !g_guiHwndRaw || (wParam != WM_MOUSEWHEEL) )
+  guiHwnd      := g_hotkeyWnd.m_guiHwndRaw
+  if( !guiHwnd || (wParam != WM_MOUSEWHEEL) )
   {
     return DllCall( "CallNextHookEx", "Ptr", 0, "Int", nCode, "UPtr", wParam, "UPtr", lParam, "Ptr" )
   }
@@ -319,7 +328,7 @@ LowLevelMouseProc( nCode, wParam, lParam )
   ; Treat any wheel event inside the GUI window rect as belonging to our UI.
   ; This avoids WindowFromPoint/root resolution edge cases on child controls.
   rect := Buffer( 16, 0 )
-  if( !DllCall( "GetWindowRect", "Ptr", g_guiHwndRaw, "Ptr", rect, "Int" ) )
+  if( !DllCall( "GetWindowRect", "Ptr", guiHwnd, "Ptr", rect, "Int" ) )
   {
     return DllCall( "CallNextHookEx", "Ptr", 0, "Int", nCode, "UPtr", wParam, "UPtr", lParam, "Ptr" )
   }
@@ -351,9 +360,8 @@ LowLevelMouseProc( nCode, wParam, lParam )
 
 DoWheel( direction )
 {
-  global g_tabs
   global g_uiTabs
-  global g_tabScrollHwnd
+  global g_hotkeyWnd
 
   ; Acceleration config
   SCROLL_PIXELS_BASE := 4    ; pixels per notch at rest
@@ -365,12 +373,13 @@ DoWheel( direction )
   static lastEventMs := 0
   static accelPixels := 0
 
-  if( !IsSet( g_tabs ) || !IsObject( g_tabs ) )
+  tabCtrl := g_hotkeyWnd.m_tabs
+  if( !IsObject( tabCtrl ) )
   {
     return
   }
 
-  tabIndex := g_tabs.Value
+  tabIndex := tabCtrl.Value
   if( (tabIndex < 1) ||
       (tabIndex > g_uiTabs.Length) )
   {
@@ -395,7 +404,7 @@ DoWheel( direction )
   if( tab.ScrollByPixels( scrollBy ) )
   {
     UpdateScrollInfo()
-    if( g_tabScrollHwnd )
+    if( g_hotkeyWnd.m_tabScrollHwnd )
     {
       ; Re-raise scrollbar z-order without forced redraw to avoid flash loops.
       ScrollbarRaiseOnly()

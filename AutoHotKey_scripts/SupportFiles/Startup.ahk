@@ -27,11 +27,13 @@ Startup()
 
 FillTrayMenu( menu )
 {
+  global g_hotkeyWnd
+
   menu.Add( "Open UI",  ShowUI )
   menu.Add( "Close UI", HideUI )
   menu.Add()
-  menu.Add( "Set favourite spot",     (*) => SetFavouriteSpot()    )
-  menu.Add( "Move to favourite spot", (*) => MoveToFavouriteSpot() )
+  menu.Add( "Set favourite spot",     (*) => g_hotkeyWnd.SetFavouriteSpot()    )
+  menu.Add( "Move to favourite spot", (*) => g_hotkeyWnd.MoveToFavouriteSpot() )
   menu.Add()
   menu.Add( "Test Function", (*) => TestFunction() )
   menu.Add()
@@ -43,9 +45,9 @@ FillTrayMenu( menu )
 ToggleUI( * )
 {
   OutputDebug( "Toggling UI." )
-  global g_gui
-  OutputDebug( "g_gui is " (IsObject( g_gui ) ? "an object" : "not an object") "." )
-  if( !IsObject( g_gui ) || !IsWindowVisible( g_gui.Hwnd ) )
+  global g_hotkeyWnd
+  OutputDebug( "Window is " (g_hotkeyWnd.IsCreated() ? "created" : "not created") "." )
+  if( !g_hotkeyWnd.IsCreated() || !IsWindowVisible( g_hotkeyWnd.Hwnd ) )
   {
     OutputDebug( "Showing UI." )
     ShowUI()
@@ -60,18 +62,16 @@ ToggleUI( * )
 ShowUI( * )
 {
   OutputDebug( "Showing UI." )
-  global g_gui
-  if( IsObject( g_gui ) )
+  global g_hotkeyWnd
+  if( g_hotkeyWnd.IsCreated() )
   {
     OutputDebug( "UI object already exists. Restoring and activating window." )
-    g_gui.Restore()
-    ;g_gui.Show()
-    WinActivate( "ahk_id " g_gui.Hwnd )
+    g_hotkeyWnd.Restore()
   }
   else
   {
     OutputDebug( "UI object does not exist. Creating new window." )
-    ShowWindow() ; Start on the emojis tab
+    g_hotkeyWnd.Show() ; Start on the emojis tab
   }
   OutputDebug( "UI is now visible." )
   INI_SetWndOpen( true )
@@ -81,9 +81,8 @@ ShowUI( * )
 HideUI( * )
 {
   OutputDebug( "Hiding UI." )
-  global g_gui
-  g_gui.Hide()
+  global g_hotkeyWnd
+  g_hotkeyWnd.Hide()
   INI_SetWndOpen( false )
   OutputDebug( "Updated INI file to indicate window is closed." )
 }
-
