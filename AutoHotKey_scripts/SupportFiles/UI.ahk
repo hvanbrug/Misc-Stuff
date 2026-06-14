@@ -172,6 +172,10 @@ class HotkeyWindow
     ; mode this and every other Theme call below is a no-op.
     Theme.EnableDarkMode( this.m_gui )
 
+    ; Thin border around the (frameless) window — light on dark, dark on light.
+    ; Applies in both modes.
+    Theme.ApplyWindowBorder( this.m_gui )
+
     tabList := []
     tabContentWidth  := 0
     tabContentHeight := 0

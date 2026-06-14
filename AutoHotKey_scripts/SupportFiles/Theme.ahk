@@ -16,6 +16,7 @@ class Theme
   static m_darkColorCb := 0
   static m_darkTabCb   := 0
   static m_ownerBtnCb  := 0
+  static m_borderCb    := 0
 
   ; TEMP (diagnostics): counts how many times the tab control's NM_CUSTOMDRAW
   ; prepaint actually reached our handler. Read by ThemeDiagnostics().
@@ -31,6 +32,12 @@ class Theme
   static BTN_BG         := 0x3A3A3A
   static BTN_BG_PRESSED := 0x4A4A4A
   static BTN_BORDER     := 0x555555
+
+  ; Thin border drawn around the (frameless) main window: light on the dark
+  ; theme, dark on the light theme.
+  static BORDER_THICKNESS  := 2
+  static DARK_MODE_BORDER  := 0xAAAAAA   ; light grey
+  static LIGHT_MODE_BORDER := 0x555555   ; dark grey
 
   ; Cached GDI brushes keyed by colour, and per-button owner-draw info keyed by
   ; hwnd. Both live for the process lifetime.
@@ -205,6 +212,34 @@ class Theme
     Theme.ApplyDarkFrame( gui.Hwnd )
 
     gui.BackColor := Theme.BackColorHex()
+  }
+
+  ; The window-border colour for the current theme: light on dark, dark on light.
+  static BorderColor()
+  {
+    return Theme.IsDark() ? Theme.DARK_MODE_BORDER : Theme.LIGHT_MODE_BORDER
+  }
+
+  static BorderCallback()
+  {
+    if( !Theme.m_borderCb )
+    {
+      Theme.m_borderCb := CallbackCreate( _GuiBorderProc, , 6 )
+    }
+    return Theme.m_borderCb
+  }
+
+  ; Draw a thin border around the (frameless) main window by subclassing it and
+  ; painting a frame after the GUI's own paint. Works in both light and dark
+  ; mode (the colour comes from BorderColor).
+  static ApplyWindowBorder( gui )
+  {
+    if( !IsObject( gui ) )
+    {
+      return
+    }
+    DllCall( "comctl32\SetWindowSubclass", "Ptr", gui.Hwnd, "Ptr", Theme.BorderCallback(), "UPtr", 6, "UPtr", 0 )
+    DllCall( "InvalidateRect", "Ptr", gui.Hwnd, "Ptr", 0, "Int", true )
   }
 
   ; Apply the dark control theme so a standard control (button, tab, scrollbar)
@@ -468,6 +503,45 @@ _DarkStaticColor( hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData )
                   "Ptr",  wParam,
                   "Ptr",  lParam,
                   "Ptr" )
+}
+
+; Subclass procedure for the main GUI: after the window paints its content, draw
+; a thin border frame at the client edge (the window is frameless). The border
+; colour follows the theme.
+_GuiBorderProc( hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData )
+{
+  static WM_PAINT := 0x000F
+
+  result := DllCall( "comctl32\DefSubclassProc",
+                     "Ptr",  hWnd,
+                     "UInt", uMsg,
+                     "Ptr",  wParam,
+                     "Ptr",  lParam,
+                     "Ptr" )
+
+  if( uMsg = WM_PAINT )
+  {
+    hdc := DllCall( "GetDC", "Ptr", hWnd, "Ptr" )
+    if( hdc )
+    {
+      rc := Buffer( 16, 0 )
+      DllCall( "GetClientRect", "Ptr", hWnd, "Ptr", rc )
+      brush := Theme.Brush( Theme.BorderColor() )
+
+      ; Draw THICKNESS concentric 1px frames for a THICKNESS-pixel border.
+      loop Theme.BORDER_THICKNESS
+      {
+        DllCall( "user32\FrameRect", "Ptr", hdc, "Ptr", rc, "Ptr", brush )
+        NumPut( "Int", NumGet( rc, 0,  "Int" ), rc,  0 )
+        NumPut( "Int", NumGet( rc, 4,  "Int" ), rc,  4 )
+        NumPut( "Int", NumGet( rc, 8,  "Int" ), rc,  8 )
+        NumPut( "Int", NumGet( rc, 12, "Int" ), rc, 12 )
+      }
+
+      DllCall( "ReleaseDC", "Ptr", hWnd, "Ptr", hdc )
+    }
+  }
+  return result
 }
 
 ; Subclass procedure for owner-drawn buttons: swallow WM_ERASEBKGND (we paint
