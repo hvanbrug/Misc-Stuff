@@ -244,9 +244,8 @@ class TabPage
                                      "Ptr",  0,
                                      "Ptr" )
 
-    ; In dark mode, darken the clip panel so its child content panel (and thus
-    ; the gaps between the symbol buttons) paints on the dark background instead
-    ; of the default light grey.
+    ; Darken the clip panel so its child content panel (and thus the gaps between
+    ; the symbol buttons) paints on the dark background instead of light grey.
     Theme.DarkenStaticBackground( this.m_clipPanelHwnd )
 
     ; Create a content panel (full content height) inside the clip panel.

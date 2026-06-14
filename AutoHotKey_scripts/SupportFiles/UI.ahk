@@ -36,6 +36,13 @@ class HotkeyWindow
   m_dragOffsetX  := 0
   m_dragOffsetY  := 0
 
+  ; ── Manual vertical-resize state ──
+  m_resizing         := false
+  m_resizeEdge       := ""   ; "top" or "bottom"
+  m_resizeGrabY      := 0    ; cursor screen Y when the drag started
+  m_resizeStartTop   := 0    ; window top (screen px) at drag start
+  m_resizeStartHeight := 0   ; window height (screen px) at drag start
+
   ; ── Window position persistence ──
   m_wndX := 0
   m_wndY := 0
@@ -59,6 +66,9 @@ class HotkeyWindow
   m_onDrawItem              := ""
   m_onNcPaint               := ""
   m_onNcActivate            := ""
+  m_onSetCursor             := ""
+  m_onMouseMove             := ""
+  m_onLButtonUp             := ""
   m_hoverCheckTimer         := ""
   m_trackActiveWindowTimer  := ""
   m_saveWindowPosTimer      := ""
@@ -79,6 +89,9 @@ class HotkeyWindow
     this.m_onDrawItem             := ObjBindMethod( this, "OnDrawItem"          )
     this.m_onNcPaint              := ObjBindMethod( this, "OnNcPaint"           )
     this.m_onNcActivate           := ObjBindMethod( this, "OnNcActivate"        )
+    this.m_onSetCursor            := ObjBindMethod( this, "OnSetCursor"         )
+    this.m_onMouseMove            := ObjBindMethod( this, "OnMouseMove"         )
+    this.m_onLButtonUp            := ObjBindMethod( this, "OnLButtonUp"         )
     this.m_hoverCheckTimer        := ObjBindMethod( this, "HoverCheck"          )
     this.m_trackActiveWindowTimer := ObjBindMethod( this, "TrackActiveWindow"   )
     this.m_saveWindowPosTimer     := ObjBindMethod( this, "SaveWindowPos"       )
@@ -147,11 +160,13 @@ class HotkeyWindow
     this.m_frmSize := 9
 
     ; Add WS_CLIPCHILDREN so the GUI doesn't paint over child button areas during
-    ; scroll, and WS_THICKFRAME so the OS will actually let us resize the window
-    ; via WM_NCHITTEST. With -Caption, WS_THICKFRAME would normally add a small
-    ; visible sizing border; we suppress that frame entirely in OnNcCalcSize so
-    ; the client area stays flush with the window edges.
-    AddWindowStyle( this.m_gui.Hwnd, WS_CLIPCHILDREN | WS_THICKFRAME, true )
+    ; scroll. We deliberately do NOT use WS_THICKFRAME for resizing: on Win11 it
+    ; summons a DWM-composited frame that renders white when the window is
+    ; inactive and can't be recoloured for a captionless tool window. Instead the
+    ; vertical resize is done manually (see OnSetCursor / BeginResize / the
+    ; WM_MOUSEMOVE handler). OnNcCalcSize still flattens the client to the window
+    ; edges.
+    AddWindowStyle( this.m_gui.Hwnd, WS_CLIPCHILDREN, true )
 
     ; Follow the Windows light/dark setting (decided once, at startup). In light
     ; mode this and every other Theme call below is a no-op.
@@ -195,9 +210,12 @@ class HotkeyWindow
     this.m_tabs := this.m_gui.AddTab3( "x" tabLeft " y" tabTop " w" tabWth " h" tabHgt, tabList )
 
     ; WS_CLIPSIBLINGS: prevents the tab control from painting over sibling windows
-    ; (the utility buttons) that sit above it in z-order.  Set once here so we
-    ; never need to fiddle with z-order during shrink/expand.
-    AddWindowStyle( this.m_tabs.Hwnd, WS_CLIPSIBLINGS, false )
+    ; (the utility buttons) that sit above it in z-order. WS_CLIPCHILDREN: keeps
+    ; the tab's own painting (including our dark full-repaint) out of the child
+    ; clip-panel region, so the buttons there aren't briefly covered and don't
+    ; flash during a resize. Set once here so we never fiddle with z-order during
+    ; shrink/expand.
+    AddWindowStyle( this.m_tabs.Hwnd, WS_CLIPSIBLINGS | WS_CLIPCHILDREN, false )
 
     ; Fully dark-paint the tab control (the standard control has no dark style,
     ; so its labels and frame stay light otherwise). This subclass also darkens
@@ -278,6 +296,9 @@ class HotkeyWindow
     OnMessage( 0x002B, this.m_onDrawItem          )  ; WM_DRAWITEM      (dark owner-drawn buttons)
     OnMessage( 0x0085, this.m_onNcPaint           )  ; WM_NCPAINT       (suppress white frame in dark)
     OnMessage( 0x0086, this.m_onNcActivate        )  ; WM_NCACTIVATE    (keep frame dark when inactive)
+    OnMessage( 0x0020, this.m_onSetCursor         )  ; WM_SETCURSOR     (resize cursor at top/bottom edge)
+    OnMessage( 0x0200, this.m_onMouseMove         )  ; WM_MOUSEMOVE     (manual resize drag)
+    OnMessage( 0x0202, this.m_onLButtonUp         )  ; WM_LBUTTONUP     (end manual resize)
 
     for tabIndex, tab in g_uiTabs
     {
@@ -442,6 +463,9 @@ class HotkeyWindow
     OnMessage( 0x002B, this.m_onDrawItem,     0 )
     OnMessage( 0x0085, this.m_onNcPaint,      0 )
     OnMessage( 0x0086, this.m_onNcActivate,   0 )
+    OnMessage( 0x0020, this.m_onSetCursor,    0 )
+    OnMessage( 0x0200, this.m_onMouseMove,    0 )
+    OnMessage( 0x0202, this.m_onLButtonUp,    0 )
     RemoveWheelHook()
 
     this.m_guiHwndRaw     := 0
@@ -486,10 +510,7 @@ class HotkeyWindow
         this.m_tabs.Opt( "Hidden" )
         this.SetToggleSizeBtnState( true )
 
-        ; Remove WS_THICKFRAME to get the tool border back
-        RemoveWindowStyle( this.m_gui.Hwnd, WS_THICKFRAME, true )
-
-        ; Adjust control positions to remove frame offset when collapsed
+        ; Pull the corner controls tight against the edge for the collapsed strip.
         this.AdjustControlPositions( false )
 
         ; Update INI before Show() so the WM_SIZE handler sees the new state and
@@ -505,10 +526,7 @@ class HotkeyWindow
         this.m_tabs.Opt( "-Hidden" )
         this.SetToggleSizeBtnState( false )
 
-        ; Re-add WS_THICKFRAME for the frame border
-        AddWindowStyle( this.m_gui.Hwnd, WS_THICKFRAME, true )
-
-        ; Restore control positions with frame offset when expanding
+        ; Restore the padded corner-control positions for the expanded window.
         this.AdjustControlPositions( true )
 
         ; Hiding the tab control also hides its child clip panels.
@@ -726,12 +744,12 @@ class HotkeyWindow
                       x, y, w, h,
                       func )
   {
-    btn   := this.CreateButton( text, tip,
-                                fontName, fontSize,
-                                x, y, w, h,
-                                func )
-    style := DllCall( "GetWindowLong", "Ptr", btn.Hwnd, "Int", GWL_STYLE, "Int" )
-    DllCall( "SetWindowLong", "Ptr", btn.Hwnd, "Int", GWL_STYLE, "Int", (style & ~styleMask) | styleBits )
+    btn := this.CreateButton( text, tip,
+                              fontName, fontSize,
+                              x, y, w, h,
+                              func )
+    RemoveWindowStyle( btn.Hwnd, styleMask, false )
+    AddWindowStyle(    btn.Hwnd, styleBits, false )
 
     return btn
   }
@@ -845,52 +863,17 @@ class HotkeyWindow
     return 0
   }
 
-  ; WM_NCHITTEST handler. Default hit-testing on a window with WS_THICKFRAME
-  ; returns HTTOPLEFT / HTLEFT / HTRIGHT / etc. near the edges, which would
-  ; show horizontal/diagonal resize cursors. We override every hit-test for
-  ; this window: only the top and bottom edge zones return resize codes; all
-  ; other positions are reported as HTCLIENT, which keeps the cursor as the
-  ; normal arrow and prevents the OS from initiating a horizontal resize.
+  ; WM_NCHITTEST handler. Report the whole window as client so a click on the
+  ; top/bottom resize zone arrives as WM_LBUTTONDOWN (handled by OnLButtonDown ->
+  ; BeginResize) rather than a non-client click. Without WS_THICKFRAME the OS
+  ; won't size the window itself; we drive the resize manually.
   OnNcHitTest( wParam, lParam, msg, hwnd )
   {
-    static RESIZE_ZONE := 6
-    static HTCLIENT    := 1
-    static HTTOP       := 12
-    static HTBOTTOM    := 15
+    static HTCLIENT := 1
 
     if( !IsObject( this.m_gui ) || hwnd != this.m_gui.Hwnd )
     {
       return
-    }
-    if( INI_IsCollapsed() )
-    {
-      return HTCLIENT
-    }
-
-    ; lParam packs cursor screen coords as two signed 16-bit ints.
-    cx := lParam & 0xFFFF
-    if( cx & 0x8000 )
-    {
-      cx -= 0x10000
-    }
-    cy := (lParam >> 16) & 0xFFFF
-    if( cy & 0x8000 )
-    {
-      cy -= 0x10000
-    }
-
-    rect := Buffer( 16, 0 )
-    DllCall( "GetWindowRect", "Ptr", hwnd, "Ptr", rect )
-    top    := NumGet( rect, 4,  "Int" )
-    bottom := NumGet( rect, 12, "Int" )
-
-    if( cy - top < RESIZE_ZONE )
-    {
-      return HTTOP
-    }
-    if( bottom - cy < RESIZE_ZONE )
-    {
-      return HTBOTTOM
     }
     return HTCLIENT
   }
@@ -1047,10 +1030,19 @@ class HotkeyWindow
 
   OnLButtonDown( wParam, lParam, msg, hwnd )
   {
-    ; Pressing the bare window background starts a drag immediately — there is
-    ; no click action to disambiguate from.
     if( hwnd = this.m_gui.Hwnd )
     {
+      ; A press in the top/bottom edge zone starts a vertical resize instead of
+      ; a move (this replaces the old WS_THICKFRAME OS resize).
+      edge := this.ResizeEdgeAtCursor()
+      if( edge != "" )
+      {
+        this.BeginResize( edge )
+        return 0
+      }
+
+      ; Otherwise pressing the bare window background starts a move — there is no
+      ; click action to disambiguate from.
       this.BeginWindowDrag()
       return
     }
@@ -1121,6 +1113,174 @@ class HotkeyWindow
     }
     this.BeginWindowDrag()
     return true
+  }
+
+  ; ── Manual vertical resize ───────────────────────────────────────
+
+  ; Return "top" or "bottom" if the cursor is within the resize zone of the
+  ; window's top or bottom edge, otherwise "". Disabled while collapsed.
+  ResizeEdgeAtCursor()
+  {
+    static RESIZE_ZONE := 6
+
+    if( !IsObject( this.m_gui ) || INI_IsCollapsed() )
+    {
+      return ""
+    }
+
+    pt := Buffer( 8 )
+    DllCall( "GetCursorPos", "Ptr", pt )
+    cx := NumGet( pt, 0, "Int" )
+    cy := NumGet( pt, 4, "Int" )
+
+    rect := Buffer( 16, 0 )
+    DllCall( "GetWindowRect", "Ptr", this.m_gui.Hwnd, "Ptr", rect )
+    left   := NumGet( rect, 0,  "Int" )
+    top    := NumGet( rect, 4,  "Int" )
+    right  := NumGet( rect, 8,  "Int" )
+    bottom := NumGet( rect, 12, "Int" )
+
+    if( cx < left || cx >= right )
+    {
+      return ""
+    }
+    if( cy >= top && cy - top < RESIZE_ZONE )
+    {
+      return "top"
+    }
+    if( cy < bottom && bottom - cy <= RESIZE_ZONE )
+    {
+      return "bottom"
+    }
+    return ""
+  }
+
+  ; Begin a manual vertical resize from the given edge. Captures the mouse so we
+  ; receive the drag (WM_MOUSEMOVE) and release (WM_LBUTTONUP) even outside the
+  ; window. The actual sizing happens in OnMouseMove.
+  BeginResize( edge )
+  {
+    pt := Buffer( 8 )
+    DllCall( "GetCursorPos", "Ptr", pt )
+    rect := Buffer( 16, 0 )
+    DllCall( "GetWindowRect", "Ptr", this.m_gui.Hwnd, "Ptr", rect )
+
+    this.m_resizing          := true
+    this.m_resizeEdge        := edge
+    this.m_resizeGrabY       := NumGet( pt, 4, "Int" )
+    this.m_resizeStartTop    := NumGet( rect, 4, "Int" )
+    this.m_resizeStartHeight := NumGet( rect, 12, "Int" ) - NumGet( rect, 4, "Int" )
+
+    DllCall( "SetCapture", "Ptr", this.m_gui.Hwnd )
+  }
+
+  ; WM_SETCURSOR handler. Show the N–S resize cursor while the pointer is over a
+  ; top/bottom edge zone (the bare GUI margin there; child controls handle their
+  ; own cursor). Returning TRUE tells the OS we set the cursor.
+  OnSetCursor( wParam, lParam, msg, hwnd )
+  {
+    static IDC_SIZENS := 32645
+
+    if( !IsObject( this.m_gui ) || hwnd != this.m_gui.Hwnd )
+    {
+      return
+    }
+    if( this.m_resizing || this.ResizeEdgeAtCursor() != "" )
+    {
+      DllCall( "SetCursor", "Ptr", DllCall( "LoadCursor", "Ptr", 0, "Ptr", IDC_SIZENS, "Ptr" ) )
+      return 1
+    }
+  }
+
+  ; WM_MOUSEMOVE handler. While a manual resize is in progress, size the window
+  ; from the cursor delta (top edge moves the top and keeps the bottom fixed;
+  ; bottom edge keeps the top fixed). Height is clamped; SetWindowPos drives the
+  ; WM_SIZE relayout. Does nothing when not resizing.
+  OnMouseMove( wParam, lParam, msg, hwnd )
+  {
+    static MIN_HEIGHT := 140
+    static IDC_SIZENS := 32645
+    static SWP_NOZORDER   := 0x0004
+    static SWP_NOACTIVATE := 0x0010
+
+    if( !this.m_resizing )
+    {
+      return
+    }
+
+    pt := Buffer( 8 )
+    DllCall( "GetCursorPos", "Ptr", pt )
+    cy := NumGet( pt, 4, "Int" )
+    dy := cy - this.m_resizeGrabY
+
+    maxHeight := A_ScreenHeight
+
+    rect := Buffer( 16, 0 )
+    DllCall( "GetWindowRect", "Ptr", this.m_gui.Hwnd, "Ptr", rect )
+    x := NumGet( rect, 0, "Int" )
+    w := NumGet( rect, 8, "Int" ) - x
+
+    if( this.m_resizeEdge = "bottom" )
+    {
+      newH := this.m_resizeStartHeight + dy
+      newH := Min( Max( newH, MIN_HEIGHT ), maxHeight )
+      newY := this.m_resizeStartTop
+    }
+    else
+    {
+      ; Top edge: keep the bottom fixed, move the top.
+      bottomFixed := this.m_resizeStartTop + this.m_resizeStartHeight
+      newH := this.m_resizeStartHeight - dy
+      newH := Min( Max( newH, MIN_HEIGHT ), maxHeight )
+      newY := bottomFixed - newH
+    }
+
+    DllCall( "SetCursor", "Ptr", DllCall( "LoadCursor", "Ptr", 0, "Ptr", IDC_SIZENS, "Ptr" ) )
+    DllCall( "SetWindowPos", "Ptr", this.m_gui.Hwnd, "Ptr", 0,
+             "Int", x, "Int", newY, "Int", w, "Int", newH,
+             "UInt", SWP_NOZORDER | SWP_NOACTIVATE )
+
+    ; The SetWindowPos above relaid the content out (via WM_SIZE). Force the
+    ; visible owner-drawn buttons to repaint right now so a fast drag doesn't
+    ; leave them showing their unpainted white background until it stops.
+    this.ForceActiveButtonsRepaint()
+  }
+
+  ; Synchronously repaint the active tab's clip panel and all its children (no
+  ; erase, to avoid a white flash) so the dark owner-drawn buttons keep up with
+  ; a fast manual resize. Dark mode only.
+  ForceActiveButtonsRepaint()
+  {
+    global g_uiTabs
+
+    if( !Theme.IsDark() || !IsObject( g_uiTabs ) || !IsObject( this.m_tabs ) )
+    {
+      return
+    }
+    tabIdx := this.m_tabs.Value
+    if( tabIdx < 1 || tabIdx > g_uiTabs.Length )
+    {
+      return
+    }
+    clipHwnd := g_uiTabs[tabIdx].m_clipPanelHwnd
+    if( clipHwnd )
+    {
+      ; RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN (no RDW_ERASE).
+      DllCall( "RedrawWindow", "Ptr", clipHwnd, "Ptr", 0, "Ptr", 0, "UInt", 0x181 )
+    }
+  }
+
+  ; WM_LBUTTONUP handler. End a manual resize: release the capture and persist
+  ; the new height (debounced). Inert when not resizing.
+  OnLButtonUp( wParam, lParam, msg, hwnd )
+  {
+    if( !this.m_resizing )
+    {
+      return
+    }
+    this.m_resizing := false
+    DllCall( "ReleaseCapture" )
+    SetTimer( this.m_saveWindowHeightTimer, -500 )
   }
 
   OnRButtonUp( wParam, lParam, msg, hwnd )

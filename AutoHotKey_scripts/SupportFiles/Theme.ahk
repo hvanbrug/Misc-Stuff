@@ -15,6 +15,7 @@ class Theme
   static m_panelBrush  := 0
   static m_darkColorCb := 0
   static m_darkTabCb   := 0
+  static m_ownerBtnCb  := 0
 
   ; TEMP (diagnostics): counts how many times the tab control's NM_CUSTOMDRAW
   ; prepaint actually reached our handler. Read by ThemeDiagnostics().
@@ -220,6 +221,18 @@ class Theme
     DllCall( "SendMessageW", "Ptr", hwnd, "UInt", 0x031A, "Ptr", 0, "Ptr", 0 )  ; WM_THEMECHANGED
   }
 
+  ; A cached subclass callback that stops an owner-drawn button from erasing its
+  ; (light) background before WM_DRAWITEM, which otherwise flickers white on
+  ; resize. We paint the whole button in WM_DRAWITEM, so the erase is unneeded.
+  static OwnerButtonCallback()
+  {
+    if( !Theme.m_ownerBtnCb )
+    {
+      Theme.m_ownerBtnCb := CallbackCreate( _OwnerButtonNoErase, , 6 )
+    }
+    return Theme.m_ownerBtnCb
+  }
+
   ; Subclass a container static so its child statics paint on the dark panel
   ; background instead of the default light grey. No-op in light mode.
   static DarkenStaticBackground( hwnd )
@@ -340,18 +353,19 @@ class Theme
   ; match how the button's text was created. Not for image/bitmap buttons.
   static MakeOwnerDrawn( btn, align := "center" )
   {
-    static BS_OWNERDRAW := 0x0B
-    static BS_TYPEMASK  := 0x0F
-
     if( !Theme.IsDark() || !IsObject( btn ) || !btn.HasProp( "Hwnd" ) || !btn.Hwnd )
     {
       return
     }
-    hwnd  := btn.Hwnd
+    hwnd := btn.Hwnd
     ; Replace the button-type nibble with BS_OWNERDRAW, keeping the other flags
     ; (BS_NOTIFY for double-click, etc.).
-    style := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int" )
-    DllCall( "SetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int", (style & ~BS_TYPEMASK) | BS_OWNERDRAW )
+    RemoveWindowStyle( hwnd, BS_TYPEMASK,  false )
+    AddWindowStyle(    hwnd, BS_OWNERDRAW, false )
+
+    ; Suppress the button's own background erase so it doesn't flash white before
+    ; our WM_DRAWITEM paint during a resize.
+    DllCall( "comctl32\SetWindowSubclass", "Ptr", hwnd, "Ptr", Theme.OwnerButtonCallback(), "UPtr", 4, "UPtr", 0 )
 
     Theme.m_ownerDraw[hwnd] := { align: align }
     DllCall( "InvalidateRect", "Ptr", hwnd, "Ptr", 0, "Int", true )
@@ -447,6 +461,24 @@ _DarkStaticColor( hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData )
     DllCall( "gdi32\SetBkColor",   "Ptr", wParam, "UInt", Theme.DARK_BG   )
     DllCall( "gdi32\SetTextColor", "Ptr", wParam, "UInt", Theme.DARK_TEXT )
     return Theme.PanelBrush()
+  }
+  return DllCall( "comctl32\DefSubclassProc",
+                  "Ptr",  hWnd,
+                  "UInt", uMsg,
+                  "Ptr",  wParam,
+                  "Ptr",  lParam,
+                  "Ptr" )
+}
+
+; Subclass procedure for owner-drawn buttons: swallow WM_ERASEBKGND (we paint
+; the whole button in WM_DRAWITEM, so the default light erase is unneeded and
+; only causes a white flash on resize). Everything else is left to default.
+_OwnerButtonNoErase( hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData )
+{
+  static WM_ERASEBKGND := 0x0014
+  if( uMsg = WM_ERASEBKGND )
+  {
+    return 1
   }
   return DllCall( "comctl32\DefSubclassProc",
                   "Ptr",  hWnd,

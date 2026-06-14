@@ -447,16 +447,26 @@ RecalcWindowFrame( hwnd )
 ; recalcFrame: if true, forces OS to recalculate the non-client area
 AddWindowStyle( hwnd, styleFlag, recalcFrame := true )
 {
-  static GWL_STYLE := -16
+  global GWL_STYLE
+  AddWindowStyleWorker( hwnd, GWL_STYLE, styleFlag, recalcFrame )
+}
 
+AddWindowExStyle( hwnd, styleFlag, recalcFrame := true )
+{
+  global GWL_EXSTYLE
+  AddWindowStyleWorker( hwnd, GWL_EXSTYLE, styleFlag, recalcFrame )
+}
+
+AddWindowStyleWorker( hwnd, styleType, styleFlag, recalcFrame )
+{
   if( !hwnd )
   {
     return
   }
 
-  currentStyle := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int" )
+  currentStyle := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", styleType, "Int" )
   newStyle := currentStyle | styleFlag
-  DllCall( "SetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int", newStyle )
+  DllCall( "SetWindowLong", "Ptr", hwnd, "Int", styleType, "Int", newStyle )
 
   if( recalcFrame )
   {
@@ -469,16 +479,26 @@ AddWindowStyle( hwnd, styleFlag, recalcFrame := true )
 ; recalcFrame: if true, forces OS to recalculate the non-client area
 RemoveWindowStyle( hwnd, styleFlag, recalcFrame := true )
 {
-  static GWL_STYLE := -16
+  global GWL_STYLE
+  RemoveWindowStyleWorker( hwnd, GWL_STYLE, styleFlag, recalcFrame )
+}
 
+RemoveWindowExStyle( hwnd, styleFlag, recalcFrame := true )
+{
+  global GWL_EXSTYLE
+  RemoveWindowStyleWorker( hwnd, GWL_EXSTYLE, styleFlag, recalcFrame )
+}
+
+RemoveWindowStyleWorker( hwnd, styleType, styleFlag, recalcFrame )
+{
   if( !hwnd )
   {
     return
   }
 
-  currentStyle := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int" )
+  currentStyle := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", styleType, "Int" )
   newStyle := currentStyle & ~styleFlag
-  DllCall( "SetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int", newStyle )
+  DllCall( "SetWindowLong", "Ptr", hwnd, "Int", styleType, "Int", newStyle )
 
   if( recalcFrame )
   {
@@ -486,26 +506,28 @@ RemoveWindowStyle( hwnd, styleFlag, recalcFrame := true )
   }
 }
 
-; ── Window Style Constants ──────────────────────────────────────────────
-; Common WS_* and button style flags for use with AddWindowStyle/RemoveWindowStyle
-global GWL_STYLE       := -16
-global WS_CLIPCHILDREN := 0x02000000
-global WS_THICKFRAME   := 0x00040000
-global WS_CLIPSIBLINGS := 0x04000000
-global BS_MULTILINE    := 0x2000
-global BS_NOTIFY       := 0x4000
-global BS_BITMAP       := 0x80
-
 ; Test if all specified style flags are set on a window.
 ; Returns true only if ALL bits in styleFlags are set in the window's style.
 HasWindowStyle( hwnd, styleFlags )
+{
+  global GWL_STYLE
+  return HasWindowStyleWorker( hwnd, GWL_STYLE, styleFlags )
+}
+
+HasWindowExStyle( hwnd, styleFlags )
+{
+  global GWL_EXSTYLE
+  return HasWindowStyleWorker( hwnd, GWL_EXSTYLE, styleFlags )
+}
+
+HasWindowStyleWorker( hwnd, styleType, styleFlags )
 {
   if( !hwnd )
   {
     return false
   }
 
-  currentStyle := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int" )
+  currentStyle := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", styleType, "Int" )
   return (currentStyle & styleFlags) = styleFlags
 }
 
@@ -513,11 +535,36 @@ HasWindowStyle( hwnd, styleFlags )
 ; Returns true if ANY bit in styleFlags is set in the window's style.
 HasAnyWindowStyle( hwnd, styleFlags )
 {
+  global GWL_STYLE
+  return HasAnyWindowStyleWorker( hwnd, GWL_STYLE, styleFlags )
+}
+
+HasAnyWindowExStyle( hwnd, styleFlags )
+{
+  global GWL_EXSTYLE
+  return HasAnyWindowStyleWorker( hwnd, GWL_EXSTYLE, styleFlags )
+}
+
+HasAnyWindowStyleWorker( hwnd, styleType, styleFlags )
+{
   if( !hwnd )
   {
     return false
   }
 
-  currentStyle := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", GWL_STYLE, "Int" )
+  currentStyle := DllCall( "GetWindowLong", "Ptr", hwnd, "Int", styleType, "Int" )
   return (currentStyle & styleFlags) != 0
 }
+
+; ── Window Style Constants ──────────────────────────────────────────────
+; Common WS_* and button style flags for use with AddWindowStyle/RemoveWindowStyle
+global GWL_STYLE       := -16
+global GWL_EXSTYLE     := -20
+global WS_CLIPCHILDREN := 0x02000000
+global WS_THICKFRAME   := 0x00040000
+global WS_CLIPSIBLINGS := 0x04000000
+global BS_MULTILINE    := 0x2000
+global BS_NOTIFY       := 0x4000
+global BS_BITMAP       := 0x80
+global BS_OWNERDRAW    := 0x0B
+global BS_TYPEMASK     := 0x0F
