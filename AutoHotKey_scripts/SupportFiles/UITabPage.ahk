@@ -244,6 +244,11 @@ class TabPage
                                      "Ptr",  0,
                                      "Ptr" )
 
+    ; In dark mode, darken the clip panel so its child content panel (and thus
+    ; the gaps between the symbol buttons) paints on the dark background instead
+    ; of the default light grey.
+    Theme.DarkenStaticBackground( this.m_clipPanelHwnd )
+
     ; Create a content panel (full content height) inside the clip panel.
     ; All buttons will be children of this panel.  Scrolling moves this panel.
     ; WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN = 0x52000000
@@ -315,6 +320,7 @@ class TabPage
       btn := gui.AddButton( opt, buttonText )
       DisableButtonWrap(       btn )
       EnableButtonDoubleClick( btn )
+      Theme.ThemeControl(      btn.Hwnd )
       btn.SetFont( this.m_fontSize, this.m_fontName )
       filename := ""
       if( this.m_useEmojiImages )
@@ -329,6 +335,12 @@ class TabPage
       if( btn.Text != "" )
       {
         ApplyEllipsisToButton( btn )
+      }
+      ; Owner-draw plain text buttons dark. Emoji-bitmap buttons (filename set)
+      ; keep their normal rendering for now. No-op in light mode.
+      if( filename = "" )
+      {
+        Theme.MakeOwnerDrawn( btn, sym.align )
       }
       sym.ctrl := btn
       if( IsSet( tip ) )
@@ -851,8 +863,10 @@ class TabPage
   }
 }
 
-; Subclass callback: forwards WM_COMMAND from the content panel to the AHK GUI
-; so that button click events are routed through AHK's event system.
+; Subclass callback for the content panel. Forwards WM_COMMAND (button clicks)
+; to the AHK GUI so click events route through AHK's event system, and paints
+; the owner-drawn symbol buttons dark on WM_DRAWITEM (those buttons are children
+; of this panel, so their draw notifications arrive here).
 _ContentPanelForwardCmd( hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData )
 {
   if( uMsg = 0x0111 )  ; WM_COMMAND
@@ -863,6 +877,14 @@ _ContentPanelForwardCmd( hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData )
                     "Ptr",  wParam,
                     "Ptr",  lParam,
                     "Ptr" )
+  }
+
+  if( uMsg = 0x002B )  ; WM_DRAWITEM
+  {
+    if( Theme.DrawOwnerButton( lParam ) )
+    {
+      return 1
+    }
   }
 
   return DllCall( "comctl32\DefSubclassProc",

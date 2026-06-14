@@ -9,6 +9,7 @@ A_MaxHotkeysPerInterval := 400
 
 #Include "SupportFiles\UIConstants.ahk"
 #Include "SupportFiles\Utilities.ahk"
+#Include "SupportFiles\Theme.ahk"
 #Include "SupportFiles\Symbols.ahk"
 #Include "SupportFiles\Emojis.ahk"
 #Include "SupportFiles\CommentSupport.ahk"

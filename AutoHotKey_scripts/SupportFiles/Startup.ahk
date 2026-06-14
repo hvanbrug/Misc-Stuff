@@ -36,6 +36,7 @@ FillTrayMenu( menu )
   menu.Add( "Move to favourite spot", (*) => g_hotkeyWnd.MoveToFavouriteSpot() )
   menu.Add()
   menu.Add( "Test Function", (*) => TestFunction() )
+  menu.Add( "Theme diagnostics", (*) => ThemeDiagnostics() )   ; TEMP
   menu.Add()
   menu.Add( "Exit", (*) => ExitApp() )
 }

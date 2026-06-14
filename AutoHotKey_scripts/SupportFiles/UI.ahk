@@ -55,6 +55,10 @@ class HotkeyWindow
   m_onRButtonUp             := ""
   m_onWindowMove            := ""
   m_onWindowMoving          := ""
+  m_onNotify                := ""
+  m_onDrawItem              := ""
+  m_onNcPaint               := ""
+  m_onNcActivate            := ""
   m_hoverCheckTimer         := ""
   m_trackActiveWindowTimer  := ""
   m_saveWindowPosTimer      := ""
@@ -71,6 +75,10 @@ class HotkeyWindow
     this.m_onRButtonUp            := ObjBindMethod( this, "OnRButtonUp"         )
     this.m_onWindowMove           := ObjBindMethod( this, "OnWindowMove"        )
     this.m_onWindowMoving         := ObjBindMethod( this, "OnWindowMoving"      )
+    this.m_onNotify               := ObjBindMethod( this, "OnNotify"            )
+    this.m_onDrawItem             := ObjBindMethod( this, "OnDrawItem"          )
+    this.m_onNcPaint              := ObjBindMethod( this, "OnNcPaint"           )
+    this.m_onNcActivate           := ObjBindMethod( this, "OnNcActivate"        )
     this.m_hoverCheckTimer        := ObjBindMethod( this, "HoverCheck"          )
     this.m_trackActiveWindowTimer := ObjBindMethod( this, "TrackActiveWindow"   )
     this.m_saveWindowPosTimer     := ObjBindMethod( this, "SaveWindowPos"       )
@@ -145,6 +153,10 @@ class HotkeyWindow
     ; the client area stays flush with the window edges.
     AddWindowStyle( this.m_gui.Hwnd, WS_CLIPCHILDREN | WS_THICKFRAME, true )
 
+    ; Follow the Windows light/dark setting (decided once, at startup). In light
+    ; mode this and every other Theme call below is a no-op.
+    Theme.EnableDarkMode( this.m_gui )
+
     tabList := []
     tabContentWidth  := 0
     tabContentHeight := 0
@@ -186,6 +198,11 @@ class HotkeyWindow
     ; (the utility buttons) that sit above it in z-order.  Set once here so we
     ; never need to fiddle with z-order during shrink/expand.
     AddWindowStyle( this.m_tabs.Hwnd, WS_CLIPSIBLINGS, false )
+
+    ; Fully dark-paint the tab control (the standard control has no dark style,
+    ; so its labels and frame stay light otherwise). This subclass also darkens
+    ; the child clip panels via WM_CTLCOLORSTATIC, so no separate call is needed.
+    Theme.DarkenTabControl( this.m_tabs.Hwnd )
     ; Start from the tab's client rect, then shrink to the display area.
     displayRect := Buffer( 16, 0 )
     DllCall( "GetClientRect", "Ptr", this.m_tabs.Hwnd, "Ptr", displayRect.Ptr )
@@ -240,8 +257,16 @@ class HotkeyWindow
                                      "Ptr",  0,
                                      "Ptr" )
 
-    ; Force classic scrollbar appearance so it stays visible instead of auto-hiding.
-    DllCall( "uxtheme\SetWindowTheme", "Ptr", this.m_tabScrollHwnd, "Str", "", "Str", "" )
+    ; In dark mode use the dark scrollbar theme; otherwise force classic
+    ; appearance so it stays visible instead of auto-hiding.
+    if( Theme.IsDark() )
+    {
+      Theme.ThemeControl( this.m_tabScrollHwnd )
+    }
+    else
+    {
+      DllCall( "uxtheme\SetWindowTheme", "Ptr", this.m_tabScrollHwnd, "Str", "", "Str", "" )
+    }
 
     OnMessage( 0x0115, VScroll                    )  ; WM_VSCROLL
     OnMessage( 0x0111, this.m_onButtonDoubleClick )  ; WM_COMMAND       (for BN_DBLCLK)
@@ -249,6 +274,10 @@ class HotkeyWindow
     OnMessage( 0x0084, this.m_onNcHitTest         )  ; WM_NCHITTEST     (vertical-only resize hit-test)
     OnMessage( 0x0024, this.m_onGetMinMaxInfo     )  ; WM_GETMINMAXINFO (height bounds)
     OnMessage( 0x0005, this.m_onWindowSize        )  ; WM_SIZE          (relayout on height change)
+    OnMessage( 0x004E, this.m_onNotify            )  ; WM_NOTIFY        (dark tab-label text)
+    OnMessage( 0x002B, this.m_onDrawItem          )  ; WM_DRAWITEM      (dark owner-drawn buttons)
+    OnMessage( 0x0085, this.m_onNcPaint           )  ; WM_NCPAINT       (suppress white frame in dark)
+    OnMessage( 0x0086, this.m_onNcActivate        )  ; WM_NCACTIVATE    (keep frame dark when inactive)
 
     for tabIndex, tab in g_uiTabs
     {
@@ -345,6 +374,7 @@ class HotkeyWindow
     this.m_gui.SetFont( g_fontSize " norm", g_fontName )
     g_useClipSend := INI_IsClipSendMode()
     this.SetShowClipBulletState( g_useClipSend )
+    Theme.ApplyTextColor( this.m_clipIndicator )
 
     ; Strip-emojis-from-comments indicator (click to toggle): sits immediately
     ; to the right of the shrink/expand button, mirroring the clipboard-mode
@@ -360,6 +390,7 @@ class HotkeyWindow
     this.m_gui.SetFont( g_fontSize " norm", g_fontName )
     g_stripSendEmojis := INI_IsStripCommentEmojis()
     this.SetStripEmojisIndicatorState( g_stripSendEmojis )
+    Theme.ApplyTextColor( this.m_stripEmojisIndicator )
 
     ; Explicit window size based on tab control dimensions.
     ; Prevents AHK from auto-sizing to include hidden buttons at large Y offsets.
@@ -399,6 +430,7 @@ class HotkeyWindow
     this.m_toggleSizeBtn        := ""
     this.m_clipIndicator        := ""
     this.m_stripEmojisIndicator := ""
+    Theme.ClearOwnerDraw()
 
     this.SaveWindowPos()
     OnMessage( 0x0003, this.m_onWindowMove,   0 )
@@ -406,6 +438,10 @@ class HotkeyWindow
     OnMessage( 0x0115, VScroll,               0 )
     OnMessage( 0x0201, this.m_onLButtonDown,  0 )
     OnMessage( 0x0205, this.m_onRButtonUp,    0 )
+    OnMessage( 0x004E, this.m_onNotify,       0 )
+    OnMessage( 0x002B, this.m_onDrawItem,     0 )
+    OnMessage( 0x0085, this.m_onNcPaint,      0 )
+    OnMessage( 0x0086, this.m_onNcActivate,   0 )
     RemoveWheelHook()
 
     this.m_guiHwndRaw     := 0
@@ -623,9 +659,16 @@ class HotkeyWindow
     }
 
     ; Track the new full height so collapse → expand round-trips honour the
-    ; user's chosen size.
-    this.m_gui.GetPos( , , , &winH )
-    this.m_fullH := winH
+    ; user's chosen size — but only for a genuine user drag-resize. During the
+    ; programmatic collapse/expand Show() (m_allowWidthChange is set), the size
+    ; AHK produces is skewed by the WS_THICKFRAME toggle vs the zero non-client
+    ; area from OnNcCalcSize. Capturing it there would feed that skew back into
+    ; m_fullH and make the window drift taller on every expand.
+    if( !this.m_allowWidthChange )
+    {
+      this.m_gui.GetPos( , , , &winH )
+      this.m_fullH := winH
+    }
 
     UpdateScrollInfo()
     RedrawScrollbar()
@@ -668,6 +711,8 @@ class HotkeyWindow
     this.m_gui.SetFont( fontSize, fontName )
     btn := this.m_gui.AddButton( "x" x " y" y " w" w " h" h, text )
     DisableButtonWrap( btn )
+    Theme.ThemeControl( btn.Hwnd )
+    Theme.MakeOwnerDrawn( btn )
     btn.OnEvent( "Click", func )
     g_tipMap[btn.Hwnd] := tip
     this.m_gui.SetFont( g_fontSize " norm", g_fontName )
@@ -919,6 +964,85 @@ class HotkeyWindow
     ; Persist the new height (debounced) so it's restored next time the script
     ; runs. SaveWindowHeight reads m_fullH that RelayoutForHeight just updated.
     SetTimer( this.m_saveWindowHeightTimer, -500 )
+  }
+
+  ; WM_NOTIFY handler. The standard tab control keeps drawing its label text in
+  ; black even under DarkMode_Explorer, so in dark mode we hook its NM_CUSTOMDRAW
+  ; and recolour just the text to the light foreground (the control still draws
+  ; everything else). Light mode and every other notification fall straight
+  ; through so AHK's own tab handling is untouched.
+  OnNotify( wParam, lParam, msg, hwnd )
+  {
+    static NM_CUSTOMDRAW       := -12
+    static CDDS_PREPAINT       := 0x00000001
+    static CDDS_ITEMPREPAINT   := 0x00010001
+    static CDRF_DODEFAULT      := 0x00000000
+    static CDRF_NEWFONT        := 0x00000002
+    static CDRF_NOTIFYITEMDRAW := 0x00000020
+
+    if( !Theme.IsDark() || !IsObject( this.m_tabs ) )
+    {
+      return
+    }
+    if( NumGet( lParam, 16, "Int" ) != NM_CUSTOMDRAW )      ; NMHDR.code
+    {
+      return
+    }
+    if( NumGet( lParam, 0, "Ptr" ) != this.m_tabs.Hwnd )    ; NMHDR.hwndFrom
+    {
+      return
+    }
+
+    drawStage := NumGet( lParam, 24, "UInt" )               ; NMCUSTOMDRAW.dwDrawStage
+    if( drawStage = CDDS_PREPAINT )
+    {
+      Theme.m_tabCustomDrawHits += 1   ; TEMP (diagnostics)
+      return CDRF_NOTIFYITEMDRAW   ; ask for per-item callbacks
+    }
+    if( drawStage = CDDS_ITEMPREPAINT )
+    {
+      hdc := NumGet( lParam, 32, "Ptr" )                    ; NMCUSTOMDRAW.hdc
+      DllCall( "gdi32\SetTextColor", "Ptr", hdc, "UInt", Theme.DARK_TEXT )
+      return CDRF_NEWFONT          ; redraw this item's text with the new colour
+    }
+    return CDRF_DODEFAULT
+  }
+
+  ; WM_DRAWITEM handler for the corner/helper buttons (children of the GUI).
+  ; Symbol buttons live under the content panel and are drawn from that panel's
+  ; subclass instead; both delegate to Theme.DrawOwnerButton.
+  OnDrawItem( wParam, lParam, msg, hwnd )
+  {
+    if( Theme.DrawOwnerButton( lParam ) )
+    {
+      return 1
+    }
+  }
+
+  ; WM_NCPAINT handler. In dark mode, suppress the window's non-client frame
+  ; painting so the thick WS_THICKFRAME sizing border doesn't show up white
+  ; (most visible when the window is inactive). Returning 0 = "frame handled,
+  ; draw nothing"; the client area is unaffected. Light mode is left alone.
+  OnNcPaint( wParam, lParam, msg, hwnd )
+  {
+    if( !Theme.IsDark() || !IsObject( this.m_gui ) || hwnd != this.m_gui.Hwnd )
+    {
+      return
+    }
+    return 0
+  }
+
+  ; WM_NCACTIVATE handler. The thick WS_THICKFRAME sizing border renders in the
+  ; OS "inactive" colour (white) when the window loses focus. We force the frame
+  ; to always draw in its active colour by telling DefWindowProc the window is
+  ; active (wParam = TRUE) regardless of the real state. Dark mode only.
+  OnNcActivate( wParam, lParam, msg, hwnd )
+  {
+    if( !Theme.IsDark() || !IsObject( this.m_gui ) || hwnd != this.m_gui.Hwnd )
+    {
+      return
+    }
+    return DllCall( "DefWindowProcW", "Ptr", hwnd, "UInt", 0x0086, "Ptr", 1, "Ptr", lParam, "Ptr" )
   }
 
   OnLButtonDown( wParam, lParam, msg, hwnd )
