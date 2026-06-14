@@ -14,7 +14,6 @@ class HotkeyWindow
   m_tabScrollHwnd        := 0
   m_fullW                := 0
   m_fullH                := 0
-  m_frmSize              := 9
   m_toggleSizeBtn        := ""
   m_clipIndicator        := ""
   m_stripEmojisIndicator := ""
@@ -157,8 +156,6 @@ class HotkeyWindow
 
     INI_SetWndOpen( true )
 
-    this.m_frmSize := 9
-
     ; Add WS_CLIPCHILDREN so the GUI doesn't paint over child button areas during
     ; scroll. We deliberately do NOT use WS_THICKFRAME for resizing: on Win11 it
     ; summons a DWM-composited frame that renders white when the window is
@@ -206,9 +203,9 @@ class HotkeyWindow
     }
 
     tabScrlW := 18
-    tabLeft  := 5  + this.m_frmSize
-    tabTop   := 24 + this.m_frmSize
-    tabWth   := tabContentWidth  + tabScrlW + 14
+    tabLeft  := 4
+    tabTop   := 28
+    tabWth   := tabContentWidth  + tabScrlW + 12
     tabHgt   := tabContentHeight + 30
 
     this.m_tabs := this.m_gui.AddTab3( "x" tabLeft " y" tabTop " w" tabWth " h" tabHgt, tabList )
@@ -350,11 +347,11 @@ class HotkeyWindow
 
     ; Utility buttons in top-right corner (outside tab context).
     this.m_tabs.UseTab( 0 )
-    btnTop    := this.m_frmSize
+    btnTop    := 1
     btnGap    := 2
     btnWth    := 40
     btnHgt    := 24
-    rightEdge := tabContentWidth + tabScrlW + 16 + this.m_frmSize
+    rightEdge := tabContentWidth + tabScrlW + 16
 
     this.CreateButton( "⌫.", "Back 3, Replace with period",
                        "Segoe UI Symbol", "s10",
@@ -391,8 +388,8 @@ class HotkeyWindow
     ; the shrink/expand buttons so it's easy to see in either mode.
     clipW := 12
     clipH := 14
-    clipX := 2 + this.m_frmSize
-    clipY := 1 + this.m_frmSize
+    clipX := 2
+    clipY := 1
     this.m_gui.SetFont( "s10", "Segoe UI Symbol" )
     this.m_clipIndicator := this.m_gui.AddText( "x" clipX " y" clipY " w" clipW " h" clipH " +0x100", "○" )
     g_tipMap[this.m_clipIndicator.Hwnd] := "Clipboard send mode: OFF"
@@ -407,8 +404,8 @@ class HotkeyWindow
     ; Comments tab via CommentsTabPage.TransformSendText.
     stripW := 14
     stripH := 16
-    stripX := 14 + btnWth + 2 + this.m_frmSize
-    stripY := 1 + this.m_frmSize
+    stripX := 14 + btnWth + 2
+    stripY := 1
     this.m_gui.SetFont( "s10", "Segoe UI Symbol" )
     this.m_stripEmojisIndicator := this.m_gui.AddText( "x" stripX " y" stripY " w" stripW " h" stripH " +0x100", "☺" )
     g_tipMap[this.m_stripEmojisIndicator.Hwnd] := "Strip emojis from comments: OFF"
@@ -419,7 +416,7 @@ class HotkeyWindow
 
     ; Explicit window size based on tab control dimensions.
     ; Prevents AHK from auto-sizing to include hidden buttons at large Y offsets.
-    showW        := tabContentWidth + tabScrlW + 14 + 14
+    showW        := rightEdge + 2
     showH        := tabContentHeight + 30 + 14 + 14
     this.m_fullW := showW
 
@@ -515,14 +512,14 @@ class HotkeyWindow
         this.SetToggleSizeBtnState( true )
 
         ; Pull the corner controls tight against the edge for the collapsed strip.
-        this.AdjustControlPositions( false )
+        this.AdjustControlPositions()
 
         ; Update INI before Show() so the WM_SIZE handler sees the new state and
         ; can correctly skip the relayout while collapsing.
         INI_SetCollapsed( true )
         savedPos := this.LoadWindowPos()
         width    := 72
-        height   := 24
+        height   := 26
         this.m_gui.Show( "w" width " h" height " NoActivate" savedPos )
       }
       else
@@ -531,7 +528,7 @@ class HotkeyWindow
         this.SetToggleSizeBtnState( false )
 
         ; Restore the padded corner-control positions for the expanded window.
-        this.AdjustControlPositions( true )
+        this.AdjustControlPositions()
 
         ; Hiding the tab control also hides its child clip panels.
         ; Re-show the active tab's clip panel so buttons reappear.
@@ -573,8 +570,7 @@ class HotkeyWindow
   ; ── Layout ───────────────────────────────────────────────────────
 
   ; Position the utility controls (indicators and toggle button) accounting for frame offset.
-  ; includeFrame: true to add m_frmSize offset, false for no offset
-  AdjustControlPositions( includeFrame )
+  AdjustControlPositions()
   {
     ; Get control dimensions
     this.m_clipIndicator.GetPos( , , &clipW, &clipH )
@@ -582,7 +578,7 @@ class HotkeyWindow
     this.m_stripEmojisIndicator.GetPos( , , &stripW, &stripH )
 
     ; Y positions with frame offset
-    yOffset := includeFrame ? this.m_frmSize : 0
+    yOffset := 1
     btnY    := yOffset
 
     ; Center the indicator controls vertically on the button
@@ -591,7 +587,7 @@ class HotkeyWindow
     stripY     := btnCenterY - stripH / 2 - 2 ; 12 - (16/2) = 4 - 2 = 2 (there is an offset related to the font's character baseline on the statics)
 
     ; X positions: layout left-to-right with 2-pixel gaps
-    xOffset    := includeFrame ? this.m_frmSize : 0
+    xOffset    := 0
     edgeGap    := 2
     controlGap := 1
 
