@@ -544,6 +544,13 @@ class HotkeyWindow
     this.m_clipIndicator.Move( clipX, clipY )
     this.m_toggleSizeBtn.Move( btnX,  btnY  )
     this.m_stripEmojisIndicator.Move( stripX, stripY )
+
+    ; Moving a child control repaints it at its new spot but leaves the parent
+    ; pixels it vacated untouched, so the old position ghosts as an artifact.
+    ; Invalidate the GUI client area with an erase so the exposed background
+    ; repaints. WS_CLIPCHILDREN (set in Show) keeps the erase off the controls
+    ; themselves, so this clears the ghosts without flicker.
+    DllCall( "InvalidateRect", "Ptr", this.m_gui.Hwnd, "Ptr", 0, "Int", true )
   }
 
   ; Resize the tab control, scrollbar, and each tab's clip panel to match the
@@ -916,20 +923,55 @@ class HotkeyWindow
 
   OnLButtonDown( wParam, lParam, msg, hwnd )
   {
-    if( hwnd != this.m_gui.Hwnd )
+    ; Pressing the bare window background starts a drag immediately — there is
+    ; no click action to disambiguate from.
+    if( hwnd = this.m_gui.Hwnd )
     {
-      if( this.IsClipControl( hwnd ) )
-      {
-        ToggleClipboardSendMode()
-      }
-      else if( this.IsStripEmojisControl( hwnd ) )
-      {
-        ToggleStripSendEmojis()
-      }
+      this.BeginWindowDrag()
       return
     }
 
-    ; Record how far the cursor is from the window top-left at grab time.
+    ; The clipboard / strip-emoji indicators and the shrink-expand button each
+    ; do something on a plain click, but they should double as drag handles:
+    ; when collapsed they cover almost the whole window, leaving no bare strip
+    ; to grab. DragDetect tells a click apart from a press-and-drag.
+    isCornerControl := this.IsClipControl(        hwnd )
+                    || this.IsStripEmojisControl( hwnd )
+                    || this.IsToggleSizeBtn(      hwnd )
+    if( !isCornerControl )
+    {
+      return
+    }
+
+    if( this.StartDragIfMoved( hwnd ) )
+    {
+      ; User dragged: the window move has begun, so skip the click action.
+      ; Returning a value also suppresses the button's default press/BN_CLICKED.
+      return 0
+    }
+
+    ; Plain click: run the control's action.
+    if( this.IsClipControl( hwnd ) )
+    {
+      ToggleClipboardSendMode()
+    }
+    else if( this.IsStripEmojisControl( hwnd ) )
+    {
+      ToggleStripSendEmojis()
+    }
+    else
+    {
+      this.ToggleWindowSize()
+    }
+    return 0
+  }
+
+  ; Record how far the cursor is from the window top-left at grab time (so the
+  ; snap logic in OnWindowMoving can recover the cursor-implied position), then
+  ; post the message that starts the OS window-move loop. Shared by the
+  ; background-drag path and the corner-control drag handles.
+  BeginWindowDrag()
+  {
     pt := Buffer( 8 )
     DllCall( "GetCursorPos", "Ptr", pt )
     cursorX := NumGet( pt, 0, "Int" )
@@ -938,7 +980,23 @@ class HotkeyWindow
     this.m_dragOffsetX := cursorX - winX
     this.m_dragOffsetY := cursorY - winY
 
-    PostMessage( 0xA1, 2,,, "ahk_id " hwnd )
+    PostMessage( 0xA1, 2,,, "ahk_id " this.m_gui.Hwnd )  ; WM_NCLBUTTONDOWN, HTCAPTION
+  }
+
+  ; True if the user pressed and dragged on the given control — in which case the
+  ; window move has been started. False on a plain click. DragDetect captures the
+  ; mouse and pumps messages itself until the button is released (click) or the
+  ; cursor moves past the system drag threshold (drag).
+  StartDragIfMoved( hwnd )
+  {
+    pt := Buffer( 8 )
+    DllCall( "GetCursorPos", "Ptr", pt )
+    if( !DllCall( "DragDetect", "Ptr", hwnd, "Int64", NumGet( pt, 0, "Int64" ) ) )
+    {
+      return false
+    }
+    this.BeginWindowDrag()
+    return true
   }
 
   OnRButtonUp( wParam, lParam, msg, hwnd )
