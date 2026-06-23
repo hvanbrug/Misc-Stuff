@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>HenksHotkeys</RootNamespace>
+    <AssemblyName>HenksHotkeys</AssemblyName>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\Images\HenksHotkeys.ico</ApplicationIcon>
+    <Version>2.3.0</Version>
+    <Product>Henk's Hotkeys</Product>
+    <AssemblyTitle>Henk's Hotkeys</AssemblyTitle>
+  </PropertyGroup>
+
+  <!-- Twemoji PNGs are loaded from disk at runtime (the same source the AHK
+       debug build used). Copy the whole image set next to the executable. -->
+  <ItemGroup>
+    <None Include="..\Images\Twemoji\*.png" Link="Images\Twemoji\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\Images\HenksHotkeys.ico" Link="Images\HenksHotkeys.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
