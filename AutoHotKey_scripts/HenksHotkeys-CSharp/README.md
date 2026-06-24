@@ -1,6 +1,6 @@
-# Henk's Hotkeys — C# / WinForms port
+# Henk's Hotkeys — C# / WPF port
 
-A faithful C# (.NET 9, WinForms) rewrite of the AutoHotkey v2 application in the
+A faithful C# (.NET 9, WPF) rewrite of the AutoHotkey v2 application in the
 parent folder (`HenksHotkeys.ahk` + `SupportFiles\*.ahk`). It is an always-on-top,
 frameless, dark-aware helper window with tabs of buttons that send symbols,
 emojis, ready-made comments, prompt fragments, Greek/Russian letters and other

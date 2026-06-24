@@ -6,9 +6,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <!-- WinForms is kept only for the few OS bits without a first-class WPF API:
-         the tray icon (NotifyIcon), Clipboard and Screen. The UI itself is WPF. -->
-    <UseWindowsForms>true</UseWindowsForms>
     <LangVersion>latest</LangVersion>
     <RootNamespace>HenksHotkeys</RootNamespace>
     <AssemblyName>HenksHotkeys</AssemblyName>
@@ -25,14 +22,6 @@
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
   </PropertyGroup>
-
-    <!-- Drop the WinForms/Drawing implicit usings so WPF's System.Windows types
-       (Application, MessageBox, Color, Point, Size…) are unambiguous. The handful
-       of files that still need WinForms import it explicitly. -->
-  <ItemGroup>
-    <Using Remove="System.Windows.Forms" />
-    <Using Remove="System.Drawing" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />

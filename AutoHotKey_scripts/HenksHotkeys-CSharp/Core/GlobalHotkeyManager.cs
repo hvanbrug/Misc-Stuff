@@ -1,44 +1,30 @@
-using System.Windows.Forms;
+using System.Windows.Interop;
 using HenksHotkeys.Native;
 
 namespace HenksHotkeys.Core;
 
 /// <summary>
-/// Registers all global hotkeys on a message-only window and dispatches WM_HOTKEY
-/// to the bound actions. Replaces AutoHotkey's built-in Hotkey() registrations
-/// (the per-symbol bindings collected in <see cref="HotkeyRegistry"/> plus the
-/// app-level ones such as ^+x toggle and ^+a list).
+/// Registers all global hotkeys on a message-only window (HwndSource) and
+/// dispatches WM_HOTKEY to the bound actions. Replaces AutoHotkey's built-in
+/// Hotkey() registrations (the per-symbol bindings collected in
+/// <see cref="HotkeyRegistry"/> plus the app-level ones such as ^+x and ^+a).
 /// </summary>
 internal sealed class GlobalHotkeyManager : IDisposable
 {
-  private sealed class MessageWindow : NativeWindow
-  {
-    private readonly GlobalHotkeyManager m_owner;
+  private static readonly IntPtr HWND_MESSAGE = new( -3 );
 
-    public MessageWindow( GlobalHotkeyManager owner )
-    {
-      m_owner = owner;
-      var cp = new CreateParams { Caption = "HenksHotkeysMsgWnd" };
-      CreateHandle( cp ); // message-only-ish; never shown
-    }
-
-    protected override void WndProc( ref Message m )
-    {
-      if( m.Msg == NativeMethods.WM_HOTKEY )
-      {
-        m_owner.Dispatch( (int)m.WParam );
-      }
-      base.WndProc( ref m );
-    }
-  }
-
-  private readonly MessageWindow           m_window;
+  private readonly HwndSource              m_source;
   private readonly Dictionary<int, Action> m_actions = new();
   private int m_nextId = 1;
 
   public GlobalHotkeyManager()
   {
-    m_window = new MessageWindow( this );
+    var prms = new HwndSourceParameters( "HenksHotkeysHotkeys" )
+    {
+      ParentWindow = HWND_MESSAGE, // message-only window
+    };
+    m_source = new HwndSource( prms );
+    m_source.AddHook( WndProc );
   }
 
   /// <summary>Register a hotkey by AHK-style string. Returns false on parse/registration failure.</summary>
@@ -51,7 +37,7 @@ internal sealed class GlobalHotkeyManager : IDisposable
     }
 
     int id = m_nextId++;
-    if( !NativeMethods.RegisterHotKey( m_window.Handle, id,
+    if( !NativeMethods.RegisterHotKey( m_source.Handle, id,
                                        parsed.Value.Modifiers | NativeMethods.MOD_NOREPEAT,
                                        parsed.Value.VirtualKey ) )
     {
@@ -71,6 +57,16 @@ internal sealed class GlobalHotkeyManager : IDisposable
     }
   }
 
+  private IntPtr WndProc( IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled )
+  {
+    if( msg == NativeMethods.WM_HOTKEY )
+    {
+      Dispatch( (int)wParam );
+      handled = true;
+    }
+    return IntPtr.Zero;
+  }
+
   private void Dispatch( int id )
   {
     if( m_actions.TryGetValue( id, out Action? action ) )
@@ -83,9 +79,10 @@ internal sealed class GlobalHotkeyManager : IDisposable
   {
     foreach( int id in m_actions.Keys )
     {
-      NativeMethods.UnregisterHotKey( m_window.Handle, id );
+      NativeMethods.UnregisterHotKey( m_source.Handle, id );
     }
     m_actions.Clear();
-    m_window.DestroyHandle();
+    m_source.RemoveHook( WndProc );
+    m_source.Dispose();
   }
 }

@@ -210,4 +210,93 @@ internal static class NativeMethods
   public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
   // DWMWA_BORDER_COLOR (Win11)
   public const int DWMWA_BORDER_COLOR = 34;
+
+  // ── Monitor / work area ──────────────────────────────────────────
+  public const int MONITOR_DEFAULTTONEAREST = 2;
+  public const int SPI_GETWORKAREA          = 0x0030;
+
+  [StructLayout( LayoutKind.Sequential )]
+  public struct MONITORINFO
+  {
+    public int  cbSize;
+    public RECT rcMonitor;
+    public RECT rcWork;
+    public int  dwFlags;
+  }
+
+  [DllImport( "user32.dll" )]
+  public static extern IntPtr MonitorFromWindow( IntPtr hwnd, int dwFlags );
+
+  [DllImport( "user32.dll", CharSet = CharSet.Unicode )]
+  [return: MarshalAs( UnmanagedType.Bool )]
+  public static extern bool GetMonitorInfoW( IntPtr hMonitor, ref MONITORINFO lpmi );
+
+  [DllImport( "user32.dll", CharSet = CharSet.Unicode )]
+  [return: MarshalAs( UnmanagedType.Bool )]
+  public static extern bool SystemParametersInfoW( int uiAction, int uiParam, ref RECT pvParam, int fWinIni );
+
+  /// <summary>Work area (physical px) of the monitor the window is on.</summary>
+  public static RECT GetWorkAreaForWindow( IntPtr hwnd )
+  {
+    IntPtr mon = MonitorFromWindow( hwnd, MONITOR_DEFAULTTONEAREST );
+    var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+    if( mon != IntPtr.Zero && GetMonitorInfoW( mon, ref mi ) )
+    {
+      return mi.rcWork;
+    }
+    return GetPrimaryWorkArea();
+  }
+
+  /// <summary>Work area (physical px) of the primary monitor.</summary>
+  public static RECT GetPrimaryWorkArea()
+  {
+    var rc = new RECT();
+    SystemParametersInfoW( SPI_GETWORKAREA, 0, ref rc, 0 );
+    return rc;
+  }
+
+  // ── Tray icon (Shell_NotifyIcon) ─────────────────────────────────
+  public const int NIM_ADD    = 0x0;
+  public const int NIM_MODIFY = 0x1;
+  public const int NIM_DELETE = 0x2;
+  public const int NIF_MESSAGE = 0x1;
+  public const int NIF_ICON    = 0x2;
+  public const int NIF_TIP     = 0x4;
+
+  [StructLayout( LayoutKind.Sequential, CharSet = CharSet.Unicode )]
+  public struct NOTIFYICONDATAW
+  {
+    public int    cbSize;
+    public IntPtr hWnd;
+    public int    uID;
+    public int    uFlags;
+    public int    uCallbackMessage;
+    public IntPtr hIcon;
+    [MarshalAs( UnmanagedType.ByValTStr, SizeConst = 128 )] public string szTip;
+    public int    dwState;
+    public int    dwStateMask;
+    [MarshalAs( UnmanagedType.ByValTStr, SizeConst = 256 )] public string szInfo;
+    public int    uTimeoutOrVersion;
+    [MarshalAs( UnmanagedType.ByValTStr, SizeConst = 64 )]  public string szInfoTitle;
+    public int    dwInfoFlags;
+    public Guid   guidItem;
+    public IntPtr hBalloonIcon;
+  }
+
+  [DllImport( "shell32.dll", CharSet = CharSet.Unicode )]
+  [return: MarshalAs( UnmanagedType.Bool )]
+  public static extern bool Shell_NotifyIconW( int dwMessage, ref NOTIFYICONDATAW lpData );
+
+  [DllImport( "shell32.dll", CharSet = CharSet.Unicode )]
+  public static extern int ExtractIconExW( string lpszFile, int nIconIndex,
+                                           IntPtr[]? phiconLarge, IntPtr[]? phiconSmall, int nIcons );
+
+  [DllImport( "user32.dll", CharSet = CharSet.Unicode )]
+  public static extern IntPtr LoadIconW( IntPtr hInstance, IntPtr lpIconName );
+
+  [DllImport( "user32.dll" )]
+  [return: MarshalAs( UnmanagedType.Bool )]
+  public static extern bool DestroyIcon( IntPtr hIcon );
+
+  public static readonly IntPtr IDI_APPLICATION = new( 32512 );
 }

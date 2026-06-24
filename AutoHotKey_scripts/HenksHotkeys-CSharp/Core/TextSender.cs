@@ -1,4 +1,4 @@
-using System.Windows.Forms;
+using System.Windows;
 using HenksHotkeys.Native;
 using static HenksHotkeys.Native.NativeMethods;
 using SysMarshal = System.Runtime.InteropServices.Marshal;

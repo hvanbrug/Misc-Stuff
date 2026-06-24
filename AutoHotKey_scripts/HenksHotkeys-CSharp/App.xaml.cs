@@ -1,25 +1,21 @@
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using HenksHotkeys.Core;
 using HenksHotkeys.Tabs;
 using HenksHotkeys.UI;
-using WF = System.Windows.Forms;
-using Drawing = System.Drawing;
 
 namespace HenksHotkeys;
 
 /// <summary>
 /// Application entry point and wiring (the role played by HenksHotkeys.ahk +
 /// Startup.ahk): builds the tab models, creates the WPF helper window, registers
-/// global hotkeys, installs the tray menu, and restores the previous state.
-/// The tray icon uses WinForms NotifyIcon (no first-class WPF equivalent).
+/// global hotkeys, installs the tray icon/menu, and restores the previous state.
 /// </summary>
 public partial class App
 {
   private Mutex?               m_mutex;
   private GlobalHotkeyManager? m_hotkeys;
-  private WF.NotifyIcon?       m_tray;
+  private TrayIcon?            m_tray;
   private HotkeyWindow?        m_window;
 
   protected override void OnStartup( StartupEventArgs e )
@@ -75,8 +71,7 @@ public partial class App
     m_hotkeys.Register( "^+s", AppActions.SrefToFullPrompt );
   }
 
-  // One menu definition drives both the tray menu (WinForms) and the window's
-  // right-click context menu (WPF).
+  // One definition drives both the tray menu and the window's right-click menu.
   private (string? Label, Action? Action)[] MenuItems() => new (string?, Action?)[]
   {
     ( "Open UI",                () => m_window!.ShowUi() ),
@@ -90,36 +85,10 @@ public partial class App
     ( "Exit",                   ExitApp ),
   };
 
-  private void BuildMenusAndTray()
+  private ContextMenu BuildMenu()
   {
-    var defs = MenuItems();
-
-    // Tray (WinForms NotifyIcon + ContextMenuStrip).
-    var strip = new WF.ContextMenuStrip();
-    foreach( var (label, action) in defs )
-    {
-      if( label is null )
-      {
-        strip.Items.Add( new WF.ToolStripSeparator() );
-      }
-      else
-      {
-        strip.Items.Add( label, null, ( _, _ ) => action!() );
-      }
-    }
-
-    m_tray = new WF.NotifyIcon
-    {
-      Text             = "Henk's Hotkeys",
-      Icon             = LoadTrayIcon(),
-      Visible          = true,
-      ContextMenuStrip = strip,
-    };
-    m_tray.DoubleClick += ( _, _ ) => m_window!.ShowUi();
-
-    // Window right-click menu (WPF).
     var menu = new ContextMenu();
-    foreach( var (label, action) in defs )
+    foreach( var (label, action) in MenuItems() )
     {
       if( label is null )
       {
@@ -133,33 +102,21 @@ public partial class App
         menu.Items.Add( item );
       }
     }
-    m_window!.ContextMenu = menu;
+    return menu;
   }
 
-  private static Drawing.Icon LoadTrayIcon()
+  private void BuildMenusAndTray()
   {
-    try
-    {
-      using Stream? s = System.Reflection.Assembly.GetExecutingAssembly()
-        .GetManifestResourceStream( "app.ico" );
-      if( s is not null )
-      {
-        return new Drawing.Icon( s );
-      }
-    }
-    catch { /* fall through */ }
-    return Drawing.SystemIcons.Application;
+    // A fresh menu instance for each surface so they never share open state.
+    m_window!.ContextMenu = BuildMenu();
+    m_tray = new TrayIcon( BuildMenu(), () => m_window!.ShowUi(), "Henk's Hotkeys" );
   }
 
   private void ExitApp() => Shutdown();
 
   protected override void OnExit( ExitEventArgs e )
   {
-    if( m_tray is not null )
-    {
-      m_tray.Visible = false;
-      m_tray.Dispose();
-    }
+    m_tray?.Dispose();
     m_hotkeys?.Dispose();
     base.OnExit( e );
   }

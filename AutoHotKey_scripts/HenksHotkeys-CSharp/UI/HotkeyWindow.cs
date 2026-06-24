@@ -455,7 +455,7 @@ internal sealed class HotkeyWindow : Window
 
     // No saved position: centre on the primary work area (physical px) instead of
     // landing at (0, 0), which sits in the top-of-screen snap zone.
-    var area = System.Windows.Forms.Screen.PrimaryScreen!.WorkingArea;
+    NativeMethods.RECT area = NativeMethods.GetPrimaryWorkArea();
     NativeMethods.GetWindowRect( m_hwnd, out NativeMethods.RECT rc );
     MoveTo( area.Left + ( area.Width - rc.Width ) / 2,
             area.Top  + ( area.Height - rc.Height ) / 2 );

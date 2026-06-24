@@ -1,6 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Windows.Forms;
+using System.Windows;
 using System.Windows.Interop;
 using HenksHotkeys.Native;
 using HenksHotkeys.UI;
@@ -53,7 +53,7 @@ internal static class AppActions
     int borderR = win.Right    - frame.Right;
     int borderB = win.Bottom   - frame.Bottom;
 
-    var area = Screen.FromHandle( target ).WorkingArea;
+    NativeMethods.RECT area = NativeMethods.GetWorkAreaForWindow( target );
     int x = area.Left   - borderL;
     int y = area.Top    - borderT;
     int w = area.Width  + borderL + borderR;
@@ -78,7 +78,7 @@ internal static class AppActions
   public static void TestFunction()
   {
     var sb = new StringBuilder();
-    var area = Screen.PrimaryScreen?.WorkingArea ?? default;
+    NativeMethods.RECT area = NativeMethods.GetPrimaryWorkArea();
     sb.AppendLine( $"Work area: {area.Left}, {area.Top}, {area.Right}, {area.Bottom}" );
 
     if( AppState.Window is { } w )
