@@ -10,7 +10,7 @@
     <RootNamespace>HenksHotkeys</RootNamespace>
     <AssemblyName>HenksHotkeys</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>..\Images\HenksHotkeys.ico</ApplicationIcon>
+    <ApplicationIcon>Images\HenksHotkeys.ico</ApplicationIcon>
     <Version>2.3.0</Version>
     <Product>Henk's Hotkeys</Product>
     <AssemblyTitle>Henk's Hotkeys</AssemblyTitle>
@@ -27,16 +27,20 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
-  <!-- Twemoji PNGs and the tray icon are embedded into the assembly manifest
-       (EmbeddedResource works for files outside the project cone, unlike WPF
-       Resource), so there are no loose files at runtime and everything bundles
-       into a future single-file exe. Loaded via Assembly.GetManifestResourceStream
-       using the LogicalName below. -->
+  <!-- Twemoji PNGs and the tray icon are embedded into the assembly manifest, so
+       there are no loose files at runtime and everything bundles into the
+       single-file exe. Loaded via Assembly.GetManifestResourceStream using the
+       LogicalName below. The Remove lines stop the SDK default globs from also
+       picking these up as None/Content/Resource (which would be a duplicate-item
+       error now that they live inside the project). -->
   <ItemGroup>
-    <EmbeddedResource Include="..\Images\Twemoji\*.png">
+    <None Remove="Images\**" />
+    <Content Remove="Images\**" />
+    <Resource Remove="Images\**" />
+    <EmbeddedResource Include="Images\Twemoji\*.png">
       <LogicalName>twemoji.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\Images\HenksHotkeys.ico">
+    <EmbeddedResource Include="Images\HenksHotkeys.ico">
       <LogicalName>app.ico</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
