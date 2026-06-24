@@ -117,10 +117,45 @@ internal static class TextSender
     }
   }
 
+  /// <summary>
+  /// One resolved keystroke from an AHK-flavoured send string: a virtual key when
+  /// <see cref="Vk"/> is non-zero, otherwise the Unicode character <see cref="Ch"/>.
+  /// </summary>
+  internal readonly record struct SendKey( ushort Vk, char Ch );
+
   // Parse the AHK-flavoured string and emit the corresponding input events.
   private static void SendKeystrokes( string s )
   {
-    var inputs = new List<INPUT>( s.Length * 2 );
+    IReadOnlyList<SendKey> keys = ParseSends( s );
+    if( keys.Count == 0 )
+    {
+      return;
+    }
+
+    var inputs = new List<INPUT>( keys.Count * 2 );
+    foreach( SendKey k in keys )
+    {
+      if( k.Vk != 0 )
+      {
+        AppendVk( inputs, k.Vk );
+      }
+      else
+      {
+        AppendUnicode( inputs, k.Ch );
+      }
+    }
+
+    INPUT[] arr = inputs.ToArray();
+    SendInput( (uint)arr.Length, arr, SysMarshal.SizeOf<INPUT>() );
+  }
+
+  // Pure: turn an AHK-flavoured send string into a sequence of keystrokes.
+  // Interprets brace escapes ({!} {#} {@} {+} {^} {{} {}}), named keys
+  // ({Enter} {Left} {Right} {Up} {Down} {Backspace}/{BS} {Tab} {Space}) and the
+  // control chars from `n / `t / `b. Unknown {tokens} are dropped, lone {/} stay literal.
+  internal static IReadOnlyList<SendKey> ParseSends( string s )
+  {
+    var keys = new List<SendKey>( s.Length );
     int i = 0;
     while( i < s.Length )
     {
@@ -131,8 +166,7 @@ internal static class TextSender
         int close = s.IndexOf( '}', i + 1 );
         if( close > i )
         {
-          string token = s.Substring( i + 1, close - i - 1 );
-          AppendToken( inputs, token );
+          AppendToken( keys, s.Substring( i + 1, close - i - 1 ) );
           i = close + 1;
           continue;
         }
@@ -140,44 +174,39 @@ internal static class TextSender
 
       switch( c )
       {
-        case '\n': AppendVk( inputs, VK_RETURN ); break;
-        case '\r':                                break; // ignore; \r\n collapses to one Enter
-        case '\b': AppendVk( inputs, VK_BACK   ); break;
-        case '\t': AppendVk( inputs, VK_TAB    ); break;
-        default:   AppendUnicode( inputs, c    ); break;
+        case '\n': keys.Add( new SendKey( VK_RETURN, '\0' ) ); break;
+        case '\r':                                              break; // ignore; \r\n collapses to one Enter
+        case '\b': keys.Add( new SendKey( VK_BACK,   '\0' ) ); break;
+        case '\t': keys.Add( new SendKey( VK_TAB,    '\0' ) ); break;
+        default:   keys.Add( new SendKey( 0, c )            ); break;
       }
       i++;
     }
-
-    if( inputs.Count > 0 )
-    {
-      INPUT[] arr = inputs.ToArray();
-      SendInput( (uint)arr.Length, arr, SysMarshal.SizeOf<INPUT>() );
-    }
+    return keys;
   }
 
-  private static void AppendToken( List<INPUT> inputs, string token )
+  private static void AppendToken( List<SendKey> keys, string token )
   {
     // Single-character literal escapes ({!} {#} {@} {+} {^} {{} {}}).
     if( token.Length == 1 && "!#@+^{}".Contains( token[0] ) )
     {
-      AppendUnicode( inputs, token[0] );
+      keys.Add( new SendKey( 0, token[0] ) );
       return;
     }
 
     switch( token.ToLowerInvariant() )
     {
       case "enter":
-      case "return":    AppendVk( inputs, VK_RETURN ); break;
-      case "left":      AppendVk( inputs, VK_LEFT   ); break;
-      case "right":     AppendVk( inputs, VK_RIGHT  ); break;
-      case "up":        AppendVk( inputs, VK_UP     ); break;
-      case "down":      AppendVk( inputs, VK_DOWN   ); break;
+      case "return":    keys.Add( new SendKey( VK_RETURN, '\0' ) ); break;
+      case "left":      keys.Add( new SendKey( VK_LEFT,   '\0' ) ); break;
+      case "right":     keys.Add( new SendKey( VK_RIGHT,  '\0' ) ); break;
+      case "up":        keys.Add( new SendKey( VK_UP,     '\0' ) ); break;
+      case "down":      keys.Add( new SendKey( VK_DOWN,   '\0' ) ); break;
       case "backspace":
-      case "bs":        AppendVk( inputs, VK_BACK   ); break;
-      case "tab":       AppendVk( inputs, VK_TAB    ); break;
-      case "space":     AppendUnicode( inputs, ' '  ); break;
-      default:          /* unknown token: ignore */    break;
+      case "bs":        keys.Add( new SendKey( VK_BACK,   '\0' ) ); break;
+      case "tab":       keys.Add( new SendKey( VK_TAB,    '\0' ) ); break;
+      case "space":     keys.Add( new SendKey( 0, ' ' )          ); break;
+      default:          /* unknown token: ignore */                break;
     }
   }
 
