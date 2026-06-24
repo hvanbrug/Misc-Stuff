@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\HenksHotkeys-CSharp\HenksHotkeys.csproj" />
+    <ProjectReference Include="..\HenksHotkeys\HenksHotkeys.csproj" />
   </ItemGroup>
 
 </Project>

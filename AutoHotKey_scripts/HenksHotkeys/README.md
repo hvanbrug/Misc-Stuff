@@ -9,7 +9,7 @@ text to whatever window was active, plus global hotkeys and a tray icon.
 ## Build & run
 
 ```
-cd HenksHotkeys-CSharp
+cd HenksHotkeys
 dotnet build -c Release
 dotnet run -c Release
 ```
