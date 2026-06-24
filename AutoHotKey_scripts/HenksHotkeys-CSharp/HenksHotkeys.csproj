@@ -34,6 +34,10 @@
     <Using Remove="System.Drawing" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
   <!-- Twemoji PNGs and the tray icon are embedded into the assembly manifest
        (EmbeddedResource works for files outside the project cone, unlike WPF
        Resource), so there are no loose files at runtime and everything bundles

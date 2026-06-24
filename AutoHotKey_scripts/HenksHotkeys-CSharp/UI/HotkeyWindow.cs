@@ -87,8 +87,8 @@ internal sealed class HotkeyWindow : Window
     Width     = m_fullWidth;
     Height    = m_fullHeight;
 
-    m_favX = AppState.Ini.FavX;
-    m_favY = AppState.Ini.FavY;
+    m_favX = AppState.Settings.FavX;
+    m_favY = AppState.Settings.FavY;
 
     m_activeWinTimer.Tick += ( _, _ ) => TrackActiveWindow();
     m_activeWinTimer.Start();
@@ -182,13 +182,13 @@ internal sealed class HotkeyWindow : Window
       m_tabs.Items.Add( item );
     }
 
-    int last = AppState.Ini.LastTab - 1;
+    int last = AppState.Settings.LastTab - 1;
     m_tabs.SelectedIndex = last >= 0 && last < m_tabs.Items.Count ? last : 0;
     m_tabs.SelectionChanged += ( _, _ ) =>
     {
       if( m_tabs.SelectedIndex >= 0 )
       {
-        AppState.Ini.SetLastTab( m_tabs.SelectedIndex + 1 );
+        AppState.Settings.SetLastTab( m_tabs.SelectedIndex + 1 );
       }
     };
   }
@@ -397,7 +397,7 @@ internal sealed class HotkeyWindow : Window
     double defaultH = viewport + 64;
 
     double screenH = SystemParameters.PrimaryScreenHeight;
-    int    savedH  = AppState.Ini.WndHeight;
+    int    savedH  = AppState.Settings.WndHeight;
     m_fullHeight = savedH >= 140 && savedH <= screenH ? savedH : defaultH;
   }
 
@@ -418,20 +418,20 @@ internal sealed class HotkeyWindow : Window
                                 NativeMethods.SWP_NOSIZE |
                                 NativeMethods.SWP_NOACTIVATE );
 
-    if( AppState.Ini.IsCollapsed )
+    if( AppState.Settings.IsCollapsed )
     {
       SetCollapsed( true, persist: false );
     }
 
     InstallWheelHook();
-    AppState.Ini.SetWndOpen( true );
+    AppState.Settings.SetWndOpen( true );
   }
 
   public void HideUi()
   {
     RemoveWheelHook();
     Hide();
-    AppState.Ini.SetWndOpen( false );
+    AppState.Settings.SetWndOpen( false );
   }
 
   public void ToggleUi()
@@ -447,7 +447,7 @@ internal sealed class HotkeyWindow : Window
       return;
     }
 
-    if( AppState.Ini.WndX is int px && AppState.Ini.WndY is int py )
+    if( AppState.Settings.WndX is int px && AppState.Settings.WndY is int py )
     {
       MoveTo( px, py );
       return;
@@ -522,7 +522,7 @@ internal sealed class HotkeyWindow : Window
 
     if( persist )
     {
-      AppState.Ini.SetCollapsed( collapse );
+      AppState.Settings.SetCollapsed( collapse );
     }
   }
 
@@ -545,19 +545,19 @@ internal sealed class HotkeyWindow : Window
     NativeMethods.GetWindowRect( m_hwnd, out NativeMethods.RECT rc );
     m_favX = rc.Left;
     m_favY = rc.Top;
-    AppState.Ini.SetFav( rc.Left, rc.Top );
+    AppState.Settings.SetFav( rc.Left, rc.Top );
   }
 
   public void MoveToFavouriteSpot()
   {
-    m_favX = AppState.Ini.FavX;
-    m_favY = AppState.Ini.FavY;
+    m_favX = AppState.Settings.FavX;
+    m_favY = AppState.Settings.FavY;
     if( (m_favX is int fx) &&
         (m_favY is int fy) &&
         (m_hwnd != nint.Zero) )
     {
       MoveTo( fx, fy );
-      AppState.Ini.SetWndPos( fx, fy );
+      AppState.Settings.SetWndPos( fx, fy );
     }
   }
 
@@ -798,13 +798,13 @@ internal sealed class HotkeyWindow : Window
     if( m_hwnd != IntPtr.Zero )
     {
       NativeMethods.GetWindowRect( m_hwnd, out NativeMethods.RECT rc );
-      AppState.Ini.SetWndPos( rc.Left, rc.Top );
+      AppState.Settings.SetWndPos( rc.Left, rc.Top );
     }
 
     if( !m_collapsed && !m_suppressResizePersist )
     {
       m_fullHeight = ActualHeight;
-      AppState.Ini.SetWndHeight( (int)Math.Round( ActualHeight ) );
+      AppState.Settings.SetWndHeight( (int)Math.Round( ActualHeight ) );
     }
   }
 

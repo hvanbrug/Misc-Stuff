@@ -34,9 +34,9 @@ public partial class App
       return;
     }
 
-    AppState.InitIni();
-    AppState.UseClipSend     = AppState.Ini.IsClipSendMode;
-    AppState.StripSendEmojis = AppState.Ini.IsStripCommentEmojis;
+    AppState.InitSettings();
+    AppState.UseClipSend     = AppState.Settings.IsClipSendMode;
+    AppState.StripSendEmojis = AppState.Settings.IsStripCommentEmojis;
 
     BuildTabModels();
 
@@ -46,7 +46,7 @@ public partial class App
     RegisterHotkeys();
     BuildMenusAndTray();
 
-    if( AppState.Ini.IsWndOpen )
+    if( AppState.Settings.IsWndOpen )
     {
       m_window.ShowUi();
     }

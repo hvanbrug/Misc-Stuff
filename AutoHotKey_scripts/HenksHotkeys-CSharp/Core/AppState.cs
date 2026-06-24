@@ -1,4 +1,3 @@
-using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using HenksHotkeys.UI;
@@ -16,10 +15,7 @@ internal static class AppState
   public static bool   StripSendEmojis { get; set; }
   public static IntPtr ActiveWindow    { get; set; } = IntPtr.Zero;
 
-  public static IniFile Ini { get; private set; } = null!;
-
-  public static string BaseDir => AppContext.BaseDirectory;
-  public static string IniPath => Path.Combine( BaseDir, "HenksHotkeys.ini" );
+  public static SettingsStore Settings { get; private set; } = null!;
 
   public static HotkeyWindow Window { get; set; } = null!;
 
@@ -28,9 +24,9 @@ internal static class AppState
   /// <summary>(label, description) pairs for the ListHotkeys (^+a) view.</summary>
   public static List<(string Label, string Desc)> HotkeyHelp { get; } = new();
 
-  public static void InitIni()
+  public static void InitSettings()
   {
-    Ini = new IniFile( IniPath );
+    Settings = new SettingsStore();
   }
 
   // ── Comments-tab emoji stripping (StripEmojis in Utilities.ahk) ──

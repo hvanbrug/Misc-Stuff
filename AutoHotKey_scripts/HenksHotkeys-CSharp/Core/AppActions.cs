@@ -18,14 +18,14 @@ internal static class AppActions
   public static void ToggleClipboardSendMode()
   {
     AppState.UseClipSend = !AppState.UseClipSend;
-    AppState.Ini.SetClipSendMode( AppState.UseClipSend );
+    AppState.Settings.SetClipSendMode( AppState.UseClipSend );
     AppState.Window?.UpdateClipIndicator( AppState.UseClipSend );
   }
 
   public static void ToggleStripSendEmojis()
   {
     AppState.StripSendEmojis = !AppState.StripSendEmojis;
-    AppState.Ini.SetStripCommentEmojis( AppState.StripSendEmojis );
+    AppState.Settings.SetStripCommentEmojis( AppState.StripSendEmojis );
     AppState.Window?.UpdateStripIndicator( AppState.StripSendEmojis );
   }
 

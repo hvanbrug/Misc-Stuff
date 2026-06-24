@@ -41,7 +41,7 @@ next to the executable; the Emojis tab loads those images at runtime.
 | Area        | Files |
 |-------------|-------|
 | Entry point | `Program.cs`, `HotkeyAppContext.cs` |
-| Core        | `Core/` — `AppState`, `IniFile`, `TextSender`, `HotkeyParser`, `GlobalHotkeyManager`, `HotkeyRegistry`, `AppActions` |
+| Core        | `Core/` — `AppState`, `Settings` + `SettingsStore` (JSON in %LocalAppData%), `TextSender`, `HotkeyParser`, `GlobalHotkeyManager`, `HotkeyRegistry`, `AppActions` |
 | Interop     | `Native/NativeMethods.cs` |
 | UI          | `UI/` — `HotkeyWindow`, `TabModel`, `TabPanelControl`, `ThemedButton`, `DarkTabControl`, `Theme`, `SymbolElement`, `UiText`, `HotkeyListForm` |
 | Emoji       | `Emoji/EmojiImageProvider.cs` |
