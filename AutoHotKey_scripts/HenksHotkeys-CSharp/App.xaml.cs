@@ -140,10 +140,11 @@ public partial class App
   {
     try
     {
-      string ico = Path.Combine( AppState.BaseDir, "Images", "HenksHotkeys.ico" );
-      if( File.Exists( ico ) )
+      using Stream? s = System.Reflection.Assembly.GetExecutingAssembly()
+        .GetManifestResourceStream( "app.ico" );
+      if( s is not null )
       {
-        return new Drawing.Icon( ico );
+        return new Drawing.Icon( s );
       }
     }
     catch { /* fall through */ }

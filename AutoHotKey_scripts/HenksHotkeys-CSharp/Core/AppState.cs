@@ -18,9 +18,8 @@ internal static class AppState
 
   public static IniFile Ini { get; private set; } = null!;
 
-  public static string BaseDir   => AppContext.BaseDirectory;
-  public static string IniPath   => Path.Combine( BaseDir, "HenksHotkeys.ini" );
-  public static string TwemojiDir => Path.Combine( BaseDir, "Images", "Twemoji" );
+  public static string BaseDir => AppContext.BaseDirectory;
+  public static string IniPath => Path.Combine( BaseDir, "HenksHotkeys.ini" );
 
   public static HotkeyWindow Window { get; set; } = null!;
 

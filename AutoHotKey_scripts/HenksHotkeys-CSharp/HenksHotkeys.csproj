@@ -34,14 +34,18 @@
     <Using Remove="System.Drawing" />
   </ItemGroup>
 
-  <!-- Twemoji PNGs are loaded from disk at runtime; copy them next to the exe. -->
+  <!-- Twemoji PNGs and the tray icon are embedded into the assembly manifest
+       (EmbeddedResource works for files outside the project cone, unlike WPF
+       Resource), so there are no loose files at runtime and everything bundles
+       into a future single-file exe. Loaded via Assembly.GetManifestResourceStream
+       using the LogicalName below. -->
   <ItemGroup>
-    <None Include="..\Images\Twemoji\*.png" Link="Images\Twemoji\%(Filename)%(Extension)">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\Images\HenksHotkeys.ico" Link="Images\HenksHotkeys.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <EmbeddedResource Include="..\Images\Twemoji\*.png">
+      <LogicalName>twemoji.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\Images\HenksHotkeys.ico">
+      <LogicalName>app.ico</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

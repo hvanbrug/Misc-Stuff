@@ -1,19 +1,20 @@
 using System.IO;
+using System.Reflection;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using HenksHotkeys.Core;
 
 namespace HenksHotkeys.Emoji;
 
 /// <summary>
-/// Loads Twemoji PNG images for emoji characters as WPF <see cref="ImageSource"/>s
-/// (EmojiSupport.ahk debug path: Images\Twemoji\{stem}.png). The grey backdrop the
-/// original composited in is now supplied by the emoji button style, so the
-/// transparent PNG can be used directly. Returns null when no PNG exists, so the
-/// caller falls back to the emoji-character glyph.
+/// Loads Twemoji PNG images for emoji characters from the assembly's embedded
+/// resources (EmbeddedResource items named "twemoji.{stem}.png" in the csproj),
+/// so there are no loose files at runtime. The grey backdrop is supplied by the
+/// emoji button style, so the transparent PNG is used directly. Returns null when
+/// no image exists, so the caller falls back to the emoji-character glyph.
 /// </summary>
 internal static class EmojiImageProvider
 {
+  private static readonly Assembly s_asm = Assembly.GetExecutingAssembly();
   private static readonly Dictionary<string, (ImageSource? Img, string Stem)> s_cache = new( StringComparer.Ordinal );
 
   public readonly record struct Result( ImageSource? Image, string Stem );
@@ -50,7 +51,7 @@ internal static class EmojiImageProvider
 
   /// <summary>
   /// Returns the emoji image (decoded to roughly <paramref name="pixelSize"/>) plus
-  /// the resolved filename stem. <see cref="Result.Image"/> is null if no PNG exists.
+  /// the resolved filename stem. <see cref="Result.Image"/> is null if no image exists.
   /// </summary>
   public static Result Get( string ch, int pixelSize )
   {
@@ -65,29 +66,36 @@ internal static class EmojiImageProvider
       return new Result( hit.Img, hit.Stem );
     }
 
-    ImageSource? image = null;
-    string path = Path.Combine( AppState.TwemojiDir, stem + ".png" );
-    if( File.Exists( path ) )
-    {
-      try
-      {
-        var bmp = new BitmapImage();
-        bmp.BeginInit();
-        bmp.CacheOption       = BitmapCacheOption.OnLoad;
-        bmp.CreateOptions     = BitmapCreateOptions.IgnoreColorProfile;
-        bmp.DecodePixelWidth  = Math.Max( 1, pixelSize );
-        bmp.UriSource         = new Uri( path, UriKind.Absolute );
-        bmp.EndInit();
-        bmp.Freeze();
-        image = bmp;
-      }
-      catch
-      {
-        image = null;
-      }
-    }
-
+    ImageSource? image = Decode( stem, pixelSize );
     s_cache[stem] = ( image, stem );
     return new Result( image, stem );
+  }
+
+  private static ImageSource? Decode( string stem, int pixelSize )
+  {
+    // GetManifestResourceStream returns null (no exception) when the emoji has no
+    // embedded image, so the caller falls back to the glyph.
+    using Stream? s = s_asm.GetManifestResourceStream( "twemoji." + stem + ".png" );
+    if( s is null )
+    {
+      return null;
+    }
+
+    try
+    {
+      var bmp = new BitmapImage();
+      bmp.BeginInit();
+      bmp.CacheOption      = BitmapCacheOption.OnLoad;   // read fully now; stream can be disposed after
+      bmp.CreateOptions    = BitmapCreateOptions.IgnoreColorProfile;
+      bmp.DecodePixelWidth = Math.Max( 1, pixelSize );
+      bmp.StreamSource     = s;
+      bmp.EndInit();
+      bmp.Freeze();
+      return bmp;
+    }
+    catch
+    {
+      return null;
+    }
   }
 }
