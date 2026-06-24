@@ -189,6 +189,12 @@ internal static class NativeMethods
   [DllImport( "user32.dll" )]
   public static extern uint GetDpiForWindow( IntPtr hwnd );
 
+  [DllImport( "user32.dll", EntryPoint = "GetWindowLongPtrW" )]
+  public static extern IntPtr GetWindowLongPtr( IntPtr hWnd, int nIndex );
+
+  [DllImport( "user32.dll", EntryPoint = "SetWindowLongPtrW" )]
+  public static extern IntPtr SetWindowLongPtr( IntPtr hWnd, int nIndex, IntPtr dwNewLong );
+
   [DllImport( "dwmapi.dll" )]
   public static extern int DwmSetWindowAttribute( IntPtr hwnd, int attr, ref int attrValue, int attrSize );
 

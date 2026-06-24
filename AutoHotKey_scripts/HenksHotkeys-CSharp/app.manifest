@@ -17,4 +17,12 @@
     </application>
   </compatibility>
 
+  <!-- Per-monitor DPI v2: WPF then scales in device-independent units, so no
+       manual pixel scaling is needed (unlike the WinForms version). -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
+
 </assembly>

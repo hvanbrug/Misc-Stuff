@@ -1,22 +1,22 @@
-using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Text;
+using System.IO;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using HenksHotkeys.Core;
-using HenksHotkeys.UI;
 
 namespace HenksHotkeys.Emoji;
 
 /// <summary>
-/// Loads Twemoji PNG images for emoji characters and composites them onto a grey
-/// backdrop, reproducing EmojiSupport.ahk (debug path: Images\Twemoji\{stem}.png).
-/// Returns null when no matching PNG exists, so the caller falls back to the
-/// emoji-character text label.
+/// Loads Twemoji PNG images for emoji characters as WPF <see cref="ImageSource"/>s
+/// (EmojiSupport.ahk debug path: Images\Twemoji\{stem}.png). The grey backdrop the
+/// original composited in is now supplied by the emoji button style, so the
+/// transparent PNG can be used directly. Returns null when no PNG exists, so the
+/// caller falls back to the emoji-character glyph.
 /// </summary>
 internal static class EmojiImageProvider
 {
-  private static readonly Dictionary<string, (Bitmap? Bmp, string Stem)> s_cache = new( StringComparer.Ordinal );
+  private static readonly Dictionary<string, (ImageSource? Img, string Stem)> s_cache = new( StringComparer.Ordinal );
 
-  public readonly record struct Result( Bitmap? Image, string Stem );
+  public readonly record struct Result( ImageSource? Image, string Stem );
 
   /// <summary>
   /// Twemoji filename stem for an emoji string (e.g. "😀" → "1f600",
@@ -49,8 +49,8 @@ internal static class EmojiImageProvider
   }
 
   /// <summary>
-  /// Returns a composited bitmap of the given pixel size for the emoji, plus the
-  /// resolved filename stem. <see cref="Result.Image"/> is null if no PNG exists.
+  /// Returns the emoji image (decoded to roughly <paramref name="pixelSize"/>) plus
+  /// the resolved filename stem. <see cref="Result.Image"/> is null if no PNG exists.
   /// </summary>
   public static Result Get( string ch, int pixelSize )
   {
@@ -60,32 +60,34 @@ internal static class EmojiImageProvider
       return new Result( null, "" );
     }
 
-    string cacheKey = stem + "@" + pixelSize;
-    if( s_cache.TryGetValue( cacheKey, out var hit ) )
+    if( s_cache.TryGetValue( stem, out var hit ) )
     {
-      return new Result( hit.Bmp, hit.Stem );
+      return new Result( hit.Img, hit.Stem );
     }
 
-    Bitmap? composed = null;
-    string  path     = Path.Combine( AppState.TwemojiDir, stem + ".png" );
+    ImageSource? image = null;
+    string path = Path.Combine( AppState.TwemojiDir, stem + ".png" );
     if( File.Exists( path ) )
     {
       try
       {
-        using var src = (Bitmap)Image.FromFile( path );
-        composed = new Bitmap( pixelSize, pixelSize );
-        using Graphics g = Graphics.FromImage( composed );
-        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-        g.Clear( Theme.EmojiBackdrop );
-        g.DrawImage( src, new Rectangle( 0, 0, pixelSize, pixelSize ) );
+        var bmp = new BitmapImage();
+        bmp.BeginInit();
+        bmp.CacheOption       = BitmapCacheOption.OnLoad;
+        bmp.CreateOptions     = BitmapCreateOptions.IgnoreColorProfile;
+        bmp.DecodePixelWidth  = Math.Max( 1, pixelSize );
+        bmp.UriSource         = new Uri( path, UriKind.Absolute );
+        bmp.EndInit();
+        bmp.Freeze();
+        image = bmp;
       }
       catch
       {
-        composed = null;
+        image = null;
       }
     }
 
-    s_cache[cacheKey] = ( composed, stem );
-    return new Result( composed, stem );
+    s_cache[stem] = ( image, stem );
+    return new Result( image, stem );
   }
 }

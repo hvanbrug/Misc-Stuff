@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
+using System.Windows.Interop;
 using HenksHotkeys.Native;
 using HenksHotkeys.UI;
 
@@ -80,11 +81,15 @@ internal static class AppActions
     var area = Screen.PrimaryScreen?.WorkingArea ?? default;
     sb.AppendLine( $"Work area: {area.Left}, {area.Top}, {area.Right}, {area.Bottom}" );
 
-    if( AppState.Window is { } w && w.IsHandleCreated )
+    if( AppState.Window is { } w )
     {
-      NativeMethods.GetWindowRect( w.Handle, out NativeMethods.RECT rc );
-      sb.AppendLine( $"Window: {rc.Width} x {rc.Height}  at ({rc.Left}, {rc.Top})" );
-      sb.AppendLine( $"Client: {w.ClientSize.Width} x {w.ClientSize.Height}" );
+      IntPtr hwnd = new WindowInteropHelper( w ).Handle;
+      if( hwnd != IntPtr.Zero )
+      {
+        NativeMethods.GetWindowRect( hwnd, out NativeMethods.RECT rc );
+        sb.AppendLine( $"Window: {rc.Width} x {rc.Height}  at ({rc.Left}, {rc.Top})" );
+      }
+      sb.AppendLine( $"Size (DIP): {w.ActualWidth:0} x {w.ActualHeight:0}" );
     }
 
     MessageBox.Show( sb.ToString(), "Test Function" );
@@ -92,7 +97,6 @@ internal static class AppActions
 
   public static void ListHotkeys()
   {
-    using var form = new HotkeyListForm();
-    form.ShowDialog();
+    new HotkeyListWindow().Show();
   }
 }

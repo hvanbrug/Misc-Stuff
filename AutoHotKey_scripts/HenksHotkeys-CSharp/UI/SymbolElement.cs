@@ -1,5 +1,3 @@
-using System.Windows.Forms;
-
 namespace HenksHotkeys.UI;
 
 /// <summary>
@@ -22,8 +20,8 @@ internal sealed class SymbolElement
   public string Hotkey   = "";
   public string Align    = "center";
 
-  public Action ClickAction  = static () => { };
+  public Action ClickAction = static () => { };
 
-  /// <summary>The WinForms button created for this element (set at layout time).</summary>
-  public Control? Ctrl;
+  /// <summary>The control created for this element (set at layout time).</summary>
+  public object? Ctrl;
 }
