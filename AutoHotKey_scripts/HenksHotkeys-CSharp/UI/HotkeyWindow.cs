@@ -24,7 +24,6 @@ namespace HenksHotkeys.UI;
 /// </summary>
 internal sealed class HotkeyWindow : Window
 {
-  private const int WM_MOVING       = 0x0216;
   private const int WM_EXITSIZEMOVE = 0x0232;
   private const int DoubleClickMs   = 400;
 
@@ -48,6 +47,7 @@ internal sealed class HotkeyWindow : Window
   private int  m_dragOffsetY;
   private bool m_snappedToTop;
   private bool m_snappedToFav;
+  private bool m_dragging;
 
   private IntPtr m_hwnd;
   private readonly DispatcherTimer m_activeWinTimer = new() { Interval = TimeSpan.FromMilliseconds( 200 ) };
@@ -507,6 +507,7 @@ internal sealed class HotkeyWindow : Window
         m_toggleBtn.ToolTip       = "Shrink window";
 
         ResizeMode = ResizeMode.CanResize;
+        DisableMaximize(); // CanResize re-adds WS_MAXIMIZEBOX; strip it again
         MinWidth   = m_fullWidth;
         MaxWidth   = m_fullWidth;
         Width      = m_fullWidth;
@@ -597,9 +598,27 @@ internal sealed class HotkeyWindow : Window
     long exNew = ex.ToInt64() | NativeMethods.WS_EX_NOACTIVATE | NativeMethods.WS_EX_TOOLWINDOW;
     NativeMethods.SetWindowLongPtr( m_hwnd, NativeMethods.GWL_EXSTYLE, new IntPtr( exNew ) );
 
+    DisableMaximize();
     Theme.ApplyDarkFrame( m_hwnd );
 
     HwndSource.FromHwnd( m_hwnd )?.AddHook( WndHook );
+  }
+
+  // ResizeMode.CanResize gives the window WS_MAXIMIZEBOX, which makes it eligible
+  // for the Aero-Snap "drag to the top = maximize" gesture — that fills the height
+  // and pushes the resize edges off-screen. Stripping WS_MAXIMIZEBOX disables that
+  // gesture while leaving edge-resize (WS_THICKFRAME / WindowChrome) intact. WPF
+  // re-adds the style whenever ResizeMode is set back to CanResize, so this is
+  // re-applied after each expand.
+  private void DisableMaximize()
+  {
+    if( m_hwnd == IntPtr.Zero )
+    {
+      return;
+    }
+    const long WS_MAXIMIZEBOX = 0x00010000;
+    long style = NativeMethods.GetWindowLongPtr( m_hwnd, NativeMethods.GWL_STYLE ).ToInt64();
+    NativeMethods.SetWindowLongPtr( m_hwnd, NativeMethods.GWL_STYLE, new IntPtr( style & ~WS_MAXIMIZEBOX ) );
   }
 
   private void EnsureHwnd()
@@ -612,21 +631,46 @@ internal sealed class HotkeyWindow : Window
 
   private IntPtr WndHook( IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled )
   {
-    switch( msg )
+    // WM_EXITSIZEMOVE fires after an edge-resize (the resize still uses the OS
+    // sizing loop via WindowChrome); moves are handled manually below.
+    if( msg == WM_EXITSIZEMOVE )
     {
-      case WM_MOVING:
-        if( HandleMoving( lParam ) )
-        {
-          handled = true;
-          return new IntPtr( 1 );
-        }
-        break;
-
-      case WM_EXITSIZEMOVE:
-        PersistPositionAndSize();
-        break;
+      PersistPositionAndSize();
+    }
+    else if( msg == NativeMethods.WM_GETMINMAXINFO && !m_collapsed && m_hwnd != IntPtr.Zero )
+    {
+      ClampMinMax( lParam );
+      handled = true;
     }
     return IntPtr.Zero;
+  }
+
+  // Cap the window's size and the maximized placement to the work area (minus a
+  // margin) and lock the width. This guarantees at least one edge stays on-screen
+  // even if something (Aero-Snap, Win+Up) tries to maximize the window — so it can
+  // always be grabbed and resized/dragged back.
+  private void ClampMinMax( IntPtr lParam )
+  {
+    const int margin = 32;
+
+    var mmi = Marshal.PtrToStructure<NativeMethods.MINMAXINFO>( lParam );
+    NativeMethods.RECT work = NativeMethods.GetWorkAreaForWindow( m_hwnd );
+
+    // Lock to the intended full width (physical px), NOT the current window width:
+    // during a collapse→expand this message can fire while the window is still at
+    // the collapsed width, and clamping to that would trap the expand at the
+    // narrow size.
+    double scale = NativeMethods.GetDpiForWindow( m_hwnd ) / 96.0;
+    int width = (int)Math.Round( m_fullWidth * scale );
+    int minH  = (int)Math.Round( 140 * scale );
+    int maxH  = Math.Max( minH, work.Height - margin );
+
+    mmi.ptMaxPosition  = new NativeMethods.POINT { X = work.Left, Y = work.Top };
+    mmi.ptMaxSize      = new NativeMethods.POINT { X = width, Y = maxH };
+    mmi.ptMinTrackSize = new NativeMethods.POINT { X = width, Y = minH };
+    mmi.ptMaxTrackSize = new NativeMethods.POINT { X = width, Y = maxH };
+
+    Marshal.StructureToPtr( mmi, lParam, false );
   }
 
   // ── Drag move + snap (physical px) ───────────────────────────────
@@ -636,17 +680,105 @@ internal sealed class HotkeyWindow : Window
     BeginWindowDrag();
   }
 
-  // Record the cursor-to-window offset (so the WM_MOVING snap can recover the
-  // cursor-implied position) and start the OS move loop.
+  // Manual drag (deliberately NOT DragMove / the OS move loop): moving the window
+  // ourselves with SetWindowPos means Windows' Aero-Snap never engages, so a drag
+  // to the top edge can't maximize the window. We apply our own top/favourite snap.
   private void BeginWindowDrag()
   {
     EnsureHwnd();
     NativeMethods.GetCursorPos( out NativeMethods.POINT cur );
     NativeMethods.GetWindowRect( m_hwnd, out NativeMethods.RECT rc );
-    m_dragOffsetX = cur.X - rc.Left;
-    m_dragOffsetY = cur.Y - rc.Top;
+    m_dragOffsetX  = cur.X - rc.Left;
+    m_dragOffsetY  = cur.Y - rc.Top;
+    m_snappedToTop = false;
+    m_snappedToFav = false;
+    m_dragging     = true;
+    CaptureMouse();
+  }
 
-    try { DragMove(); } catch { /* mouse already released */ }
+  protected override void OnMouseMove( MouseEventArgs e )
+  {
+    base.OnMouseMove( e );
+    if( !m_dragging )
+    {
+      return;
+    }
+
+    NativeMethods.GetCursorPos( out NativeMethods.POINT cur );
+    ( int left, int top ) = ApplyDragSnap( cur.X - m_dragOffsetX, cur.Y - m_dragOffsetY );
+    NativeMethods.SetWindowPos( m_hwnd, IntPtr.Zero, left, top, 0, 0,
+      NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE );
+  }
+
+  protected override void OnMouseLeftButtonUp( MouseButtonEventArgs e )
+  {
+    base.OnMouseLeftButtonUp( e );
+    EndDrag();
+  }
+
+  protected override void OnLostMouseCapture( MouseEventArgs e )
+  {
+    base.OnLostMouseCapture( e );
+    EndDrag();
+  }
+
+  private void EndDrag()
+  {
+    if( !m_dragging )
+    {
+      return;
+    }
+    m_dragging = false;
+    ReleaseMouseCapture();
+    PersistPositionAndSize();
+  }
+
+  // Top-of-screen and favourite-spot snapping with release hysteresis, applied to
+  // the cursor-implied top-left (UI.ahk OnWindowMoving).
+  private (int Left, int Top) ApplyDragSnap( int left, int top )
+  {
+    const int snapThreshold    = 20;
+    const int releaseThreshold = 30;
+
+    if( m_favX is int favX && m_favY is int favY )
+    {
+      if( m_snappedToFav )
+      {
+        if( Math.Abs( left - favX ) >= releaseThreshold || Math.Abs( top - favY ) >= releaseThreshold )
+        {
+          m_snappedToFav = false;
+        }
+        else
+        {
+          return ( favX, favY );
+        }
+      }
+      else if( Math.Abs( left - favX ) <= snapThreshold && Math.Abs( top - favY ) <= snapThreshold )
+      {
+        m_snappedToFav = true;
+        m_snappedToTop = false;
+        return ( favX, favY );
+      }
+    }
+
+    if( m_snappedToTop )
+    {
+      if( top >= releaseThreshold )
+      {
+        m_snappedToTop = false;
+      }
+      else
+      {
+        return ( left, 0 ); // stay snapped to the top edge, allow horizontal movement
+      }
+    }
+    else if( top <= snapThreshold )
+    {
+      m_snappedToTop = true;
+      return ( left, 0 );
+    }
+
+    return ( left, top );
   }
 
   // Make a corner control double as a drag handle: a plain click runs <paramref
@@ -718,79 +850,6 @@ internal sealed class HotkeyWindow : Window
       node = parent;
     }
     return false;
-  }
-
-  // Faithful port of UI.ahk OnWindowMoving with release hysteresis.
-  private bool HandleMoving( IntPtr lParam )
-  {
-    const int snapThreshold    = 20;
-    const int releaseThreshold = 30;
-
-    NativeMethods.RECT r = Marshal.PtrToStructure<NativeMethods.RECT>( lParam );
-    int w = r.Width;
-    int h = r.Height;
-
-    NativeMethods.GetCursorPos( out NativeMethods.POINT cur );
-    int impliedLeft = cur.X - m_dragOffsetX;
-    int impliedTop  = cur.Y - m_dragOffsetY;
-
-    if( m_favX is int favX && m_favY is int favY )
-    {
-      if( m_snappedToFav )
-      {
-        if( Math.Abs( impliedLeft - favX ) >= releaseThreshold ||
-            Math.Abs( impliedTop  - favY ) >= releaseThreshold )
-        {
-          m_snappedToFav = false;
-          SetRect( ref r, impliedLeft, impliedTop, w, h );
-        }
-        else
-        {
-          SetRect( ref r, favX, favY, w, h );
-        }
-        Marshal.StructureToPtr( r, lParam, false );
-        return true;
-      }
-
-      if( Math.Abs( r.Left - favX ) <= snapThreshold && Math.Abs( r.Top - favY ) <= snapThreshold )
-      {
-        m_snappedToFav = true;
-        m_snappedToTop = false;
-        SetRect( ref r, favX, favY, w, h );
-        Marshal.StructureToPtr( r, lParam, false );
-        return true;
-      }
-    }
-
-    if( m_snappedToTop )
-    {
-      if( impliedTop >= releaseThreshold )
-      {
-        m_snappedToTop = false;
-        r.Top = impliedTop; r.Bottom = impliedTop + h;
-      }
-      else
-      {
-        r.Top = 0; r.Bottom = h;
-      }
-      Marshal.StructureToPtr( r, lParam, false );
-      return true;
-    }
-
-    if( r.Top <= snapThreshold )
-    {
-      m_snappedToTop = true;
-      r.Top = 0; r.Bottom = h;
-      Marshal.StructureToPtr( r, lParam, false );
-      return true;
-    }
-
-    return false;
-  }
-
-  private static void SetRect( ref NativeMethods.RECT r, int left, int top, int w, int h )
-  {
-    r.Left = left; r.Top = top; r.Right = left + w; r.Bottom = top + h;
   }
 
   private void PersistPositionAndSize()

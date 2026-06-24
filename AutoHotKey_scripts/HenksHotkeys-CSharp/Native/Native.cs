@@ -224,6 +224,18 @@ internal static class NativeMethods
     public int  dwFlags;
   }
 
+  public const int WM_GETMINMAXINFO = 0x0024;
+
+  [StructLayout( LayoutKind.Sequential )]
+  public struct MINMAXINFO
+  {
+    public POINT ptReserved;
+    public POINT ptMaxSize;
+    public POINT ptMaxPosition;
+    public POINT ptMinTrackSize;
+    public POINT ptMaxTrackSize;
+  }
+
   [DllImport( "user32.dll" )]
   public static extern IntPtr MonitorFromWindow( IntPtr hwnd, int dwFlags );
 
