@@ -46,10 +46,17 @@ internal sealed class MappingViewModel : ObservableObject
   public string Unc   { get; }
 
   public ICommand ConnectCommand    { get; }
+  public ICommand ReconnectCommand  { get; }
   public ICommand DisconnectCommand { get; }
+  public ICommand UnmapCommand      { get; }
 
-  /// <summary>False for discovered "other" mappings — we have no target/credentials to (re)connect them.</summary>
+  /// <summary>False for discovered "other" mappings — we have no configured target/credentials to map them fresh.</summary>
   public bool CanConnect { get; }
+
+  /// <summary>Current state, used to enable only the actions that make sense.</summary>
+  public NetShare.Status State { get; private set; } = NetShare.Status.NotMapped;
+
+  private bool IsMapped => State is NetShare.Status.Connected or NetShare.Status.Unavailable or NetShare.Status.OtherTarget;
 
   public MappingViewModel( string drive, string unc, GroupViewModel group, MainViewModel main )
   {
@@ -57,8 +64,10 @@ internal sealed class MappingViewModel : ObservableObject
     Unc        = unc;
     CanConnect = group.IsConnectable;
 
-    ConnectCommand    = new RelayCommand( () => _ = main.ConnectMappingAsync( group, this ),    () => !main.IsBusy && CanConnect );
-    DisconnectCommand = new RelayCommand( () => _ = main.DisconnectMappingAsync( group, this ), () => !main.IsBusy );
+    ConnectCommand    = new RelayCommand( () => _ = main.ConnectMappingAsync( group, this ),    () => !main.IsBusy && CanConnect && State == NetShare.Status.NotMapped );
+    ReconnectCommand  = new RelayCommand( () => _ = main.ReconnectMappingAsync( group, this ),  () => !main.IsBusy && State == NetShare.Status.Unavailable );
+    DisconnectCommand = new RelayCommand( () => _ = main.DisconnectMappingAsync( group, this ), () => !main.IsBusy && State == NetShare.Status.Connected );
+    UnmapCommand      = new RelayCommand( () => _ = main.UnmapMappingAsync( group, this ),      () => !main.IsBusy && IsMapped );
   }
 
   private string m_statusText = "—";
@@ -79,6 +88,7 @@ internal sealed class MappingViewModel : ObservableObject
       NetShare.Status.OtherTarget => ( $"Other: {r.Remote}",       Palette.Orange, false ),
       _                           => ( NetShare.Describe( r.Code ), Palette.Red,    false ),
     };
+    State       = r.Status;
     IsConnected = connected;
     StatusText  = text;
     StatusBrush = brush;
@@ -97,7 +107,9 @@ internal sealed class GroupViewModel : ObservableObject
   public bool IsConnectable { get; }
 
   public ICommand ConnectCommand    { get; }
+  public ICommand ReconnectCommand  { get; }
   public ICommand DisconnectCommand { get; }
+  public ICommand UnmapCommand      { get; }
 
   private string m_password = "";
   public string Password { get => m_password; set => SetField( ref m_password, value ); }
@@ -110,7 +122,9 @@ internal sealed class GroupViewModel : ObservableObject
     IsConnectable = isConnectable;
 
     ConnectCommand    = new RelayCommand( () => _ = main.ConnectGroupAsync( this ),    () => !main.IsBusy && IsConnectable );
+    ReconnectCommand  = new RelayCommand( () => _ = main.ReconnectGroupAsync( this ),  () => !main.IsBusy );
     DisconnectCommand = new RelayCommand( () => _ = main.DisconnectGroupAsync( this ), () => !main.IsBusy );
+    UnmapCommand      = new RelayCommand( () => _ = main.UnmapGroupAsync( this ),      () => !main.IsBusy );
   }
 
   public static GroupViewModel FromShareGroup( ShareGroup g, MainViewModel main )
@@ -174,51 +188,47 @@ internal sealed class MainViewModel : ObservableObject
   }
 
   // Snapshot a group's data on the UI thread so the background worker never
-  // touches the observable collections / view models.
-  private static Job ToJob( GroupViewModel g )
-    => new( g.Name, g.Username, g.Password, g.Mappings.Select( m => (m.Drive, m.Unc) ).ToList() );
+  // touches the observable collections / view models. The password is passed
+  // explicitly so "reconnect" can force saved-credential use (blank password).
+  private static Job ToJob( GroupViewModel g, string pass )
+    => new( g.Name, g.Username, pass, g.Mappings.Select( m => (m.Drive, m.Unc) ).ToList() );
 
-  // Single-drive operations use the owning group's credentials.
-  private static Job OneJob( GroupViewModel g, MappingViewModel m )
-    => new( g.Name, g.Username, g.Password, new List<(string, string)> { (m.Drive, m.Unc) } );
+  private static Job OneJob( GroupViewModel g, MappingViewModel m, string pass )
+    => new( g.Name, g.Username, pass, new List<(string, string)> { (m.Drive, m.Unc) } );
 
+  // ── Per-entry ────────────────────────────────────────────────────
   public Task ConnectMappingAsync( GroupViewModel g, MappingViewModel m )
-  {
-    var jobs = new List<Job> { OneJob( g, m ) };
-    return RunAsync( $"Connect — {m.Drive}", () => ConnectJobs( jobs ) );
-  }
+    => RunAsync( $"Connect — {m.Drive}", () => ConnectJobs( new List<Job> { OneJob( g, m, g.Password ) }, "connected" ) );
+
+  public Task ReconnectMappingAsync( GroupViewModel g, MappingViewModel m )
+    => RunAsync( $"Reconnect — {m.Drive}", () => ConnectJobs( new List<Job> { OneJob( g, m, "" ) }, "reconnected" ) );
 
   public Task DisconnectMappingAsync( GroupViewModel g, MappingViewModel m )
-  {
-    var jobs = new List<Job> { OneJob( g, m ) };
-    return RunAsync( $"Disconnect — {m.Drive}", () => DisconnectJobs( jobs ) );
-  }
+    => RunAsync( $"Disconnect — {m.Drive}", () => DisconnectJobs( new List<Job> { OneJob( g, m, "" ) }, keepMapping: true ) );
 
+  public Task UnmapMappingAsync( GroupViewModel g, MappingViewModel m )
+    => RunAsync( $"Unmap — {m.Drive}", () => DisconnectJobs( new List<Job> { OneJob( g, m, "" ) }, keepMapping: false ) );
+
+  // ── Per-group ────────────────────────────────────────────────────
   public Task ConnectGroupAsync( GroupViewModel g )
-  {
-    var jobs = new List<Job> { ToJob( g ) };
-    return RunAsync( $"Connect — {g.Name}", () => ConnectJobs( jobs ) );
-  }
+    => RunAsync( $"Connect — {g.Name}", () => ConnectJobs( new List<Job> { ToJob( g, g.Password ) }, "connected" ) );
+
+  public Task ReconnectGroupAsync( GroupViewModel g )
+    => RunAsync( $"Reconnect — {g.Name}", () => ConnectJobs( new List<Job> { ToJob( g, "" ) }, "reconnected" ) );
 
   public Task DisconnectGroupAsync( GroupViewModel g )
-  {
-    var jobs = new List<Job> { ToJob( g ) };
-    return RunAsync( $"Disconnect — {g.Name}", () => DisconnectJobs( jobs ) );
-  }
+    => RunAsync( $"Disconnect — {g.Name}", () => DisconnectJobs( new List<Job> { ToJob( g, "" ) }, keepMapping: true ) );
 
-  // "All" acts on the managed (predefined) groups only — discovered "other"
-  // mappings are left alone and managed via their own row/group buttons.
+  public Task UnmapGroupAsync( GroupViewModel g )
+    => RunAsync( $"Unmap — {g.Name}", () => DisconnectJobs( new List<Job> { ToJob( g, "" ) }, keepMapping: false ) );
+
+  // ── "All" — managed (predefined) groups only; discovered "other"
+  //    mappings are left alone and handled via their own buttons. ────
   public Task ConnectAllAsync()
-  {
-    var jobs = m_predefined.Select( ToJob ).ToList();
-    return RunAsync( "Connect — All", () => ConnectJobs( jobs ) );
-  }
+    => RunAsync( "Connect — All", () => ConnectJobs( m_predefined.Select( g => ToJob( g, g.Password ) ).ToList(), "connected" ) );
 
   public Task DisconnectAllAsync()
-  {
-    var jobs = m_predefined.Select( ToJob ).ToList();
-    return RunAsync( "Disconnect — All", () => DisconnectJobs( jobs ) );
-  }
+    => RunAsync( "Disconnect — All", () => DisconnectJobs( m_predefined.Select( g => ToJob( g, "" ) ).ToList(), keepMapping: true ) );
 
   public async Task RefreshAsync()
   {
@@ -231,7 +241,7 @@ internal sealed class MainViewModel : ObservableObject
     finally { IsBusy = false; }
   }
 
-  private static List<string> ConnectJobs( List<Job> jobs )
+  private static List<string> ConnectJobs( List<Job> jobs, string verb )
   {
     var log = new List<string>();
     foreach( Job job in jobs )
@@ -251,14 +261,17 @@ internal sealed class MainViewModel : ObservableObject
           continue;
         }
         int rc = NetShare.Connect( drive, unc, job.User, job.Pass );
-        log.Add( rc == 0 ? $"   {drive}  connected → {unc}" : $"   {drive}  {NetShare.Describe( rc )}" );
+        log.Add( rc == 0 ? $"   {drive}  {verb} → {unc}" : $"   {drive}  {NetShare.Describe( rc )}" );
       }
     }
     return log;
   }
 
-  private static List<string> DisconnectJobs( List<Job> jobs )
+  // keepMapping: drop the live session but keep the persistent mapping (Disconnect);
+  // otherwise remove the mapping entirely (Unmap).
+  private static List<string> DisconnectJobs( List<Job> jobs, bool keepMapping )
   {
+    string verb = keepMapping ? "disconnected" : "unmapped";
     var log = new List<string>();
     foreach( Job job in jobs )
     {
@@ -268,11 +281,11 @@ internal sealed class MainViewModel : ObservableObject
         NetShare.StatusResult st = NetShare.GetStatus( drive, unc );
         if( st.Status == NetShare.Status.NotMapped )
         {
-          log.Add( $"   {drive}  not connected" );
+          log.Add( $"   {drive}  not mapped" );
           continue;
         }
-        int rc = NetShare.Disconnect( drive );
-        log.Add( rc == 0 ? $"   {drive}  disconnected" : $"   {drive}  {NetShare.Describe( rc )}" );
+        int rc = NetShare.Disconnect( drive, keepMapping );
+        log.Add( rc == 0 ? $"   {drive}  {verb}" : $"   {drive}  {NetShare.Describe( rc )}" );
       }
     }
     return log;
