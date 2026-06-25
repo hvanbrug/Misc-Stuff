@@ -58,10 +58,12 @@
                       <TextBlock Style="{StaticResource PillText}" Text="{Binding OverallText}"/>
                     </Border>
                     <PasswordBox Width="120" Margin="0,0,6,0" VerticalContentAlignment="Center"
+                                 Visibility="{Binding IsConnectable, Converter={StaticResource BoolToVis}}"
                                  ToolTip="Password (optional — leave blank to use your saved / current credentials)"
                                  local:PasswordHelper.Attach="True"
                                  local:PasswordHelper.BoundPassword="{Binding Password, Mode=TwoWay}"/>
-                    <Button Content="Connect"    Command="{Binding ConnectCommand}"/>
+                    <Button Content="Connect"    Command="{Binding ConnectCommand}"
+                            Visibility="{Binding IsConnectable, Converter={StaticResource BoolToVis}}"/>
                     <Button Content="Disconnect" Command="{Binding DisconnectCommand}" Margin="6,0,0,0"/>
                   </StackPanel>
                 </Grid>
@@ -85,7 +87,8 @@
                           <TextBlock Style="{StaticResource PillText}" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis"/>
                         </Border>
                         <Button Grid.Column="3" Style="{StaticResource MiniButton}" Content="Connect"
-                                Command="{Binding ConnectCommand}" Margin="8,0,0,0"/>
+                                Command="{Binding ConnectCommand}" Margin="8,0,0,0"
+                                Visibility="{Binding CanConnect, Converter={StaticResource BoolToVis}}"/>
                         <Button Grid.Column="4" Style="{StaticResource MiniButton}" Content="Disconnect"
                                 Command="{Binding DisconnectCommand}" Margin="4,0,0,0"/>
                       </Grid>

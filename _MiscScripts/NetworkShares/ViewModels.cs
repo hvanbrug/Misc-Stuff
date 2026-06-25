@@ -48,12 +48,16 @@ internal sealed class MappingViewModel : ObservableObject
   public ICommand ConnectCommand    { get; }
   public ICommand DisconnectCommand { get; }
 
+  /// <summary>False for discovered "other" mappings — we have no target/credentials to (re)connect them.</summary>
+  public bool CanConnect { get; }
+
   public MappingViewModel( string drive, string unc, GroupViewModel group, MainViewModel main )
   {
-    Drive = drive;
-    Unc   = unc;
+    Drive      = drive;
+    Unc        = unc;
+    CanConnect = group.IsConnectable;
 
-    ConnectCommand    = new RelayCommand( () => _ = main.ConnectMappingAsync( group, this ),    () => !main.IsBusy );
+    ConnectCommand    = new RelayCommand( () => _ = main.ConnectMappingAsync( group, this ),    () => !main.IsBusy && CanConnect );
     DisconnectCommand = new RelayCommand( () => _ = main.DisconnectMappingAsync( group, this ), () => !main.IsBusy );
   }
 
@@ -86,7 +90,11 @@ internal sealed class GroupViewModel : ObservableObject
   public string Name     { get; }
   public string Subtitle { get; }
   public string Username { get; }
-  public ObservableCollection<MappingViewModel> Mappings { get; }
+  public ObservableCollection<MappingViewModel> Mappings { get; } = new();
+
+  /// <summary>True for the predefined groups; false for the discovered "Other Mappings" group
+  /// (which has no Connect button or password field — only Disconnect).</summary>
+  public bool IsConnectable { get; }
 
   public ICommand ConnectCommand    { get; }
   public ICommand DisconnectCommand { get; }
@@ -94,16 +102,25 @@ internal sealed class GroupViewModel : ObservableObject
   private string m_password = "";
   public string Password { get => m_password; set => SetField( ref m_password, value ); }
 
-  public GroupViewModel( ShareGroup group, MainViewModel main )
+  public GroupViewModel( string name, string subtitle, string username, bool isConnectable, MainViewModel main )
   {
-    Name     = group.Name;
-    Subtitle = group.Subtitle;
-    Username = group.Username;
-    Mappings = new ObservableCollection<MappingViewModel>(
-      group.Mappings.Select( m => new MappingViewModel( m.Drive, m.Unc, this, main ) ) );
+    Name          = name;
+    Subtitle      = subtitle;
+    Username      = username;
+    IsConnectable = isConnectable;
 
-    ConnectCommand    = new RelayCommand( () => _ = main.ConnectGroupAsync( this ),    () => !main.IsBusy );
+    ConnectCommand    = new RelayCommand( () => _ = main.ConnectGroupAsync( this ),    () => !main.IsBusy && IsConnectable );
     DisconnectCommand = new RelayCommand( () => _ = main.DisconnectGroupAsync( this ), () => !main.IsBusy );
+  }
+
+  public static GroupViewModel FromShareGroup( ShareGroup g, MainViewModel main )
+  {
+    var vm = new GroupViewModel( g.Name, g.Subtitle, g.Username, isConnectable: true, main );
+    foreach( ShareMapping m in g.Mappings )
+    {
+      vm.Mappings.Add( new MappingViewModel( m.Drive, m.Unc, vm, main ) );
+    }
+    return vm;
   }
 
   private string m_overallText = "";
@@ -141,10 +158,15 @@ internal sealed class MainViewModel : ObservableObject
   private string m_log = "";
   public string Log { get => m_log; private set => SetField( ref m_log, value ); }
 
+  private readonly List<GroupViewModel> m_predefined;
+  private readonly GroupViewModel        m_otherGroup;
+
   public MainViewModel()
   {
-    Groups = new ObservableCollection<GroupViewModel>(
-      ShareData.Groups.Select( g => new GroupViewModel( g, this ) ) );
+    m_predefined = ShareData.Groups.Select( g => GroupViewModel.FromShareGroup( g, this ) ).ToList();
+    m_otherGroup = new GroupViewModel( "Other Mappings", "drives mapped outside the groups above", "", isConnectable: false, this );
+
+    Groups = new ObservableCollection<GroupViewModel>( m_predefined );
 
     ConnectAllCommand    = new RelayCommand( () => _ = ConnectAllAsync(),    () => !IsBusy );
     DisconnectAllCommand = new RelayCommand( () => _ = DisconnectAllAsync(), () => !IsBusy );
@@ -184,15 +206,17 @@ internal sealed class MainViewModel : ObservableObject
     return RunAsync( $"Disconnect — {g.Name}", () => DisconnectJobs( jobs ) );
   }
 
+  // "All" acts on the managed (predefined) groups only — discovered "other"
+  // mappings are left alone and managed via their own row/group buttons.
   public Task ConnectAllAsync()
   {
-    var jobs = Groups.Select( ToJob ).ToList();
+    var jobs = m_predefined.Select( ToJob ).ToList();
     return RunAsync( "Connect — All", () => ConnectJobs( jobs ) );
   }
 
   public Task DisconnectAllAsync()
   {
-    var jobs = Groups.Select( ToJob ).ToList();
+    var jobs = m_predefined.Select( ToJob ).ToList();
     return RunAsync( "Disconnect — All", () => DisconnectJobs( jobs ) );
   }
 
@@ -283,19 +307,50 @@ internal sealed class MainViewModel : ObservableObject
 
   private async Task RefreshStatusesAsync()
   {
-    List<MappingViewModel> items = Groups.SelectMany( g => g.Mappings ).ToList();
+    List<MappingViewModel> items = m_predefined.SelectMany( g => g.Mappings ).ToList();
     List<(string Drive, string Unc)> pairs = items.Select( m => (m.Drive, m.Unc) ).ToList();
 
-    List<NetShare.StatusResult> statuses = await Task.Run(
-      () => pairs.Select( p => NetShare.GetStatus( p.Drive, p.Unc ) ).ToList() );
+    // Statuses for the predefined mappings + a snapshot of every mapped drive.
+    (List<NetShare.StatusResult> statuses, IReadOnlyList<(string Drive, string Remote, NetShare.Status Status)> mapped) =
+      await Task.Run( () => (
+        pairs.Select( p => NetShare.GetStatus( p.Drive, p.Unc ) ).ToList(),
+        NetShare.EnumerateMappedDrives() ) );
 
     for( int i = 0; i < items.Count; i++ )
     {
       items[i].ApplyStatus( statuses[i] );
     }
-    foreach( GroupViewModel g in Groups )
+
+    // Anything mapped that isn't one of our known drive letters is an "other" mapping.
+    var known = new HashSet<string>( items.Select( m => m.Drive ), StringComparer.OrdinalIgnoreCase );
+    var others = mapped.Where( e => !known.Contains( e.Drive ) ).ToList();
+    UpdateOtherGroup( others );
+
+    foreach( GroupViewModel g in m_predefined )
     {
       g.RefreshComputed();
+    }
+    m_otherGroup.RefreshComputed();
+  }
+
+  private void UpdateOtherGroup( List<(string Drive, string Remote, NetShare.Status Status)> others )
+  {
+    m_otherGroup.Mappings.Clear();
+    foreach( (string drive, string remote, NetShare.Status status) in others )
+    {
+      var m = new MappingViewModel( drive, remote, m_otherGroup, this );
+      m.ApplyStatus( new NetShare.StatusResult( status, remote, 0 ) );
+      m_otherGroup.Mappings.Add( m );
+    }
+
+    bool present = Groups.Contains( m_otherGroup );
+    if( others.Count > 0 && !present )
+    {
+      Groups.Add( m_otherGroup );
+    }
+    else if( others.Count == 0 && present )
+    {
+      Groups.Remove( m_otherGroup );
     }
   }
 

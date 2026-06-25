@@ -4,6 +4,8 @@
              StartupUri="MainWindow.xaml">
   <Application.Resources>
 
+    <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
     <!-- Rounded button (default for all buttons). -->
     <Style TargetType="Button">
       <Setter Property="Padding"     Value="12,5"/>

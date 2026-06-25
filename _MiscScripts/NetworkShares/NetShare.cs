@@ -105,6 +105,35 @@ internal static class NetShare
     return string.Equals( a.TrimEnd( '\\' ), b.TrimEnd( '\\' ), StringComparison.OrdinalIgnoreCase );
   }
 
+  /// <summary>All currently-mapped network drives (A:–Z:) with their remote path and state.</summary>
+  public static IReadOnlyList<(string Drive, string Remote, Status Status)> EnumerateMappedDrives()
+  {
+    var list = new List<(string, string, Status)>();
+    for( char c = 'A'; c <= 'Z'; c++ )
+    {
+      string drive = c + ":";
+      var    sb    = new StringBuilder( 520 );
+      int    len   = sb.Capacity;
+      int    rc    = WNetGetConnectionW( drive, sb, ref len );
+      if( rc == ERROR_MORE_DATA )
+      {
+        sb = new StringBuilder( len );
+        rc = WNetGetConnectionW( drive, sb, ref len );
+      }
+
+      if( rc == NO_ERROR )
+      {
+        list.Add( (drive, sb.ToString(), Status.Connected) );
+      }
+      else if( rc == ERROR_CONNECTION_UNAVAIL )
+      {
+        list.Add( (drive, sb.ToString(), Status.Unavailable) );
+      }
+      // ERROR_NOT_CONNECTED (2250) → drive letter is free; skip.
+    }
+    return list;
+  }
+
   // ── Friendly, password-free error text ───────────────────────────
   public static string Describe( int code )
   {
