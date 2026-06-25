@@ -43,6 +43,10 @@
     <EmbeddedResource Include="Images\HenksHotkeys.ico">
       <LogicalName>app.ico</LogicalName>
     </EmbeddedResource>
+    <!-- Default tab/button content, written to %LocalAppData% on first run. -->
+    <EmbeddedResource Include="Resources\tabs.default.json">
+      <LogicalName>tabs.default.json</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

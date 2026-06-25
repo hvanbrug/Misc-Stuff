@@ -50,8 +50,12 @@ internal abstract class TabModel
     m_lineIsRow = true;
   }
 
-  protected int RowHeight => SymBtnSizeY + SymBtnGap;
-  protected int ColWidth  => SymBtnSizeX + SymBtnGap;
+  public int RowHeight => SymBtnSizeY + SymBtnGap;
+  public int ColWidth  => SymBtnSizeX + SymBtnGap;
+
+  // Exposed so the data exporter can reconstruct the grid from a built tab.
+  public int  MaxSlots  => m_maxSlots;
+  public bool LineIsRow => m_lineIsRow;
 
   private int CalcSymbolX( int line, int slot )
   {
@@ -151,10 +155,32 @@ internal abstract class TabModel
   {
     int x = CalcSymbolX( line, slot );
     int y = CalcSymbolY( line, slot );
-    int w = SymBtnSizeX * width + SymBtnGap * ( width - 1 );
-    int h = SymBtnSizeY;
 
     AdvanceSlot( advanceBy );
+
+    PlaceSymbol( line, slot, width, x, y, ch, desc, hotkey, action, align, showChar, tipChar );
+  }
+
+  /// <summary>
+  /// Create and register a button at an explicit pixel position. This is the
+  /// shared core of <see cref="RegisterSymbol"/> (cursor-based) and the
+  /// data-driven <see cref="DataTabModel"/>, so both produce identical elements.
+  /// </summary>
+  protected void PlaceSymbol( int     line,
+                              int     slot,
+                              int     width,
+                              int     x,
+                              int     y,
+                              string  ch,
+                              string? desc,
+                              string? hotkey,
+                              Action? action,
+                              string  align,
+                              int     showChar,
+                              int     tipChar )
+  {
+    int w = SymBtnSizeX * width + SymBtnGap * ( width - 1 );
+    int h = SymBtnSizeY;
 
     string hk = hotkey ?? "";
     string d  = desc   ?? ch;

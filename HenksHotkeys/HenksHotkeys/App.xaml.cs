@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
 using HenksHotkeys.Core;
-using HenksHotkeys.Tabs;
 using HenksHotkeys.UI;
 
 namespace HenksHotkeys;
@@ -50,15 +49,12 @@ public partial class App
 
   private static void BuildTabModels()
   {
-    AppState.Tabs.Add( new SymbolsTab() );
-    AppState.Tabs.Add( new EmojisTab() );
-    AppState.Tabs.Add( new CommentsTab() );
-    AppState.Tabs.Add( new PromptsTab() );
-    AppState.Tabs.Add( new GreekTab() );
-    AppState.Tabs.Add( new RussianTab() );
-    AppState.Tabs.Add( new MiscTab() );
-    AppState.Tabs.Add( new ToolsTab() );
-    AppState.Tabs.Add( new SensitiveTab() );
+    // Tab content is data now (tabs.json in %LocalAppData%, seeded from the
+    // embedded default). Built-in tabs (Emojis, Tools) are referenced by name.
+    foreach( TabModel tab in TabStore.Load() )
+    {
+      AppState.Tabs.Add( tab );
+    }
   }
 
   private void RegisterHotkeys()
