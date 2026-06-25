@@ -50,9 +50,9 @@ internal static class Theme
     return brush;
   }
 
-  // Greys matching the original Theme.ahk palette.
-  public static readonly Brush DarkBackground = Frozen( 0x20, 0x20, 0x20 );
-  public static readonly Brush DarkText       = Frozen( 0xDC, 0xDC, 0xDC );
+  // Greys matching the NetworkShares dark scheme (layered, faint cool tint).
+  public static readonly Brush DarkBackground = Frozen( 0x1E, 0x1E, 0x20 );
+  public static readonly Brush DarkText       = Frozen( 0xE8, 0xE8, 0xE8 );
   public static readonly Brush DarkModeBorder  = Frozen( 0xAA, 0xAA, 0xAA );
   public static readonly Brush LightModeBorder = Frozen( 0x55, 0x55, 0x55 );
 
@@ -75,7 +75,7 @@ internal static class Theme
     try { NativeMethods.DwmSetWindowAttribute( hwnd, NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE, ref enable, sizeof( int ) ); }
     catch { /* unsupported on older Windows */ }
 
-    int border = 0x202020; // COLORREF (grey → byte order symmetric)
+    int border = 0x201E1E; // COLORREF (0x00BBGGRR) for #1E1E20 — matches DarkBackground
     try { NativeMethods.DwmSetWindowAttribute( hwnd, NativeMethods.DWMWA_BORDER_COLOR, ref border, sizeof( int ) ); }
     catch { /* Win11 only */ }
   }
