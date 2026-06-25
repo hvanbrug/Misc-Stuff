@@ -45,10 +45,16 @@ internal sealed class MappingViewModel : ObservableObject
   public string Drive { get; }
   public string Unc   { get; }
 
-  public MappingViewModel( string drive, string unc )
+  public ICommand ConnectCommand    { get; }
+  public ICommand DisconnectCommand { get; }
+
+  public MappingViewModel( string drive, string unc, GroupViewModel group, MainViewModel main )
   {
     Drive = drive;
     Unc   = unc;
+
+    ConnectCommand    = new RelayCommand( () => _ = main.ConnectMappingAsync( group, this ),    () => !main.IsBusy );
+    DisconnectCommand = new RelayCommand( () => _ = main.DisconnectMappingAsync( group, this ), () => !main.IsBusy );
   }
 
   private string m_statusText = "—";
@@ -94,7 +100,7 @@ internal sealed class GroupViewModel : ObservableObject
     Subtitle = group.Subtitle;
     Username = group.Username;
     Mappings = new ObservableCollection<MappingViewModel>(
-      group.Mappings.Select( m => new MappingViewModel( m.Drive, m.Unc ) ) );
+      group.Mappings.Select( m => new MappingViewModel( m.Drive, m.Unc, this, main ) ) );
 
     ConnectCommand    = new RelayCommand( () => _ = main.ConnectGroupAsync( this ),    () => !main.IsBusy );
     DisconnectCommand = new RelayCommand( () => _ = main.DisconnectGroupAsync( this ), () => !main.IsBusy );
@@ -149,6 +155,22 @@ internal sealed class MainViewModel : ObservableObject
   // touches the observable collections / view models.
   private static Job ToJob( GroupViewModel g )
     => new( g.Name, g.Username, g.Password, g.Mappings.Select( m => (m.Drive, m.Unc) ).ToList() );
+
+  // Single-drive operations use the owning group's credentials.
+  private static Job OneJob( GroupViewModel g, MappingViewModel m )
+    => new( g.Name, g.Username, g.Password, new List<(string, string)> { (m.Drive, m.Unc) } );
+
+  public Task ConnectMappingAsync( GroupViewModel g, MappingViewModel m )
+  {
+    var jobs = new List<Job> { OneJob( g, m ) };
+    return RunAsync( $"Connect — {m.Drive}", () => ConnectJobs( jobs ) );
+  }
+
+  public Task DisconnectMappingAsync( GroupViewModel g, MappingViewModel m )
+  {
+    var jobs = new List<Job> { OneJob( g, m ) };
+    return RunAsync( $"Disconnect — {m.Drive}", () => DisconnectJobs( jobs ) );
+  }
 
   public Task ConnectGroupAsync( GroupViewModel g )
   {

@@ -4,11 +4,59 @@
              StartupUri="MainWindow.xaml">
   <Application.Resources>
 
+    <!-- Rounded button (default for all buttons). -->
     <Style TargetType="Button">
-      <Setter Property="Padding"  Value="12,5"/>
-      <Setter Property="MinWidth" Value="92"/>
-      <Setter Property="FontSize" Value="12"/>
-      <Setter Property="Cursor"   Value="Hand"/>
+      <Setter Property="Padding"     Value="12,5"/>
+      <Setter Property="MinWidth"    Value="92"/>
+      <Setter Property="FontSize"    Value="12"/>
+      <Setter Property="Cursor"      Value="Hand"/>
+      <Setter Property="Foreground"  Value="#222222"/>
+      <Setter Property="Background"  Value="#FFFFFF"/>
+      <Setter Property="BorderBrush" Value="#C8C8C8"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bd" CornerRadius="5" BorderThickness="1"
+                    Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bd" Property="Background" Value="#F0F0F0"/></Trigger>
+              <Trigger Property="IsPressed"   Value="True"><Setter TargetName="bd" Property="Background" Value="#E4E4E4"/></Trigger>
+              <Trigger Property="IsEnabled"   Value="False"><Setter TargetName="bd" Property="Opacity" Value="0.45"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- Small pill-shaped button sized to fit a single mapping row. -->
+    <Style x:Key="MiniButton" TargetType="Button">
+      <Setter Property="Padding"           Value="9,1"/>
+      <Setter Property="MinWidth"          Value="0"/>
+      <Setter Property="FontSize"          Value="11"/>
+      <Setter Property="Cursor"            Value="Hand"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Foreground"        Value="#333333"/>
+      <Setter Property="Background"        Value="#FFFFFF"/>
+      <Setter Property="BorderBrush"       Value="#C8C8C8"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bd" CornerRadius="9" BorderThickness="1"
+                    Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bd" Property="Background" Value="#EFEFEF"/></Trigger>
+              <Trigger Property="IsPressed"   Value="True"><Setter TargetName="bd" Property="Background" Value="#E0E0E0"/></Trigger>
+              <Trigger Property="IsEnabled"   Value="False"><Setter TargetName="bd" Property="Opacity" Value="0.4"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
 
     <!-- Coloured status pill used for both per-drive and per-group status. -->
