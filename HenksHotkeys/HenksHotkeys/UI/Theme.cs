@@ -51,12 +51,12 @@ internal static class Theme
   }
 
   // Greys matching the NetworkShares dark scheme (layered, faint cool tint).
-  public static readonly Brush DarkBackground = Frozen( 0x1E, 0x1E, 0x20 );
-  public static readonly Brush DarkText       = Frozen( 0xE8, 0xE8, 0xE8 );
+  public static readonly Brush DarkBackground  = Frozen( 0x1E, 0x1E, 0x20 );
+  public static readonly Brush DarkText        = Frozen( 0xE8, 0xE8, 0xE8 );
   public static readonly Brush DarkModeBorder  = Frozen( 0xAA, 0xAA, 0xAA );
   public static readonly Brush LightModeBorder = Frozen( 0x55, 0x55, 0x55 );
 
-  public const int BorderThickness = 2;
+  public const int BorderThickness = 1;
 
   public static Brush WindowBackground => IsDark ? DarkBackground : SystemColors.ControlBrush;
   public static Brush BorderColor      => IsDark ? DarkModeBorder : LightModeBorder;
