@@ -13,6 +13,12 @@
     <Version>1.0.0</Version>
     <Product>Network Shares</Product>
     <AssemblyTitle>Network Shares</AssemblyTitle>
+    <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Embedded so the window / taskbar icon can reference it at runtime. -->
+    <Resource Include="app.ico" />
+  </ItemGroup>
 
 </Project>

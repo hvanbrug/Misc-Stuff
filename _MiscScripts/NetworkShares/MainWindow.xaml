@@ -4,6 +4,7 @@
         xmlns:local="clr-namespace:NetworkShares"
         Title="Network Shares" Height="780" Width="740"
         MinHeight="520" MinWidth="660"
+        Icon="app.ico"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBg}">
 
