@@ -11,8 +11,32 @@ namespace HenksHotkeys.Core;
 /// </summary>
 internal sealed class TabFile
 {
+  /// <summary>Free-text help shown at the top of the file. Ignored by the app but
+  /// preserved across saves so the cheat-sheet survives re-serialisation.</summary>
+  [JsonProperty( "_readme", NullValueHandling = NullValueHandling.Ignore )]
+  public string[]? Readme { get; set; }
+
+  /// <summary>Crypto parameters for the passphrase-encrypted secrets (travels with
+  /// the file so the same passphrase decrypts on another machine). Null until the
+  /// first secret is sealed.</summary>
+  [JsonProperty( "crypto", NullValueHandling = NullValueHandling.Ignore )]
+  public CryptoHeader? Crypto { get; set; }
+
   [JsonProperty( "tabs" )]
   public List<TabEntry> Tabs { get; set; } = new();
+}
+
+internal sealed class CryptoHeader
+{
+  [JsonProperty( "salt" )]
+  public string Salt { get; set; } = "";
+
+  [JsonProperty( "iterations" )]
+  public int Iterations { get; set; } = Secrets.DefaultIterations;
+
+  /// <summary>A known token encrypted with the key, used to detect a wrong passphrase.</summary>
+  [JsonProperty( "verifier", NullValueHandling = NullValueHandling.Ignore )]
+  public string? Verifier { get; set; }
 }
 
 internal sealed class TabEntry

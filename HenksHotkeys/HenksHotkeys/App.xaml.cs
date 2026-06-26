@@ -43,6 +43,9 @@ public partial class App
     AppState.UseClipSend     = AppState.Settings.IsClipSendMode;
     AppState.StripSendEmojis = AppState.Settings.IsStripCommentEmojis;
 
+    // Lets TabStore prompt for the master secrets passphrase when needed.
+    PassphrasePrompt.Provider = PassphraseDialog.Ask;
+
     BuildTabModels();
 
     m_window = new HotkeyWindow();
@@ -78,14 +81,14 @@ public partial class App
   // One definition drives both the tray menu and the window's right-click menu.
   private (string? Label, Action? Action)[] MenuItems() => new (string?, Action?)[]
   {
-    ( "Set favourite spot",     () => m_window!.SetFavouriteSpot() ),
-    ( "Move to favourite spot", () => m_window!.MoveToFavouriteSpot() ),
-    ( null, null ),
-    ( "Test Function",          AppActions.TestFunction ),
-    ( null, null ),
-    ( "Reload configuration",   ReloadConfig ),
-    ( null, null ),
-    ( "Exit",                   ExitApp ),
+    ("Set favourite spot",     () => m_window!.SetFavouriteSpot()),
+    ("Move to favourite spot", () => m_window!.MoveToFavouriteSpot()),
+    (null, null),
+    ("Reload configuration",   ReloadConfig),
+    (null, null),
+    ("Test Function",          AppActions.TestFunction),
+    (null, null),
+    ("Exit",                   ExitApp),
   };
 
   // Re-read tabs.json and rebuild the tabs, buttons and global hotkeys in place,

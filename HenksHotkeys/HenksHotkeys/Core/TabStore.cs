@@ -1,5 +1,6 @@
 using System.IO;
 using System.Reflection;
+using System.Security.Cryptography;
 using HenksHotkeys.Tabs;
 using HenksHotkeys.UI;
 using Newtonsoft.Json;
@@ -65,54 +66,117 @@ internal static class TabStore
   }
 
   /// <summary>
-  /// For every secret button: decrypt sealed values into <see cref="ButtonDef.Plain"/>,
-  /// or seal a freshly-typed plaintext value (returning true so the file is rewritten).
+  /// Decrypt the secret buttons for use and (re)seal any that need it: plaintext the
+  /// user typed, or legacy DPAPI values being migrated to the portable format.
+  /// Obtains the passphrase from the local cache or by prompting. Returns true when
+  /// the file changed and should be rewritten.
   /// </summary>
   internal static bool ProcessSecrets( TabFile file )
   {
-    bool dirty = false;
-    foreach( TabEntry tab in file.Tabs )
+    List<ButtonDef> secrets = file.Tabs
+      .Where( t => t.Rows is not null )
+      .SelectMany( t => t.Rows! )
+      .SelectMany( r => r.Buttons )
+      .Where( b => !string.IsNullOrEmpty( b.Secret ) )
+      .ToList();
+
+    if( secrets.Count == 0 )
     {
-      if( tab.Rows is null )
+      return false;
+    }
+
+    // Salt lives in the file (so it travels with it). Created in memory now; only
+    // persisted once we actually seal something, so cancelling leaves the file as-is.
+    file.Crypto ??= new CryptoHeader();
+    if( string.IsNullOrEmpty( file.Crypto.Salt ) )
+    {
+      file.Crypto.Salt = Convert.ToBase64String( RandomNumberGenerator.GetBytes( 16 ) );
+    }
+    byte[] salt       = Convert.FromBase64String( file.Crypto.Salt );
+    int    iterations = file.Crypto.Iterations > 0 ? file.Crypto.Iterations : Secrets.DefaultIterations;
+
+    bool dirty = false;
+    byte[]? key = ObtainKey( file.Crypto, salt, iterations, ref dirty );
+    if( key is null )
+    {
+      return dirty; // no passphrase available / cancelled → leave secrets locked
+    }
+
+    dirty |= ApplySecrets( secrets, key );
+    return dirty;
+  }
+
+  /// <summary>Decrypt / (re)seal each secret button with the given key. Testable.</summary>
+  internal static bool ApplySecrets( List<ButtonDef> secrets, byte[] key )
+  {
+    bool dirty = false;
+    foreach( ButtonDef b in secrets )
+    {
+      string s = b.Secret!;
+      if( Secrets.IsPassSealed( s ) )
       {
-        continue;
+        try   { b.Plain = Secrets.Decrypt( key, s ); }
+        catch { b.Plain = ""; } // wrong key / corrupt
       }
-      foreach( RowDef row in tab.Rows )
+      else if( Secrets.IsDpapiSealed( s ) )
       {
-        foreach( ButtonDef b in row.Buttons )
+        // Legacy per-machine secret → migrate to the portable format (only works on
+        // the machine that originally sealed it; elsewhere it just stays locked).
+        try
         {
-          if( string.IsNullOrEmpty( b.Secret ) )
-          {
-            continue;
-          }
-          if( Secrets.IsSealed( b.Secret ) )
-          {
-            try
-            {
-              b.Plain = Secrets.Unseal( b.Secret );
-            }
-            catch
-            {
-              // sealed by a different user / machine
-              b.Plain = "";
-            }
-          }
-          else
-          {
-            b.Plain = b.Secret; // use the typed plaintext now…
-            try
-            {
-              b.Secret = Secrets.Seal( b.Plain ); dirty = true; // …and seal it on disk
-            }
-            catch
-            {
-              // DPAPI unavailable → leave as-is
-            }
-          }
+          string plain = Secrets.DpapiUnseal( s );
+          b.Plain  = plain;
+          b.Secret = Secrets.Encrypt( key, plain );
+          dirty    = true;
         }
+        catch { b.Plain = ""; }
+      }
+      else // plaintext the user typed in
+      {
+        b.Plain  = s;
+        b.Secret = Secrets.Encrypt( key, s );
+        dirty    = true;
       }
     }
     return dirty;
+  }
+
+  // Resolve the AES key from the cached passphrase or by prompting (up to a few
+  // attempts). Returns null if there is no passphrase available (cancelled / no UI).
+  private static byte[]? ObtainKey( CryptoHeader crypto, byte[] salt, int iterations, ref bool dirty )
+  {
+    bool creating = string.IsNullOrEmpty( crypto.Verifier );
+
+    // Try the locally-cached passphrase first.
+    string? cached = PassphraseStore.Load();
+    if( cached is not null )
+    {
+      byte[] k = Secrets.DeriveKey( cached, salt, iterations );
+      if( creating || Secrets.VerifyKey( k, crypto.Verifier! ) )
+      {
+        if( creating ) { crypto.Verifier = Secrets.Encrypt( k, Secrets.Verifier ); dirty = true; }
+        return k;
+      }
+      // cached passphrase no longer matches this file → fall through to prompting
+    }
+
+    for( int attempt = 0; attempt < 3; attempt++ )
+    {
+      string? pass = PassphrasePrompt.Ask( creating, attempt > 0 );
+      if( string.IsNullOrEmpty( pass ) )
+      {
+        return null; // cancelled or no UI hooked up
+      }
+      byte[] k = Secrets.DeriveKey( pass, salt, iterations );
+      if( creating || Secrets.VerifyKey( k, crypto.Verifier! ) )
+      {
+        PassphraseStore.Save( pass );
+        if( creating ) { crypto.Verifier = Secrets.Encrypt( k, Secrets.Verifier ); dirty = true; }
+        return k;
+      }
+      // wrong passphrase → loop (retry flag set)
+    }
+    return null;
   }
 
   private static void TrySave( TabFile file )
