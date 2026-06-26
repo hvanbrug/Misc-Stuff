@@ -24,4 +24,11 @@ internal static class HotkeyRegistry
     s_seen.Add( hotkey );
     s_bindings.Add( new Binding( hotkey, action ) );
   }
+
+  /// <summary>Drop all bindings so the tabs can be rebuilt (config reload).</summary>
+  public static void Clear()
+  {
+    s_bindings.Clear();
+    s_seen.Clear();
+  }
 }

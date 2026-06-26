@@ -51,10 +51,8 @@ public partial class App
     RegisterHotkeys();
     BuildMenusAndTray();
 
-    if( AppState.Settings.IsWndOpen )
-    {
-      m_window.ShowUi();
-    }
+    // The window is always shown — there is no hidden / "no UI" mode.
+    m_window.ShowUi();
   }
 
   private static void BuildTabModels()
@@ -72,7 +70,7 @@ public partial class App
     m_hotkeys = new GlobalHotkeyManager();
     m_hotkeys.RegisterCollected();
 
-    m_hotkeys.Register( "^+x", () => m_window!.ToggleUi() );
+    m_hotkeys.Register( "^+x", () => m_window!.ToggleCollapsed() );
     m_hotkeys.Register( "^+a", AppActions.ListHotkeys );
     m_hotkeys.Register( "^+s", AppActions.SrefToFullPrompt );
   }
@@ -80,16 +78,45 @@ public partial class App
   // One definition drives both the tray menu and the window's right-click menu.
   private (string? Label, Action? Action)[] MenuItems() => new (string?, Action?)[]
   {
-    ( "Open UI",                () => m_window!.ShowUi() ),
-    ( "Close UI",               () => m_window!.HideUi() ),
-    ( null, null ),
     ( "Set favourite spot",     () => m_window!.SetFavouriteSpot() ),
     ( "Move to favourite spot", () => m_window!.MoveToFavouriteSpot() ),
     ( null, null ),
     ( "Test Function",          AppActions.TestFunction ),
     ( null, null ),
+    ( "Reload configuration",   ReloadConfig ),
+    ( null, null ),
     ( "Exit",                   ExitApp ),
   };
+
+  // Re-read tabs.json and rebuild the tabs, buttons and global hotkeys in place,
+  // so edits to the config take effect without restarting.
+  private void ReloadConfig()
+  {
+    if( m_window is null )
+    {
+      return;
+    }
+
+    // Reset the accumulators the tab builder feeds, then rebuild from disk.
+    HotkeyRegistry.Clear();
+    AppState.HotkeyHelp.Clear();
+    AppState.Tabs.Clear();
+    BuildTabModels();
+
+    m_window.ReloadTabs();
+
+    // Re-register global hotkeys (per-button bindings + the app-level ones).
+    m_hotkeys?.Dispose();
+    RegisterHotkeys();
+
+    if( !TabStore.LastParseOk )
+    {
+      MessageBox.Show(
+        "tabs.json could not be parsed — the built-in defaults were loaded instead.\n" +
+        "Check the file for JSON errors, then reload again.",
+        "Reload configuration", MessageBoxButton.OK, MessageBoxImage.Warning );
+    }
+  }
 
   private ContextMenu BuildMenu()
   {
@@ -115,7 +142,7 @@ public partial class App
   {
     // A fresh menu instance for each surface so they never share open state.
     m_window!.ContextMenu = BuildMenu();
-    m_tray = new TrayIcon( BuildMenu(), () => m_window!.ShowUi(), "Henk's Hotkeys" );
+    m_tray = new TrayIcon( BuildMenu(), () => m_window!.Summon(), "Henk's Hotkeys" );
   }
 
   private void ExitApp() => Shutdown();

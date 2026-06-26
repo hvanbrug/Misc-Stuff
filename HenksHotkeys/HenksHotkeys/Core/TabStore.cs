@@ -30,10 +30,16 @@ internal static class TabStore
     DefaultValueHandling = DefaultValueHandling.Ignore,
   };
 
+  /// <summary>False when the user's tabs.json failed to parse and the embedded
+  /// default was used instead (so a reload can warn about a bad edit).</summary>
+  public static bool LastParseOk { get; private set; } = true;
+
   public static List<TabModel> Load()
   {
     string json = ReadOrSeed();
-    TabFile? file = TryParse( json ) ?? TryParse( ReadDefault() );
+    TabFile? file = TryParse( json );
+    LastParseOk = file is not null;
+    file ??= TryParse( ReadDefault() );
 
     var tabs = new List<TabModel>();
     if( file is null )

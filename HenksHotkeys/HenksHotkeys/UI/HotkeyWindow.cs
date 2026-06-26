@@ -40,6 +40,7 @@ internal sealed class HotkeyWindow : Window
   private double m_fullHeight;
   private bool   m_collapsed;
   private bool   m_suppressResizePersist;
+  private bool   m_suppressTabPersist;
 
   private int? m_favX;
   private int? m_favY;
@@ -93,7 +94,7 @@ internal sealed class HotkeyWindow : Window
     m_activeWinTimer.Tick += ( _, _ ) => TrackActiveWindow();
     m_activeWinTimer.Start();
 
-    PreviewKeyDown += ( _, e ) => { if( e.Key == Key.Escape ) HideUi(); };
+    PreviewKeyDown += ( _, e ) => { if( e.Key == Key.Escape ) SetCollapsed( true ); };
 
     // The context menu (assigned by App) is restricted to the bare window strip,
     // the indicators and the left collapse button — never the tab control or the
@@ -148,6 +149,30 @@ internal sealed class HotkeyWindow : Window
       m_tabs.Style = (Style)Application.Current.FindResource( "DarkTabControl" );
     }
 
+    PopulateTabs();
+
+    // Subscribe once; PopulateTabs may run again on reload. The guard stops the
+    // auto-selection during a rebuild from overwriting the remembered tab.
+    m_tabs.SelectionChanged += ( _, _ ) =>
+    {
+      if( !m_suppressTabPersist && m_tabs.SelectedIndex >= 0 )
+      {
+        AppState.Settings.SetLastTab( m_tabs.SelectedIndex + 1 );
+      }
+    };
+  }
+
+  // Build (or rebuild) the tab items from AppState.Tabs.
+  private void PopulateTabs()
+  {
+    // Capture the current tab first — rebuilding the items auto-selects the first
+    // one, which would otherwise clobber the remembered tab before we restore it.
+    int targetTab = AppState.Settings.LastTab - 1;
+
+    m_suppressTabPersist = true;
+    m_tabs.Items.Clear();
+    m_scrollers.Clear();
+
     foreach( TabModel model in AppState.Tabs )
     {
       var canvas = new Canvas
@@ -182,15 +207,32 @@ internal sealed class HotkeyWindow : Window
       m_tabs.Items.Add( item );
     }
 
-    int last = AppState.Settings.LastTab - 1;
-    m_tabs.SelectedIndex = last >= 0 && last < m_tabs.Items.Count ? last : 0;
-    m_tabs.SelectionChanged += ( _, _ ) =>
+    m_tabs.SelectedIndex = targetTab >= 0 && targetTab < m_tabs.Items.Count ? targetTab : 0;
+    m_suppressTabPersist = false;
+  }
+
+  /// <summary>Rebuild the tab UI after the tab models were reloaded from disk.</summary>
+  public void ReloadTabs()
+  {
+    PopulateTabs();
+    ComputeFullWidth();
+
+    // Re-apply the locked width (the widest tab may have changed). Height is left
+    // as-is so a user-resized window keeps its height. Collapsed stays collapsed;
+    // the new width takes effect on the next expand.
+    if( !m_collapsed )
     {
-      if( m_tabs.SelectedIndex >= 0 )
+      m_suppressResizePersist = true;
+      try
       {
-        AppState.Settings.SetLastTab( m_tabs.SelectedIndex + 1 );
+        MinWidth = MaxWidth = m_fullWidth;
+        Width    = m_fullWidth;
       }
-    };
+      finally
+      {
+        m_suppressResizePersist = false;
+      }
+    }
   }
 
   private FrameworkElement BuildButton( SymbolElement sym, TabModel model )
@@ -380,18 +422,26 @@ internal sealed class HotkeyWindow : Window
     return border;
   }
 
-  private void ComputeFullSize()
+  private void ComputeFullWidth()
   {
     double maxContentW = 0;
-    double maxContentH = 0;
     foreach( TabModel m in AppState.Tabs )
     {
       maxContentW = Math.Max( maxContentW, m.ContentWidth );
-      maxContentH = Math.Max( maxContentH, m.ContentHeight );
     }
-
     // content + scrollbar + tab insets + window border (device-independent units)
     m_fullWidth = maxContentW + 30;
+  }
+
+  private void ComputeFullSize()
+  {
+    ComputeFullWidth();
+
+    double maxContentH = 0;
+    foreach( TabModel m in AppState.Tabs )
+    {
+      maxContentH = Math.Max( maxContentH, m.ContentHeight );
+    }
 
     double viewport = Math.Min( 330, Math.Max( 320, maxContentH ) );
     double defaultH = viewport + 64;
@@ -401,7 +451,9 @@ internal sealed class HotkeyWindow : Window
     m_fullHeight = savedH >= 140 && savedH <= screenH ? savedH : defaultH;
   }
 
-  // ── Show / hide ──────────────────────────────────────────────────
+  // ── Show / summon ────────────────────────────────────────────────
+  // The window is always visible. ShowUi runs once at startup (restoring the
+  // saved collapsed state); Summon brings it forward and expands it.
   public void ShowUi()
   {
     AppState.ActiveWindow = NativeMethods.GetForegroundWindow();
@@ -412,11 +464,7 @@ internal sealed class HotkeyWindow : Window
     }
     EnsureHwnd();
     RestoreSavedPosition();
-
-    NativeMethods.SetWindowPos( m_hwnd, new IntPtr( -1 ), 0, 0, 0, 0,
-                                NativeMethods.SWP_NOMOVE |
-                                NativeMethods.SWP_NOSIZE |
-                                NativeMethods.SWP_NOACTIVATE );
+    BringToFront();
 
     if( AppState.Settings.IsCollapsed )
     {
@@ -424,20 +472,29 @@ internal sealed class HotkeyWindow : Window
     }
 
     InstallWheelHook();
-    AppState.Settings.SetWndOpen( true );
   }
 
-  public void HideUi()
+  /// <summary>Bring the always-on window to the foreground and expand it.</summary>
+  public void Summon()
   {
-    RemoveWheelHook();
-    Hide();
-    AppState.Settings.SetWndOpen( false );
+    if( !IsVisible )
+    {
+      Show();
+    }
+    EnsureHwnd();
+    if( m_collapsed )
+    {
+      SetCollapsed( false );
+    }
+    BringToFront();
   }
 
-  public void ToggleUi()
+  private void BringToFront()
   {
-    if( !IsVisible ) ShowUi();
-    else HideUi();
+    NativeMethods.SetWindowPos( m_hwnd, new IntPtr( -1 ), 0, 0, 0, 0,
+                                NativeMethods.SWP_NOMOVE |
+                                NativeMethods.SWP_NOSIZE |
+                                NativeMethods.SWP_NOACTIVATE );
   }
 
   private void RestoreSavedPosition()
@@ -494,9 +551,9 @@ internal sealed class HotkeyWindow : Window
         MinWidth   = 84;
         MaxWidth   = 84;
         Width      = 84;
-        MinHeight  = 30;
-        MaxHeight  = 30;
-        Height     = 30;
+        MinHeight  = 28;
+        MaxHeight  = 28;
+        Height     = 28;
       }
       else
       {
