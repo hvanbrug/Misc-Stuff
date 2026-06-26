@@ -17,9 +17,18 @@ internal static class TabStore
 {
   private const string ResourceName = "tabs.default.json";
 
-  public static string Path => System.IO.Path.Combine(
-    Environment.GetFolderPath( Environment.SpecialFolder.LocalApplicationData ),
-    "HenksHotkeys", "tabs.json" );
+  public static string Path
+  {
+    get => System.IO.Path.Combine( Environment.GetFolderPath( Environment.SpecialFolder.LocalApplicationData ),
+                                   "HenksHotkeys", "tabs.json" );
+  }
+
+  private static readonly JsonSerializerSettings JsonSettings = new()
+  {
+    Formatting           = Formatting.Indented,
+    NullValueHandling    = NullValueHandling.Ignore,
+    DefaultValueHandling = DefaultValueHandling.Ignore,
+  };
 
   public static List<TabModel> Load()
   {
@@ -30,6 +39,12 @@ internal static class TabStore
     if( file is null )
     {
       return tabs;
+    }
+
+    // Encrypt any plaintext secrets in place and persist; decrypt the rest for use.
+    if( ProcessSecrets( file ) )
+    {
+      TrySave( file );
     }
 
     foreach( TabEntry entry in file.Tabs )
@@ -43,16 +58,80 @@ internal static class TabStore
     return tabs;
   }
 
+  /// <summary>
+  /// For every secret button: decrypt sealed values into <see cref="ButtonDef.Plain"/>,
+  /// or seal a freshly-typed plaintext value (returning true so the file is rewritten).
+  /// </summary>
+  internal static bool ProcessSecrets( TabFile file )
+  {
+    bool dirty = false;
+    foreach( TabEntry tab in file.Tabs )
+    {
+      if( tab.Rows is null )
+      {
+        continue;
+      }
+      foreach( RowDef row in tab.Rows )
+      {
+        foreach( ButtonDef b in row.Buttons )
+        {
+          if( string.IsNullOrEmpty( b.Secret ) )
+          {
+            continue;
+          }
+          if( Secrets.IsSealed( b.Secret ) )
+          {
+            try
+            {
+              b.Plain = Secrets.Unseal( b.Secret );
+            }
+            catch
+            {
+              // sealed by a different user / machine
+              b.Plain = "";
+            }
+          }
+          else
+          {
+            b.Plain = b.Secret; // use the typed plaintext now…
+            try
+            {
+              b.Secret = Secrets.Seal( b.Plain ); dirty = true; // …and seal it on disk
+            }
+            catch
+            {
+              // DPAPI unavailable → leave as-is
+            }
+          }
+        }
+      }
+    }
+    return dirty;
+  }
+
+  private static void TrySave( TabFile file )
+  {
+    try
+    {
+      Directory.CreateDirectory( System.IO.Path.GetDirectoryName( Path )! );
+      File.WriteAllText( Path, JsonConvert.SerializeObject( file, JsonSettings ) );
+    }
+    catch
+    {
+      // a failed rewrite must never crash startup
+    }
+  }
+
   private static TabModel? Build( TabEntry entry )
   {
     if( !string.IsNullOrEmpty( entry.Builtin ) )
     {
       return entry.Builtin switch
-      {
-        "Emojis" => new EmojisTab(),
-        "Tools"  => new ToolsTab(),
-        _        => null, // unknown built-in name → skip
-      };
+             {
+               "Emojis" => new EmojisTab(),
+               "Tools"  => new ToolsTab(),
+               _        => null, // unknown built-in name → skip
+             };
     }
     return new DataTabModel( entry );
   }

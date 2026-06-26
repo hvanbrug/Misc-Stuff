@@ -51,9 +51,15 @@ internal sealed class DataTabModel : TabModel
         int       slot = row.Indent + i + 1;
         int       x    = SymOrgX + ( row.Indent + i ) * ColWidth;
 
+        // Secret buttons send the decrypted value but never show it (face = desc,
+        // no value in the tooltip), regardless of the show/tip flags.
+        string sendText = b.IsSecret ? ( b.Plain ?? "" ) : b.Text;
+        int    showText = b.IsSecret ? 0 : ( b.ShowText ? 1 : 0 );
+        int    tipText  = b.IsSecret ? 0 : ( b.TipText  ? 1 : 0 );
+
         PlaceSymbol( r + 1, slot, b.Width, x, y,
-                     b.Text, b.Desc, b.Hotkey, null,
-                     b.Align, b.ShowText ? 1 : 0, b.TipText ? 1 : 0 );
+                     sendText, b.Desc, b.Hotkey, null,
+                     b.Align, showText, tipText );
       }
     }
   }

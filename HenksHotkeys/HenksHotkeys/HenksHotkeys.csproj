@@ -25,6 +25,8 @@
 
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <!-- DPAPI (ProtectedData) for encrypting sensitive tab values at rest. -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
   </ItemGroup>
 
   <!-- Twemoji PNGs and the tray icon are embedded into the assembly manifest, so

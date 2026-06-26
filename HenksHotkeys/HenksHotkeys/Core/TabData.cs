@@ -78,8 +78,24 @@ internal sealed class RowDef
 internal sealed class ButtonDef
 {
   /// <summary>The character / text the button sends (and shows, unless ShowDesc).</summary>
-  [JsonProperty( "text" )]
+  [JsonProperty( "text" ), DefaultValue( "" )]
   public string Text { get; set; } = "";
+
+  /// <summary>
+  /// A sensitive value (password / private text) sent instead of <see cref="Text"/>.
+  /// Stored encrypted at rest ("enc:..."); a plaintext value here is sealed on the
+  /// next load. Secret buttons never display their value (face shows the desc).
+  /// </summary>
+  [JsonProperty( "secret", NullValueHandling = NullValueHandling.Ignore )]
+  public string? Secret { get; set; }
+
+  /// <summary>Runtime-only decrypted secret (never serialized).</summary>
+  [JsonIgnore]
+  public string? Plain { get; set; }
+
+  /// <summary>True when this button carries a secret value.</summary>
+  [JsonIgnore]
+  public bool IsSecret => !string.IsNullOrEmpty( Secret );
 
   /// <summary>Tooltip / label. When omitted, the text is used.</summary>
   [JsonProperty( "desc", NullValueHandling = NullValueHandling.Ignore )]

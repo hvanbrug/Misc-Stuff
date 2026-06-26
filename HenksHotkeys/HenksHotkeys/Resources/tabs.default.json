@@ -1339,54 +1339,48 @@
         {
           "buttons": [
             {
-              "text": "henk.vanbruggen@microsurvey.com",
+              "secret": "you@example.com",
               "desc": "email - MicroSurvey VHE",
               "hotkey": "^+#F9",
-              "align": "left",
-              "showText": false
+              "align": "left"
             },
             {
-              "text": "H{!}Pircotha29",
+              "secret": "REPLACE_ME",
               "desc": "pswd - MicroSurvey VHE",
               "hotkey": "^+#F10",
-              "align": "left",
-              "showText": false
+              "align": "left"
             }
           ]
         },
         {
           "buttons": [
             {
-              "text": "henk.vanbruggen@microsurvey.onmicrosoft.com",
+              "secret": "you@example.onmicrosoft.com",
               "desc": "email - OnMicrosoft",
               "hotkey": "^+#F11",
-              "align": "left",
-              "showText": false
+              "align": "left"
             },
             {
-              "text": "HVB13{#}dvlp{@}",
+              "secret": "REPLACE_ME",
               "desc": "pswd - OnMicrosoft",
               "hotkey": "^+#F12",
-              "align": "left",
-              "showText": false
+              "align": "left"
             }
           ]
         },
         {
           "buttons": [
             {
-              "text": "buildprogrammer.geo@microsurvey.com",
+              "secret": "you@example.com",
               "desc": "email - Build Programmer",
               "hotkey": "^+#F7",
-              "align": "left",
-              "showText": false
+              "align": "left"
             },
             {
-              "text": "MS2023bp{!}run",
+              "secret": "REPLACE_ME",
               "desc": "pswd - Build Programmer",
               "hotkey": "^+#F8",
-              "align": "left",
-              "showText": false
+              "align": "left"
             }
           ]
         },
@@ -1394,11 +1388,10 @@
           "indent": 1,
           "buttons": [
             {
-              "text": "MyDogIs1Cut3Puppy",
+              "secret": "REPLACE_ME",
               "desc": "pswd - BitWarden",
               "hotkey": "^+#F6",
-              "align": "left",
-              "showText": false
+              "align": "left"
             }
           ]
         }
