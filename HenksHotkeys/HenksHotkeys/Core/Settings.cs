@@ -7,7 +7,6 @@ namespace HenksHotkeys.Core;
 /// </summary>
 internal sealed class Settings
 {
-  public bool WndOpen            { get; set; }
   public bool Collapsed          { get; set; }
   public bool ClipSendMode       { get; set; }
   public bool StripCommentEmojis { get; set; }

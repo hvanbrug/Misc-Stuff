@@ -53,12 +53,10 @@ internal sealed class SettingsStore
   }
 
   // ── Accessors (parallel to the former IniFile / INI_* helpers) ───
-  public bool IsWndOpen            => m_data.WndOpen;
   public bool IsCollapsed          => m_data.Collapsed;
   public bool IsClipSendMode       => m_data.ClipSendMode;
   public bool IsStripCommentEmojis => m_data.StripCommentEmojis;
 
-  public void SetWndOpen( bool v )            { m_data.WndOpen = v;            Save(); }
   public void SetCollapsed( bool v )          { m_data.Collapsed = v;          Save(); }
   public void SetClipSendMode( bool v )       { m_data.ClipSendMode = v;       Save(); }
   public void SetStripCommentEmojis( bool v ) { m_data.StripCommentEmojis = v; Save(); }
