@@ -12,6 +12,8 @@ namespace HenksHotkeys;
 /// </summary>
 public partial class App
 {
+  private const string MutexName = "HenksHotkeys_SingleInstance_2A6F";
+
   private Mutex?               m_mutex;
   private GlobalHotkeyManager? m_hotkeys;
   private TrayIcon?            m_tray;
@@ -21,8 +23,16 @@ public partial class App
   {
     base.OnStartup( e );
 
+    // Elevated helper mode: just serve window-fit requests over the pipe — no
+    // single-instance lock, settings, tabs, UI or tray.
+    if( ElevatedFit.IsHelperArg( e.Args ) )
+    {
+      new Thread( () => ElevatedFit.RunHelper( e.Args ) ) { IsBackground = true }.Start();
+      return;
+    }
+
     // #SingleInstance Force — only one running copy.
-    m_mutex = new Mutex( true, "HenksHotkeys_SingleInstance_2A6F", out bool createdNew );
+    m_mutex = new Mutex( true, MutexName, out bool createdNew );
     if( !createdNew )
     {
       Shutdown();
@@ -112,6 +122,7 @@ public partial class App
 
   protected override void OnExit( ExitEventArgs e )
   {
+    ElevatedFit.Shutdown();
     m_tray?.Dispose();
     m_hotkeys?.Dispose();
     base.OnExit( e );

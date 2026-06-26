@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace HenksHotkeys.Native;
 
@@ -24,10 +25,11 @@ internal static class NativeMethods
   public const int HTCAPTION        = 2;
 
   // ── SetWindowPos flags ───────────────────────────────────────────
-  public const uint SWP_NOSIZE     = 0x0001;
-  public const uint SWP_NOMOVE     = 0x0002;
-  public const uint SWP_NOZORDER   = 0x0004;
-  public const uint SWP_NOACTIVATE = 0x0010;
+  public const uint SWP_NOSIZE        = 0x0001;
+  public const uint SWP_NOMOVE        = 0x0002;
+  public const uint SWP_NOZORDER      = 0x0004;
+  public const uint SWP_NOACTIVATE    = 0x0010;
+  public const uint SWP_NOSENDCHANGING = 0x0400; // skip WM_WINDOWPOSCHANGING (size-clamping apps)
 
   // ── Global hotkey modifiers (RegisterHotKey) ─────────────────────
   public const uint MOD_ALT      = 0x0001;
@@ -204,7 +206,37 @@ internal static class NativeMethods
   // DWMWA_EXTENDED_FRAME_BOUNDS
   public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 
-  public const int SW_RESTORE = 9;
+  public const int SW_RESTORE  = 9;
+  public const int SW_MAXIMIZE = 3;
+
+  [DllImport( "user32.dll", CharSet = CharSet.Unicode )]
+  public static extern int GetClassName( IntPtr hWnd, StringBuilder lpClassName, int nMaxCount );
+
+  [DllImport( "user32.dll" )]
+  public static extern uint GetWindowThreadProcessId( IntPtr hWnd, out uint processId );
+
+  public const uint GA_ROOT = 2;
+
+  [DllImport( "user32.dll" )]
+  public static extern IntPtr GetAncestor( IntPtr hwnd, uint gaFlags );
+
+  public const int WM_ENTERSIZEMOVE = 0x0231;
+  public const int WM_EXITSIZEMOVE  = 0x0232;
+
+  /// <summary>
+  /// Move/size a window to exact bounds, bracketed by ENTER/EXIT size-move so a
+  /// hosted RDP client (Hyper-V enhanced session) renegotiates its inner desktop
+  /// resolution the way it does for an interactive edge-drag — a plain
+  /// SetWindowPos resizes the frame but doesn't trigger that. Returns the
+  /// SetWindowPos result.
+  /// </summary>
+  public static bool ApplyBounds( IntPtr hwnd, int x, int y, int w, int h )
+  {
+    SendMessage( hwnd, WM_ENTERSIZEMOVE, IntPtr.Zero, IntPtr.Zero );
+    bool ok = SetWindowPos( hwnd, IntPtr.Zero, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE );
+    SendMessage( hwnd, WM_EXITSIZEMOVE, IntPtr.Zero, IntPtr.Zero );
+    return ok;
+  }
 
   // DWMWA_USE_IMMERSIVE_DARK_MODE
   public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
