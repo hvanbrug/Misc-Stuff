@@ -43,23 +43,36 @@ internal sealed class DataTabModel : TabModel
       // exactly mirroring the cursor engine's CalcSymbolY. Row 0 sits at the
       // origin plus any leading gap; each later row adds one row plus its gap.
       rowOffset = r == 0 ? row.GapBefore : rowOffset + 1.0 + row.GapBefore;
+      if( row.Blank )
+      {
+        continue; // blank row: just occupies the vertical space
+      }
       int y = SymOrgY + (int)Math.Round( rowOffset * RowHeight );
 
+      // Walk the row horizontally; every entry (button or blank) takes one cell,
+      // and a button's own gapBefore inserts space ahead of it.
+      double col = row.Indent;
       for( int i = 0; i < row.Buttons.Count; i++ )
       {
-        ButtonDef b    = row.Buttons[i];
-        int       slot = row.Indent + i + 1;
-        int       x    = SymOrgX + ( row.Indent + i ) * ColWidth;
+        ButtonDef b = row.Buttons[i];
+        col += b.GapBefore;
 
-        // Secret buttons send the decrypted value but never show it (face = desc,
-        // no value in the tooltip), regardless of the show/tip flags.
-        string sendText = b.IsSecret ? ( b.Plain ?? "" ) : b.Text;
-        int    showText = b.IsSecret ? 0 : ( b.ShowText ? 1 : 0 );
-        int    tipText  = b.IsSecret ? 0 : ( b.TipText  ? 1 : 0 );
+        if( !b.Blank )
+        {
+          int x = SymOrgX + (int)Math.Round( col * ColWidth );
 
-        PlaceSymbol( r + 1, slot, b.Width, x, y,
-                     sendText, b.Desc, b.Hotkey, null,
-                     b.Align, showText, tipText );
+          // Secret buttons send the decrypted value but never show it (face = desc,
+          // no value in the tooltip), regardless of the show/tip flags.
+          string sendText = b.IsSecret ? ( b.Plain ?? "" ) : b.Text;
+          int    showText = b.IsSecret ? 0 : ( b.ShowText ? 1 : 0 );
+          int    tipText  = b.IsSecret ? 0 : ( b.TipText  ? 1 : 0 );
+
+          PlaceSymbol( r + 1, (int)Math.Round( col ) + 1, b.Width, x, y,
+                       sendText, b.Desc, b.Hotkey, null,
+                       b.Align, showText, tipText );
+        }
+
+        col += 1.0; // the cell this entry occupies
       }
     }
   }

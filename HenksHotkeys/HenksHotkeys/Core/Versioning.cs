@@ -20,43 +20,58 @@ internal static class VersionStamp
     => t.Rows is null ? Enumerable.Empty<ButtonDef>() : t.Rows.SelectMany( r => r.Buttons );
 
   public static string ButtonSig( ButtonDef b )
-    => string.Join( Sep, b.Text, b.Secret, b.Desc, b.Hotkey, b.Width, b.Align, b.ShowText, b.TipText );
+    => string.Join( Sep, b.Text, b.Secret, b.Desc, b.Hotkey, b.Width, b.Align,
+                    b.ShowText, b.TipText, b.GapBefore, b.Blank );
 
   /// <summary>Split any row wider than the tab's column count into multiple rows,
   /// so a merge/repair that piled buttons into one row can't make the tab (and
   /// window) absurdly wide. Returns true if it changed anything.</summary>
   public static bool NormalizeRows( TabEntry t )
   {
-    if( t.Rows is null || t.Columns <= 0 || !t.Rows.Any( r => r.Indent + r.Buttons.Count > t.Columns ) )
+    if( t.Rows is null )
     {
       return false;
     }
 
-    var newRows = new List<RowDef>();
+    bool changed = false;
+
+    // Blank rows draw nothing — drop any buttons they carry.
     foreach( RowDef r in t.Rows )
     {
-      if( r.Indent + r.Buttons.Count <= t.Columns )
-      {
-        newRows.Add( r );
-        continue;
-      }
-      bool first = true;
-      for( int i = 0; i < r.Buttons.Count; )
-      {
-        int indent = first ? r.Indent : 0;
-        int cap    = Math.Max( 1, t.Columns - indent );
-        newRows.Add( new RowDef
-        {
-          GapBefore = first ? r.GapBefore : 0,
-          Indent    = indent,
-          Buttons   = r.Buttons.Skip( i ).Take( cap ).ToList(),
-        } );
-        i += cap;
-        first = false;
-      }
+      if( r.Blank && r.Buttons.Count > 0 ) { r.Buttons.Clear(); changed = true; }
     }
-    t.Rows = newRows;
-    return true;
+
+    // Split any (non-blank) row that has more cells than the tab is wide.
+    if( t.Columns > 0 && t.Rows.Any( r => !r.Blank && r.Indent + r.Buttons.Count > t.Columns ) )
+    {
+      var newRows = new List<RowDef>();
+      foreach( RowDef r in t.Rows )
+      {
+        if( r.Blank || r.Indent + r.Buttons.Count <= t.Columns )
+        {
+          newRows.Add( r );
+          continue;
+        }
+        bool first = true;
+        for( int i = 0; i < r.Buttons.Count; )
+        {
+          int indent = first ? r.Indent : 0;
+          int cap    = Math.Max( 1, t.Columns - indent );
+          newRows.Add( new RowDef
+          {
+            GapBefore = first ? r.GapBefore : 0,
+            Indent    = indent,
+            Buttons   = r.Buttons.Skip( i ).Take( cap ).ToList(),
+          } );
+          i += cap;
+          first = false;
+        }
+      }
+      t.Rows = newRows;
+      changed = true;
+    }
+
+    return changed;
   }
 
   // Tab attributes + layout (row gaps/indents and the order of button ids), but
@@ -68,7 +83,7 @@ internal static class VersionStamp
                                 t.EmojiImages, t.StripEmojis );
     string layout = t.Rows is null
       ? ""
-      : string.Join( Sep, t.Rows.Select( r => r.GapBefore + "/" + r.Indent + "/" +
+      : string.Join( Sep, t.Rows.Select( r => r.GapBefore + "/" + r.Indent + "/" + r.Blank + "/" +
                                               string.Join( ",", r.Buttons.Select( b => b.Id ) ) ) );
     return attrs + Sep + layout;
   }

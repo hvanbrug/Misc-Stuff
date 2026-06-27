@@ -110,11 +110,17 @@ internal sealed class RowDef
   [JsonProperty( "gapBefore" ), DefaultValue( 0.0 )]
   public double GapBefore { get; set; }
 
-  /// <summary>Leading empty cells before the first button.</summary>
+  /// <summary>Leading empty cells before the first button (shifts the whole row
+  /// right). Equivalent to <c>gapBefore</c> on the first button.</summary>
   [JsonProperty( "indent" ), DefaultValue( 0 )]
   public int Indent { get; set; }
 
-  [JsonProperty( "buttons" )]
+  /// <summary>A blank spacer row: takes up one row's vertical space and draws
+  /// nothing. Any buttons are ignored (and removed on load).</summary>
+  [JsonProperty( "blank" ), DefaultValue( false )]
+  public bool Blank { get; set; }
+
+  [JsonProperty( "buttons", NullValueHandling = NullValueHandling.Ignore )]
   public List<ButtonDef> Buttons { get; set; } = new();
 }
 
@@ -162,6 +168,16 @@ internal sealed class ButtonDef
   /// <summary>Include the sent text in the tooltip.</summary>
   [JsonProperty( "tipText" ), DefaultValue( false )]
   public bool TipText { get; set; }
+
+  /// <summary>Horizontal gap before this button, in cell widths (like a row's
+  /// gapBefore but sideways). Fractional allowed.</summary>
+  [JsonProperty( "gapBefore" ), DefaultValue( 0.0 )]
+  public double GapBefore { get; set; }
+
+  /// <summary>A blank spacer cell: occupies one column but draws nothing. The
+  /// text, hotkey and tooltip (desc) are ignored.</summary>
+  [JsonProperty( "blank" ), DefaultValue( false )]
+  public bool Blank { get; set; }
 
   // ── Merge metadata (app-managed) ──
   [JsonProperty( "id", NullValueHandling = NullValueHandling.Ignore )]
