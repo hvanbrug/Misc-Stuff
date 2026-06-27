@@ -24,6 +24,13 @@ internal static class TabStore
                                    "HenksHotkeys", "tabs.json" );
   }
 
+  // Last fully-known state, used to detect local edits for version stamping.
+  private static string ShadowPath
+  {
+    get => System.IO.Path.Combine( Environment.GetFolderPath( Environment.SpecialFolder.LocalApplicationData ),
+                                   "HenksHotkeys", "tabs.shadow.json" );
+  }
+
   private static readonly JsonSerializerSettings JsonSettings = new()
   {
     Formatting           = Formatting.Indented,
@@ -37,21 +44,12 @@ internal static class TabStore
 
   public static List<TabModel> Load()
   {
-    string json = ReadOrSeed();
-    TabFile? file = TryParse( json );
-    LastParseOk = file is not null;
-    file ??= TryParse( ReadDefault() );
+    TabFile? file = ReadAndSync();
 
     var tabs = new List<TabModel>();
     if( file is null )
     {
       return tabs;
-    }
-
-    // Encrypt any plaintext secrets in place and persist; decrypt the rest for use.
-    if( ProcessSecrets( file ) )
-    {
-      TrySave( file );
     }
 
     foreach( TabEntry entry in file.Tabs )
@@ -63,6 +61,119 @@ internal static class TabStore
       }
     }
     return tabs;
+  }
+
+  // Parse tabs.json, version-stamp local edits, process secrets, persist, and
+  // refresh the shadow. The single funnel for reading the current config.
+  private static TabFile? ReadAndSync()
+  {
+    string json = ReadOrSeed();
+    TabFile? file = TryParse( json );
+    LastParseOk = file is not null;
+    file ??= TryParse( ReadDefault() );
+    if( file is null )
+    {
+      return null;
+    }
+
+    // Heal any over-wide rows (e.g. from an older merge/repair) before stamping.
+    bool dirty = false;
+    foreach( TabEntry t in file.Tabs )
+    {
+      dirty |= VersionStamp.NormalizeRows( t );
+    }
+
+    dirty |= VersionStamp.Stamp( file, LoadShadow() );
+    dirty |= ProcessSecrets( file );
+    if( dirty )
+    {
+      TrySave( file );
+    }
+    SaveShadow( file );
+    return file;
+  }
+
+  /// <summary>Write the current (stamped) config to <paramref name="targetPath"/> for sharing.</summary>
+  public static bool Export( string targetPath )
+  {
+    if( ReadAndSync() is null )
+    {
+      return false;
+    }
+    try
+    {
+      File.Copy( Path, targetPath, overwrite: true );
+      return true;
+    }
+    catch
+    {
+      return false;
+    }
+  }
+
+  /// <summary>Merge a shared file into the local config (last-writer-wins per tab/
+  /// button). Returns false if the file couldn't be read.</summary>
+  public static bool Import( string sourcePath )
+  {
+    TabFile? incoming;
+    try   { incoming = TryParse( File.ReadAllText( sourcePath ) ); }
+    catch { return false; }
+    if( incoming is null )
+    {
+      return false;
+    }
+    VersionStamp.Stamp( incoming, null ); // ensure ids/clocks if it was hand-made
+
+    TabFile local = TryParse( ReadOrSeed() ) ?? new TabFile();
+    VersionStamp.Stamp( local, LoadShadow() ); // capture local edits first
+
+    // Heal any pre-existing duplicate tabs, then match the two files by identity
+    // (name/content) so independently-stamped ids don't duplicate on merge.
+    VersionMerge.CollapseDuplicateTabs( local );
+    VersionMerge.ReconcileIds( local, incoming );
+
+    TabFile merged = VersionMerge.Merge( local, incoming );
+    VersionMerge.CollapseDuplicateTabs( merged );
+    ProcessSecrets( merged );
+    TrySave( merged );
+    SaveShadow( merged );
+    return true;
+  }
+
+  /// <summary>Merge duplicate (same-name) tabs in the current config into one,
+  /// keeping every distinct button. Returns the number of duplicates removed.</summary>
+  public static int RepairDuplicates()
+  {
+    TabFile? file = TryParse( ReadOrSeed() );
+    if( file is null )
+    {
+      return 0;
+    }
+    VersionStamp.Stamp( file, LoadShadow() );
+    int removed = VersionMerge.CollapseDuplicateTabs( file );
+    ProcessSecrets( file );
+    TrySave( file );
+    SaveShadow( file );
+    return removed;
+  }
+
+  private static TabFile? LoadShadow()
+  {
+    try   { return File.Exists( ShadowPath ) ? TryParse( File.ReadAllText( ShadowPath ) ) : null; }
+    catch { return null; }
+  }
+
+  private static void SaveShadow( TabFile file )
+  {
+    try
+    {
+      Directory.CreateDirectory( System.IO.Path.GetDirectoryName( ShadowPath )! );
+      File.WriteAllText( ShadowPath, JsonConvert.SerializeObject( file, JsonSettings ) );
+    }
+    catch
+    {
+      // shadow is an optimisation; failing to write it is non-fatal
+    }
   }
 
   /// <summary>

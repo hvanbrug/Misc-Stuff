@@ -85,11 +85,69 @@ public partial class App
     ("Move to favourite spot", () => m_window!.MoveToFavouriteSpot()),
     (null, null),
     ("Reload configuration",   ReloadConfig),
+    ("Export config…",         ExportConfig),
+    ("Import && merge config…", ImportConfig),
+    ("Repair: merge duplicate tabs", RepairDuplicates),
     (null, null),
     ("Test Function",          AppActions.TestFunction),
     (null, null),
     ("Exit",                   ExitApp),
   };
+
+  // Write the current config to a file you can copy to the other machine.
+  private void ExportConfig()
+  {
+    var dlg = new Microsoft.Win32.SaveFileDialog
+    {
+      Title    = "Export Henk's Hotkeys config",
+      FileName = "tabs.json",
+      Filter   = "Config (*.json)|*.json|All files (*.*)|*.*",
+    };
+    if( dlg.ShowDialog() != true )
+    {
+      return;
+    }
+    bool ok = TabStore.Export( dlg.FileName );
+    MessageBox.Show( ok ? "Config exported." : "Export failed.", "Export config",
+                     MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning );
+  }
+
+  // Collapse duplicate (same-name) tabs into one — recovery for a bad merge.
+  private void RepairDuplicates()
+  {
+    int removed = TabStore.RepairDuplicates();
+    if( removed > 0 )
+    {
+      ReloadConfig();
+    }
+    MessageBox.Show( removed > 0 ? $"Merged {removed} duplicate tab(s)." : "No duplicate tabs found.",
+                     "Repair duplicates", MessageBoxButton.OK, MessageBoxImage.Information );
+  }
+
+  // Merge a shared config file into this machine's (last-writer-wins per tab/button).
+  private void ImportConfig()
+  {
+    var dlg = new Microsoft.Win32.OpenFileDialog
+    {
+      Title  = "Import && merge config",
+      Filter = "Config (*.json)|*.json|All files (*.*)|*.*",
+    };
+    if( dlg.ShowDialog() != true )
+    {
+      return;
+    }
+    if( TabStore.Import( dlg.FileName ) )
+    {
+      ReloadConfig(); // rebuild the UI from the merged config
+      MessageBox.Show( "Config imported and merged.", "Import config",
+                       MessageBoxButton.OK, MessageBoxImage.Information );
+    }
+    else
+    {
+      MessageBox.Show( "Couldn't read that file as a config.", "Import config",
+                       MessageBoxButton.OK, MessageBoxImage.Warning );
+    }
+  }
 
   // Re-read tabs.json and rebuild the tabs, buttons and global hotkeys in place,
   // so edits to the config take effect without restarting.

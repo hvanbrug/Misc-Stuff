@@ -50,6 +50,8 @@
     "secret:",
     "  an encrypted value;",
     "  type the plaintext once and it is sealed on the next load.",
+    "Sharing across machines: use the menu's Export / Import - Import merges (per tab/button, newest wins) so neither machine's edits are clobbered.",
+    "Each tab/button has an app-managed id and mod for that merge - don't edit those.",
     "This _readme is ignored by the app - edit or delete it freely."
   ],
   "tabs": [

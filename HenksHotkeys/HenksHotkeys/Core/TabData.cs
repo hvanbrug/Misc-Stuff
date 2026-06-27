@@ -24,6 +24,17 @@ internal sealed class TabFile
 
   [JsonProperty( "tabs" )]
   public List<TabEntry> Tabs { get; set; } = new();
+
+  /// <summary>Tombstones for tabs/buttons deleted on some machine, so the deletion
+  /// wins over a stale copy on merge. App-managed; prunable.</summary>
+  [JsonProperty( "_deleted", NullValueHandling = NullValueHandling.Ignore )]
+  public List<Tombstone>? Deleted { get; set; }
+}
+
+internal sealed class Tombstone
+{
+  [JsonProperty( "id" )]  public string Id  { get; set; } = "";
+  [JsonProperty( "mod" )] public long   Mod { get; set; }
 }
 
 internal sealed class CryptoHeader
@@ -82,6 +93,14 @@ internal sealed class TabEntry
 
   [JsonProperty( "rows", NullValueHandling = NullValueHandling.Ignore )]
   public List<RowDef>? Rows { get; set; }
+
+  // ── Merge metadata (app-managed; keeps sharing across machines safe) ──
+  [JsonProperty( "id", NullValueHandling = NullValueHandling.Ignore )]
+  public string? Id { get; set; }
+
+  /// <summary>Last-modified clock for this tab's own fields + layout.</summary>
+  [JsonProperty( "mod", DefaultValueHandling = DefaultValueHandling.Ignore )]
+  public long Mod { get; set; }
 }
 
 internal sealed class RowDef
@@ -143,4 +162,12 @@ internal sealed class ButtonDef
   /// <summary>Include the sent text in the tooltip.</summary>
   [JsonProperty( "tipText" ), DefaultValue( false )]
   public bool TipText { get; set; }
+
+  // ── Merge metadata (app-managed) ──
+  [JsonProperty( "id", NullValueHandling = NullValueHandling.Ignore )]
+  public string? Id { get; set; }
+
+  /// <summary>Last-modified clock for this button's content.</summary>
+  [JsonProperty( "mod", DefaultValueHandling = DefaultValueHandling.Ignore )]
+  public long Mod { get; set; }
 }
