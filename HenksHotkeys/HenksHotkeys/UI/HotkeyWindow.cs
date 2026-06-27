@@ -34,6 +34,7 @@ internal sealed class HotkeyWindow : Window
   private TextBlock  m_clipIndicator  = null!;
   private TextBlock  m_stripIndicator = null!;
   private Button     m_toggleBtn      = null!;
+  private StackPanel m_leftStrip      = null!;
   private StackPanel m_rightCluster   = null!;
 
   private double m_fullWidth;
@@ -108,20 +109,21 @@ internal sealed class HotkeyWindow : Window
     BuildTabs();
     BuildCornerControls();
 
-    var strip = new Grid { Height = 26, Background = Theme.WindowBackground };
+    // The strip auto-sizes to its corner controls; the window border's EdgeGap
+    // padding provides the gap to the window edges (no hand-tuned margins).
+    var strip = new Grid { Background = Theme.WindowBackground };
 
-    var left = new StackPanel
+    m_leftStrip = new StackPanel
     {
       Orientation         = Orientation.Horizontal,
       HorizontalAlignment = HorizontalAlignment.Left,
       VerticalAlignment   = VerticalAlignment.Center,
-      Margin              = new Thickness( 2, 0, 0, 0 ),
     };
-    left.Children.Add( m_clipIndicator  );
-    left.Children.Add( m_toggleBtn      );
-    left.Children.Add( m_stripIndicator );
+    m_leftStrip.Children.Add( m_clipIndicator  );
+    m_leftStrip.Children.Add( m_toggleBtn      );
+    m_leftStrip.Children.Add( m_stripIndicator );
 
-    strip.Children.Add( left );
+    strip.Children.Add( m_leftStrip );
     strip.Children.Add( m_rightCluster );
     strip.MouseLeftButtonDown += OnStripDragStart;
 
@@ -138,6 +140,7 @@ internal sealed class HotkeyWindow : Window
       BorderThickness = new Thickness( Theme.BorderThickness ),
       BorderBrush     = Theme.BorderColor,
       Background      = Theme.WindowBackground,
+      Padding         = new Thickness( Layout.EdgeGap ), // gap between border and contents
       Child           = grid,
     };
   }
@@ -180,12 +183,16 @@ internal sealed class HotkeyWindow : Window
         Width      = model.ContentWidth,
         Height     = model.ContentHeight,
         Background  = Theme.WindowBackground,
+        // Sit at the top-left so the edge gap is a consistent 2px instead of the
+        // buttons being centred in the (wider) locked-width window.
+        HorizontalAlignment = HorizontalAlignment.Left,
+        VerticalAlignment   = VerticalAlignment.Top,
       };
       foreach( SymbolElement sym in model.Symbols )
       {
         FrameworkElement btn = BuildButton( sym, model );
         Canvas.SetLeft( btn, sym.X );
-        Canvas.SetTop( btn, sym.Y + 5 - model.SymOrgY );
+        Canvas.SetTop( btn, sym.Y );
         canvas.Children.Add( btn );
       }
 
@@ -350,7 +357,6 @@ internal sealed class HotkeyWindow : Window
       Orientation         = Orientation.Horizontal,
       HorizontalAlignment = HorizontalAlignment.Right,
       VerticalAlignment   = VerticalAlignment.Center,
-      Margin              = new Thickness( 0, 0, 2, 0 ),
     };
     RaiseTop( 1, MakeButton( "🔄",  "Repaint / Refresh",          "Segoe UI Symbol", 10f, ForceRepaint ) );
     RaiseTop( 0, MakeBtnGap( 38 ) );
@@ -382,7 +388,7 @@ internal sealed class HotkeyWindow : Window
       FontSize   = PtToDip( 10f ),
       Foreground = Theme.TextColor,
       VerticalAlignment = VerticalAlignment.Center,
-      Margin     = new Thickness( 3, 0, 3, 0 ),
+      Margin     = new Thickness( Layout.EdgeGap, 0, Layout.EdgeGap, 0 ),
       Cursor     = Cursors.Hand,
     };
     MakeDragOrClick( tb, onClick );
@@ -429,8 +435,8 @@ internal sealed class HotkeyWindow : Window
     {
       maxContentW = Math.Max( maxContentW, m.ContentWidth );
     }
-    // content + scrollbar + tab insets + window border (device-independent units)
-    m_fullWidth = maxContentW + 30;
+    // tab content + scrollbar + border padding (EdgeGap) + window border.
+    m_fullWidth = maxContentW + Layout.ScrollBarWidth + 2 * Layout.EdgeGap + 2 * Theme.BorderThickness;
   }
 
   private void ComputeFullSize()
@@ -546,14 +552,17 @@ internal sealed class HotkeyWindow : Window
         m_toggleBtn.Content       = "▼";
         m_toggleBtn.ToolTip       = "Expand window";
 
-        // Collapsed strip is a fixed size and not resizable.
+        // Collapsed strip is sized to its corner controls (not resizable).
+        // Relax each Min before assigning the (smaller) value: WPF coerces a new
+        // size up to the current Min, so the Min has to drop first or it sticks.
         ResizeMode = ResizeMode.NoResize;
-        MinWidth   = 84;
-        MaxWidth   = 84;
-        Width      = 84;
-        MinHeight  = 28;
-        MaxHeight  = 28;
-        Height     = 28;
+        Size c     = CollapsedSize();
+        MinWidth   = c.Width;
+        MaxWidth   = c.Width;
+        Width      = c.Width;
+        MinHeight  = c.Height;
+        MaxHeight  = c.Height;
+        Height     = c.Height;
       }
       else
       {
@@ -582,6 +591,16 @@ internal sealed class HotkeyWindow : Window
     {
       AppState.Settings.SetCollapsed( collapse );
     }
+  }
+
+  // The collapsed window is the left corner cluster plus the window border and
+  // its edge-gap padding — derived, so it tracks the controls and the constants.
+  private Size CollapsedSize()
+  {
+    m_leftStrip.Measure( new Size( double.PositiveInfinity, double.PositiveInfinity ) );
+    Size   s      = m_leftStrip.DesiredSize;
+    double chrome = 2 * ( Theme.BorderThickness + Layout.EdgeGap );
+    return new Size( Math.Ceiling( s.Width + chrome ), Math.Ceiling( s.Height + chrome ) );
   }
 
   private void ForceRepaint()

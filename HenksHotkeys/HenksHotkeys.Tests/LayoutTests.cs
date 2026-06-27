@@ -4,9 +4,12 @@ using Xunit;
 
 namespace HenksHotkeys.Tests;
 
-// Defaults: SymOrg (15,35); button 35, gap 3 → ColWidth = RowHeight = 38.
+// Buttons start at (EdgeGap, EdgeGap); default button 35; cell pitch = 35 + ButtonGap.
 public class LayoutTests
 {
+  private const int EG = Layout.EdgeGap;
+  private const int CW = 35 + Layout.ButtonGap;
+
   private static ButtonDef B( string text ) => new() { Text = text };
 
   private static DataTabModel Build( int columns, params RowDef[] rows )
@@ -19,8 +22,8 @@ public class LayoutTests
       new RowDef { Buttons = { B( "A" ), new ButtonDef { Text = "B", GapBefore = 1 } } } );
 
     Assert.Equal( 2, t.Symbols.Count );
-    Assert.Equal( 15, t.Symbols[0].X );           // A at column 0
-    Assert.Equal( 15 + 2 * 38, t.Symbols[1].X );  // B pushed an extra cell right by the gap
+    Assert.Equal( EG, t.Symbols[0].X );           // A at column 0
+    Assert.Equal( EG + 2 * CW, t.Symbols[1].X );  // B pushed an extra cell right by the gap
   }
 
   [Fact]
@@ -30,8 +33,8 @@ public class LayoutTests
       new RowDef { Buttons = { B( "A" ), new ButtonDef { Blank = true, Text = "ignored" }, B( "B" ) } } );
 
     Assert.Equal( 2, t.Symbols.Count );           // the blank cell is not drawn
-    Assert.Equal( 15, t.Symbols[0].X );
-    Assert.Equal( 15 + 2 * 38, t.Symbols[1].X );  // B skipped the blank cell
+    Assert.Equal( EG, t.Symbols[0].X );
+    Assert.Equal( EG + 2 * CW, t.Symbols[1].X );  // B skipped the blank cell
   }
 
   [Fact]
@@ -43,8 +46,8 @@ public class LayoutTests
       new RowDef { Buttons = { B( "B" ) } } );
 
     Assert.Equal( 2, t.Symbols.Count );
-    Assert.Equal( 35, t.Symbols[0].Y );
-    Assert.Equal( 35 + 2 * 38, t.Symbols[1].Y );  // B is two rows down (blank row took one)
+    Assert.Equal( EG, t.Symbols[0].Y );
+    Assert.Equal( EG + 2 * CW, t.Symbols[1].Y );  // B is two rows down (blank row took one)
   }
 
   [Fact]

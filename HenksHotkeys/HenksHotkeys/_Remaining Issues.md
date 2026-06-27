@@ -24,18 +24,20 @@ Partly modernised: data tabs lay out from `rows` + `columns` + `gapBefore`/`inde
 7. **DONE** — Go fully WPF by dropping UseWindowsForms.
 The tray NotifyIcon (Shell_NotifyIcon), Clipboard (System.Windows.Clipboard), and Screen/monitor (Win32) were all replaced; no dual-framework dependency remains.
 
-8. Button-gap constant, starting at 2px (gap between buttons, horizontal and vertical).
-**Open.** There is a per-tab `gap` field (default 3) feeding `ColWidth`/`RowHeight`, but not a single 2px constant.
+8. **DONE** — Button-gap constant, starting at 2px (gap between buttons, horizontal and vertical).
+`Layout.ButtonGap` (2px) feeds `ColWidth`/`RowHeight` and the multi-cell button width. The per-tab `gap` field was removed.
 
-9. Edge-gap constant, starting at 2px (gap between edges/containers and any controls — window edges, the tab control, etc.).
-**Open.** Spacing is still ad-hoc (the `SymOrgX`/`SymOrgY` origins and assorted margins).
+9. **DONE** — Edge-gap constant, starting at 2px (gap between edges/containers and any controls — window edges, the tab control, etc.).
+`Layout.EdgeGap` (2px): buttons start at `(EdgeGap, EdgeGap)`, `ContentWidth`/`Height` add a trailing edge-gap, and the window border carries `EdgeGap` padding. The per-tab `originX`/`originY` fields were removed, and the dead `TabExporter` was deleted.
 
-10. Calculated corner controls + calculated collapsed size. I would like to include the right corner as well.
-**Open.** The top-left indicators/collapse button are still positioned by hand, and the collapsed strip is hardcoded (84×30) rather than derived from those controls.
+10. **DONE** — Calculated corner controls + calculated collapsed size (both corners).
+The strip's hand-tuned margins are gone: both the left cluster (○ ▲ ☺) and the right cluster (🔄 ⌫. ⇚, ↩ ▲) sit at `Layout.EdgeGap` from the window edges via the border padding, the strip auto-sizes to its controls (no fixed `Height = 26`), and the indicator spacing uses `EdgeGap`. The collapsed window is now derived — `CollapsedSize()` measures the left cluster and adds the border + edge-gap chrome (≈ 79×30) instead of the old hardcoded 84×28.
+*Note:* the right cluster's per-glyph `RaiseTop` baseline nudges and the fixed inter-icon gap remain — they're font-metric cosmetics, not edge positioning.
 
 11. Full-on UI configuration — no more error-prone manual JSON editing.
 **Open (end goal).** Manual editing is much safer now — embedded `_readme` cheat-sheet, **Reload**, **Export/Import** with per-button merge + **Repair duplicate tabs**, encrypted secrets, and blank/gap spacers — but a real in-app editor is still the target.
 
-12. Make the buttons in a tab control originate at top left instead of center.
+12. **DONE** — Make the buttons in a tab control originate at top left instead of center.
+The button `Canvas` is now `HorizontalAlignment.Left` + `VerticalAlignment.Top`, so a tab narrower than the (locked) window width sits at the top-left edge-gap instead of being centred. (Done alongside #8/#9.)
 
 13. Add a favourites section at the top of the Emojis tab that is configurable by the user.

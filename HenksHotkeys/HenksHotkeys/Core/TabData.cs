@@ -76,15 +76,6 @@ internal sealed class TabEntry
   [JsonProperty( "buttonHeight" ), DefaultValue( 35 )]
   public int ButtonHeight { get; set; } = 35;
 
-  [JsonProperty( "gap" ), DefaultValue( 3 )]
-  public int Gap { get; set; } = 3;
-
-  [JsonProperty( "originX" ), DefaultValue( 15 )]
-  public int OriginX { get; set; } = 15;
-
-  [JsonProperty( "originY" ), DefaultValue( 35 )]
-  public int OriginY { get; set; } = 35;
-
   [JsonProperty( "emojiImages" ), DefaultValue( false )]
   public bool EmojiImages { get; set; }
 

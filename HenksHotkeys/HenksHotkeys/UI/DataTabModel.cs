@@ -16,9 +16,6 @@ internal sealed class DataTabModel : TabModel
     FontName          = e.FontName;
     SymBtnSizeX       = e.ButtonWidth;
     SymBtnSizeY       = e.ButtonHeight;
-    SymBtnGap         = e.Gap;
-    SymOrgX           = e.OriginX;
-    SymOrgY           = e.OriginY;
     UseEmojiImages    = e.EmojiImages;
     EnableStripEmojis = e.StripEmojis;
 

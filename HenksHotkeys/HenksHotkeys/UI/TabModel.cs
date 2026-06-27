@@ -13,11 +13,10 @@ internal abstract class TabModel
   public string Name        { get; }
   public float  FontSize    { get; protected set; } = 14f;
   public string FontName    { get; protected set; } = "Segoe UI";
-  public int    SymOrgX     { get; protected set; } = 15;
-  public int    SymOrgY     { get; protected set; } = 35;
+  public int    SymOrgX     => Layout.EdgeGap;  // buttons start one edge-gap in
+  public int    SymOrgY     => Layout.EdgeGap;
   public int    SymBtnSizeX { get; protected set; } = 35;
   public int    SymBtnSizeY { get; protected set; } = 35;
-  public int    SymBtnGap   { get; protected set; } = 3;
   public bool   UseEmojiImages   { get; protected set; }
   public bool   EnableStripEmojis{ get; protected set; }
 
@@ -50,8 +49,8 @@ internal abstract class TabModel
     m_lineIsRow = true;
   }
 
-  public int RowHeight => SymBtnSizeY + SymBtnGap;
-  public int ColWidth  => SymBtnSizeX + SymBtnGap;
+  public int RowHeight => SymBtnSizeY + Layout.ButtonGap;
+  public int ColWidth  => SymBtnSizeX + Layout.ButtonGap;
 
   // Exposed so the data exporter can reconstruct the grid from a built tab.
   public int  MaxSlots  => m_maxSlots;
@@ -81,8 +80,9 @@ internal abstract class TabModel
       maxBottom = Math.Max( maxBottom, s.Y + s.H );
     }
 
-    ContentWidth  = maxRight  == 0 ? SymBtnSizeX + SymBtnGap + 10 : maxRight              + 1;
-    ContentHeight = maxBottom == 0 ? SymBtnSizeY + SymBtnGap + 10 : (maxBottom - SymOrgY) + SymBtnGap + 10;
+    // Buttons start at (EdgeGap, EdgeGap); add the matching trailing edge-gap.
+    ContentWidth  = maxRight  == 0 ? SymBtnSizeX + 2 * Layout.EdgeGap : maxRight  + Layout.EdgeGap;
+    ContentHeight = maxBottom == 0 ? SymBtnSizeY + 2 * Layout.EdgeGap : maxBottom + Layout.EdgeGap;
   }
 
   // ── Line / slot cursor ───────────────────────────────────────────
@@ -179,7 +179,7 @@ internal abstract class TabModel
                               int     showChar,
                               int     tipChar )
   {
-    int w = SymBtnSizeX * width + SymBtnGap * ( width - 1 );
+    int w = SymBtnSizeX * width + Layout.ButtonGap * ( width - 1 );
     int h = SymBtnSizeY;
 
     string hk = hotkey ?? "";

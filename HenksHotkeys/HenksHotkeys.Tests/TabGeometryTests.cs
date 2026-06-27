@@ -19,7 +19,11 @@ internal sealed class GeometryTab : TabModel
 
 public class TabGeometryTests
 {
-  // Defaults: SymOrg (15,35), button 35x35, gap 3 → ColWidth/RowHeight = 38.
+  // Buttons start at (EdgeGap, EdgeGap); default button 35; cell pitch = 35 + ButtonGap.
+  private const int Btn = 35;
+  private const int EG  = Layout.EdgeGap;
+  private const int CW  = Btn + Layout.ButtonGap; // ColWidth == RowHeight for a square button
+
   [Fact]
   public void RowPrimary_LaysOutLeftToRight_ThenWraps()
   {
@@ -31,17 +35,17 @@ public class TabGeometryTests
     t.Add( 1, "d" ); // wraps to the next row
     t.Recalc();
 
-    Assert.Equal( ( 15, 35 ), ( t.Symbols[0].X, t.Symbols[0].Y ) );
-    Assert.Equal( ( 53, 35 ), ( t.Symbols[1].X, t.Symbols[1].Y ) );
-    Assert.Equal( ( 91, 35 ), ( t.Symbols[2].X, t.Symbols[2].Y ) );
-    Assert.Equal( ( 15, 73 ), ( t.Symbols[3].X, t.Symbols[3].Y ) );
+    Assert.Equal( ( EG,          EG ),      ( t.Symbols[0].X, t.Symbols[0].Y ) );
+    Assert.Equal( ( EG + CW,     EG ),      ( t.Symbols[1].X, t.Symbols[1].Y ) );
+    Assert.Equal( ( EG + 2 * CW, EG ),      ( t.Symbols[2].X, t.Symbols[2].Y ) );
+    Assert.Equal( ( EG,          EG + CW ), ( t.Symbols[3].X, t.Symbols[3].Y ) );
 
-    Assert.Equal( 35, t.Symbols[0].W );
-    Assert.Equal( 35, t.Symbols[0].H );
+    Assert.Equal( Btn, t.Symbols[0].W );
+    Assert.Equal( Btn, t.Symbols[0].H );
 
-    // ContentWidth = maxRight + 1; ContentHeight = (maxBottom - SymOrgY) + gap + 10.
-    Assert.Equal( 127, t.ContentWidth );  // (91+35) + 1
-    Assert.Equal( 86,  t.ContentHeight ); // (108-35) + 3 + 10
+    // Content = button extent + a trailing EdgeGap on each side.
+    Assert.Equal( EG + 2 * CW + Btn + EG, t.ContentWidth );
+    Assert.Equal( EG + CW + Btn + EG,     t.ContentHeight );
   }
 
   [Fact]
@@ -50,7 +54,7 @@ public class TabGeometryTests
     var t = new GeometryTab();
     t.Rows( 5 );
     t.Add( 2, "wide" );
-    Assert.Equal( 73, t.Symbols[0].W ); // 35*2 + 3*(2-1)
+    Assert.Equal( Btn * 2 + Layout.ButtonGap, t.Symbols[0].W );
   }
 
   [Fact]
@@ -61,7 +65,7 @@ public class TabGeometryTests
     t.Space( 2 );
     t.Add( 1, "a" );
     Assert.Equal( 3, t.Symbols[0].Slot );
-    Assert.Equal( 91, t.Symbols[0].X ); // 15 + (3-1)*38
+    Assert.Equal( EG + 2 * CW, t.Symbols[0].X );
   }
 
   [Fact]
@@ -69,13 +73,13 @@ public class TabGeometryTests
   {
     var t = new GeometryTab();
     t.Rows( 20 );        // wide enough to avoid wrapping
-    t.Add( 1, "a" );     // line 1, Y = 35
+    t.Add( 1, "a" );     // line 1
     t.Next();            // → line 2
     t.ShiftThird();      // lineShift += 1/3
-    t.Add( 1, "b" );     // line 2, Y = 35 + round((1 + 1/3) * 38) = 35 + 51
+    t.Add( 1, "b" );     // line 2, offset (1 + 1/3) rows
 
-    Assert.Equal( 35, t.Symbols[0].Y );
-    Assert.Equal( 86, t.Symbols[1].Y );
+    Assert.Equal( EG, t.Symbols[0].Y );
+    Assert.Equal( EG + (int)System.Math.Round( 4.0 / 3.0 * CW ), t.Symbols[1].Y );
   }
 
   [Fact]
@@ -87,7 +91,7 @@ public class TabGeometryTests
     t.Add( 1, "b" );
     t.Recalc();
 
-    Assert.Equal( ( 15, 35 ), ( t.Symbols[0].X, t.Symbols[0].Y ) );
-    Assert.Equal( ( 15, 73 ), ( t.Symbols[1].X, t.Symbols[1].Y ) ); // same column, next row
+    Assert.Equal( ( EG, EG ),      ( t.Symbols[0].X, t.Symbols[0].Y ) );
+    Assert.Equal( ( EG, EG + CW ), ( t.Symbols[1].X, t.Symbols[1].Y ) );
   }
 }

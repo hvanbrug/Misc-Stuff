@@ -79,20 +79,21 @@ public partial class App
   }
 
   // One definition drives both the tray menu and the window's right-click menu.
-  private (string? Label, Action? Action)[] MenuItems() => new (string?, Action?)[]
-  {
+  private (string? Label, Action? Action)[] MenuItems() =>
+  [
     ("Set favourite spot",     () => m_window!.SetFavouriteSpot()),
     ("Move to favourite spot", () => m_window!.MoveToFavouriteSpot()),
     (null, null),
     ("Reload configuration",   ReloadConfig),
-    ("Export config…",         ExportConfig),
-    ("Import && merge config…", ImportConfig),
-    ("Repair: merge duplicate tabs", RepairDuplicates),
+    ("Import configuration",   ImportConfig),
+    ("Export configuration",   ExportConfig),
+    (null, null),
+    ("Repair duplicate tabs",  RepairDuplicates),
     (null, null),
     ("Test Function",          AppActions.TestFunction),
     (null, null),
     ("Exit",                   ExitApp),
-  };
+  ];
 
   // Write the current config to a file you can copy to the other machine.
   private void ExportConfig()
@@ -184,7 +185,8 @@ public partial class App
     var menu = new ContextMenu();
     foreach( var (label, action) in MenuItems() )
     {
-      if( label is null )
+      if( (label  is null) &&
+          (action is null) )
       {
         menu.Items.Add( new Separator() );
       }
