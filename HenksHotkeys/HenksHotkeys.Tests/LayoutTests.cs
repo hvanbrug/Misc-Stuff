@@ -4,10 +4,10 @@ using Xunit;
 
 namespace HenksHotkeys.Tests;
 
-// Buttons start at (EdgeGap, EdgeGap); default button 35; cell pitch = 35 + ButtonGap.
+// Buttons start at (TabEdgeGap, TabEdgeGap); default button 35; cell pitch = 35 + ButtonGap.
 public class LayoutTests
 {
-  private const int EG = Layout.EdgeGap;
+  private const int EG = Layout.TabEdgeGap; // the button inset from the tab boundary
   private const int CW = 35 + Layout.ButtonGap;
 
   private static ButtonDef B( string text ) => new() { Text = text };

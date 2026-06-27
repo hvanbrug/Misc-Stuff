@@ -13,8 +13,8 @@ internal abstract class TabModel
   public string Name        { get; }
   public float  FontSize    { get; protected set; } = 14f;
   public string FontName    { get; protected set; } = "Segoe UI";
-  public int    SymOrgX     => Layout.EdgeGap;  // buttons start one edge-gap in
-  public int    SymOrgY     => Layout.EdgeGap;
+  public int    SymOrgX     => Layout.TabEdgeGap;  // buttons inset from the tab boundary
+  public int    SymOrgY     => Layout.TabEdgeGap;
   public int    SymBtnSizeX { get; protected set; } = 35;
   public int    SymBtnSizeY { get; protected set; } = 35;
   public bool   UseEmojiImages   { get; protected set; }
@@ -88,9 +88,9 @@ internal abstract class TabModel
       maxBottom = Math.Max( maxBottom, h.Y + h.Height );
     }
 
-    // Buttons start at (EdgeGap, EdgeGap); add the matching trailing edge-gap.
-    ContentWidth  = maxRight  == 0 ? SymBtnSizeX + 2 * Layout.EdgeGap : maxRight  + Layout.EdgeGap;
-    ContentHeight = maxBottom == 0 ? SymBtnSizeY + 2 * Layout.EdgeGap : maxBottom + Layout.EdgeGap;
+    // Buttons start at (TabEdgeGap, TabEdgeGap); add the matching trailing gap.
+    ContentWidth  = maxRight  == 0 ? SymBtnSizeX + 2 * Layout.TabEdgeGap : maxRight  + Layout.TabEdgeGap;
+    ContentHeight = maxBottom == 0 ? SymBtnSizeY + 2 * Layout.TabEdgeGap : maxBottom + Layout.TabEdgeGap;
   }
 
   // ── Line / slot cursor ───────────────────────────────────────────

@@ -8,7 +8,7 @@ namespace HenksHotkeys.Tests;
 // space the rows beneath them, and are emitted as TabModel.SectionHeader elements.
 public class SectionTests
 {
-  private const int EG = Layout.EdgeGap;
+  private const int EG = Layout.TabEdgeGap; // the button/header inset from the tab boundary
 
   private static ButtonDef B( string t ) => new() { Text = t };
 

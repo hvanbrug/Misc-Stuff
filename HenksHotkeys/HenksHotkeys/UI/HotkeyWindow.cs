@@ -468,7 +468,8 @@ internal sealed class HotkeyWindow : Window
     {
       maxContentW = Math.Max( maxContentW, m.ContentWidth );
     }
-    // tab content + scrollbar + border padding (EdgeGap) + window border.
+    // tab content (already includes the buttons' TabEdgeGap inset) + scrollbar +
+    // the window-edge gap (EdgeGap, same as every control) + window border.
     m_fullWidth = maxContentW + Layout.ScrollBarWidth + 2 * Layout.EdgeGap + 2 * Theme.BorderThickness;
   }
 

@@ -19,9 +19,9 @@ internal sealed class GeometryTab : TabModel
 
 public class TabGeometryTests
 {
-  // Buttons start at (EdgeGap, EdgeGap); default button 35; cell pitch = 35 + ButtonGap.
+  // Buttons start at (TabEdgeGap, TabEdgeGap); default button 35; cell pitch = 35 + ButtonGap.
   private const int Btn = 35;
-  private const int EG  = Layout.EdgeGap;
+  private const int EG  = Layout.TabEdgeGap; // the button inset from the tab boundary
   private const int CW  = Btn + Layout.ButtonGap; // ColWidth == RowHeight for a square button
 
   [Fact]
@@ -43,7 +43,7 @@ public class TabGeometryTests
     Assert.Equal( Btn, t.Symbols[0].W );
     Assert.Equal( Btn, t.Symbols[0].H );
 
-    // Content = button extent + a trailing EdgeGap on each side.
+    // Content = button extent + a trailing TabEdgeGap on each side.
     Assert.Equal( EG + 2 * CW + Btn + EG, t.ContentWidth );
     Assert.Equal( EG + CW + Btn + EG,     t.ContentHeight );
   }

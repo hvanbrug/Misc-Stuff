@@ -14,6 +14,11 @@ internal static class Layout
   /// (window border, tab control, the button grid).</summary>
   public const int EdgeGap = 2;
 
+  /// <summary>Gap between a tab's inner boundary and its buttons — independent of
+  /// <see cref="EdgeGap"/> so the button grid can breathe inside the tab while the
+  /// tab control itself still hugs the window with the regular edge gap.</summary>
+  public const int TabEdgeGap = 8;
+
   /// <summary>Width reserved for the vertical scrollbar so the locked window
   /// width doesn't clip the rightmost buttons when it appears.</summary>
   public const int ScrollBarWidth = 14;
