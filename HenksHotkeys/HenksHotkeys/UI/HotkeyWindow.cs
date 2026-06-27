@@ -195,6 +195,13 @@ internal sealed class HotkeyWindow : Window
         Canvas.SetTop( btn, sym.Y );
         canvas.Children.Add( btn );
       }
+      foreach( TabModel.SectionHeader hdr in model.Headers )
+      {
+        FrameworkElement label = BuildSectionHeader( hdr, model );
+        Canvas.SetLeft( label, hdr.X );
+        Canvas.SetTop( label, hdr.Y );
+        canvas.Children.Add( label );
+      }
 
       var sv = new ScrollViewer
       {
@@ -309,6 +316,32 @@ internal sealed class HotkeyWindow : Window
     WireSymbolButton( btn, sym.ClickAction );
     sym.Ctrl = btn;
     return btn;
+  }
+
+  // A section label: bold text sitting on a separator line spanning the columns.
+  // An empty name renders as just the line (a plain divider between groups).
+  private static FrameworkElement BuildSectionHeader( TabModel.SectionHeader hdr, TabModel model )
+  {
+    var text = new TextBlock
+    {
+      Text                = UiText.NormalizeDisplayText( hdr.Name ),
+      FontFamily          = new FontFamily( model.FontName ),
+      FontSize            = PtToDip( model.FontSize ),
+      FontWeight          = FontWeights.SemiBold,
+      Foreground          = Theme.TextColor,
+      VerticalAlignment   = VerticalAlignment.Bottom,
+      HorizontalAlignment = HorizontalAlignment.Left,
+      Margin              = new Thickness( Layout.EdgeGap, 0, 0, Layout.EdgeGap ),
+      TextTrimming        = TextTrimming.CharacterEllipsis,
+    };
+    return new Border
+    {
+      Width           = hdr.Width,
+      Height          = hdr.Height,
+      BorderBrush     = Theme.BorderColor,
+      BorderThickness = new Thickness( 0, 0, 0, Theme.BorderThickness ), // separator line
+      Child           = text,
+    };
   }
 
   private static string Append( string tip, string line )

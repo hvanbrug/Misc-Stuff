@@ -25,6 +25,9 @@ internal abstract class TabModel
 
   public List<SymbolElement> Symbols { get; } = new();
 
+  /// <summary>Section-header labels laid out among the rows (data tabs only).</summary>
+  public List<SectionHeader> Headers { get; } = new();
+
   private int    m_maxSlots;
   private bool   m_lineIsRow = true;
   private double m_lineShift;
@@ -78,6 +81,11 @@ internal abstract class TabModel
     {
       maxRight  = Math.Max( maxRight,  s.X + s.W );
       maxBottom = Math.Max( maxBottom, s.Y + s.H );
+    }
+    foreach( SectionHeader h in Headers )
+    {
+      maxRight  = Math.Max( maxRight,  h.X + h.Width );
+      maxBottom = Math.Max( maxBottom, h.Y + h.Height );
     }
 
     // Buttons start at (EdgeGap, EdgeGap); add the matching trailing edge-gap.
@@ -211,6 +219,17 @@ internal abstract class TabModel
     {
       AppState.HotkeyHelp.Add( (HotkeyParser.Label( hk ), d) );
     }
+  }
+
+  /// <summary>A laid-out section header: a label (blank = a plain separator line)
+  /// spanning the columns at a given Y, taking <see cref="Height"/> vertical space.</summary>
+  public sealed class SectionHeader
+  {
+    public string Name   { get; init; } = "";
+    public int    X      { get; init; }
+    public int    Y      { get; init; }
+    public int    Width  { get; init; }
+    public int    Height { get; init; }
   }
 
   // ── Send-time transform (Comments tab strips emojis when enabled) ─

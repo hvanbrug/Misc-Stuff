@@ -35,10 +35,10 @@ internal static class VersionStamp
 
     bool changed = false;
 
-    // Blank rows draw nothing — drop any buttons they carry.
+    // Blank rows and section headers draw no buttons — drop any they carry.
     foreach( RowDef r in t.Rows )
     {
-      if( r.Blank && r.Buttons.Count > 0 ) { r.Buttons.Clear(); changed = true; }
+      if( ( r.Blank || r.IsSection ) && r.Buttons.Count > 0 ) { r.Buttons.Clear(); changed = true; }
     }
 
     // Split any (non-blank) row that has more cells than the tab is wide.
@@ -83,6 +83,7 @@ internal static class VersionStamp
     string layout = t.Rows is null
       ? ""
       : string.Join( Sep, t.Rows.Select( r => r.GapBefore + "/" + r.Indent + "/" + r.Blank + "/" +
+                                              r.Section + "/" + r.HeaderHeight + "/" +
                                               string.Join( ",", r.Buttons.Select( b => b.Id ) ) ) );
     return attrs + Sep + layout;
   }
@@ -241,7 +242,7 @@ internal static class VersionMerge
       }
       if( btns.Count > 0 || r.Buttons.Count == 0 )
       {
-        rows.Add( new RowDef { GapBefore = r.GapBefore, Indent = r.Indent, Buttons = btns } );
+        rows.Add( CloneRow( r, btns ) ); // keep blank/section spacer rows intact
       }
     }
 
@@ -375,7 +376,7 @@ internal static class VersionMerge
         if( !placed.Add( b.Id ) || !seenSig.Add( VersionStamp.ButtonSig( wb ) ) ) continue;
         btns.Add( wb );
       }
-      if( btns.Count > 0 ) rows.Add( new RowDef { GapBefore = r.GapBefore, Indent = r.Indent, Buttons = btns } );
+      if( btns.Count > 0 || r.Buttons.Count == 0 ) rows.Add( CloneRow( r, btns ) );
     }
 
     List<ButtonDef> extra = byId.Values
@@ -387,6 +388,18 @@ internal static class VersionMerge
     VersionStamp.NormalizeRows( t );
     return t;
   }
+
+  // Reconstruct a row with the winning button set but its original layout
+  // attributes (gap/indent and the blank/section spacer markers) preserved.
+  private static RowDef CloneRow( RowDef r, List<ButtonDef> btns ) => new()
+  {
+    GapBefore    = r.GapBefore,
+    Indent       = r.Indent,
+    Blank        = r.Blank,
+    Section      = r.Section,
+    HeaderHeight = r.HeaderHeight,
+    Buttons      = btns,
+  };
 
   private static TabEntry CloneAttrs( TabEntry s ) => new()
   {

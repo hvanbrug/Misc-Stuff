@@ -111,6 +111,22 @@ internal sealed class RowDef
   [JsonProperty( "blank" ), DefaultValue( false )]
   public bool Blank { get; set; }
 
+  /// <summary>When present (even as an empty string), this row is a section header,
+  /// not a row of buttons: it draws this label (a separator line for an empty name)
+  /// and groups the rows beneath it until the next header. Any buttons are ignored
+  /// (removed on load). Absent = an ordinary row.</summary>
+  [JsonProperty( "section", NullValueHandling = NullValueHandling.Ignore )]
+  public string? Section { get; set; }
+
+  /// <summary>Height of this section header in pixels (0 = the default). Ignored
+  /// unless <see cref="Section"/> is set.</summary>
+  [JsonProperty( "headerHeight" ), DefaultValue( 0.0 )]
+  public double HeaderHeight { get; set; }
+
+  /// <summary>True when this row is a section header rather than a row of buttons.</summary>
+  [JsonIgnore]
+  public bool IsSection => Section != null;
+
   [JsonProperty( "buttons", NullValueHandling = NullValueHandling.Ignore )]
   public List<ButtonDef> Buttons { get; set; } = new();
 }

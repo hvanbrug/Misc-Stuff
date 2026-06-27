@@ -19,10 +19,13 @@ internal sealed class DataTabModel : TabModel
     UseEmojiImages    = e.EmojiImages;
     EnableStripEmojis = e.StripEmojis;
 
+    m_cols = e.Columns;
     SetRowsOf( e.Columns );
     BuildRows( e.Rows );
     RecalcSizes();
   }
+
+  private int m_cols;
 
   private void BuildRows( List<RowDef>? rows )
   {
@@ -31,20 +34,46 @@ internal sealed class DataTabModel : TabModel
       return;
     }
 
-    double rowOffset = 0;
+    // Width a section header spans: the full grid of columns.
+    int headerWidth = m_cols > 0 ? SymBtnSizeX * m_cols + Layout.ButtonGap * ( m_cols - 1 )
+                                 : SymBtnSizeX;
+
+    // The offset is accumulated in row-height units; a row consumes one unit,
+    // except a section header, which consumes its (pixel) height. prevAdvance
+    // carries the previous row's consumed height so the next row lands below it.
+    double rowOffset   = 0;
+    double prevAdvance = 0;
     for( int r = 0; r < rows.Count; r++ )
     {
       RowDef row = rows[r];
 
-      // Accumulate the row offset (in row-height units) and round once per row,
-      // exactly mirroring the cursor engine's CalcSymbolY. Row 0 sits at the
-      // origin plus any leading gap; each later row adds one row plus its gap.
-      rowOffset = r == 0 ? row.GapBefore : rowOffset + 1.0 + row.GapBefore;
+      // Row 0 sits at the origin plus any leading gap; each later row adds the
+      // previous row's height plus this row's gap. Round once per row, mirroring
+      // the cursor engine's CalcSymbolY.
+      rowOffset = r == 0 ? row.GapBefore : rowOffset + prevAdvance + row.GapBefore;
+      int y = SymOrgY + (int)Math.Round( rowOffset * RowHeight );
+
+      if( row.IsSection )
+      {
+        int hPx = row.HeaderHeight > 0 ? (int)Math.Round( row.HeaderHeight ) : Layout.SectionHeaderHeight;
+        Headers.Add( new SectionHeader
+        {
+          Name   = row.Section ?? "",
+          X      = SymOrgX,
+          Y      = y,
+          Width  = headerWidth,
+          Height = hPx,
+        } );
+        prevAdvance = (double)hPx / RowHeight; // header height back to row-units
+        continue;
+      }
+
       if( row.Blank )
       {
+        prevAdvance = 1.0;
         continue; // blank row: just occupies the vertical space
       }
-      int y = SymOrgY + (int)Math.Round( rowOffset * RowHeight );
+      prevAdvance = 1.0;
 
       // Walk the row horizontally; every entry (button or blank) takes one cell,
       // and a button's own gapBefore inserts space ahead of it.

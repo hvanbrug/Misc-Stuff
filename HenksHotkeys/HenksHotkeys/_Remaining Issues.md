@@ -41,3 +41,9 @@ The strip's hand-tuned margins are gone: both the left cluster (○ ▲ ☺) and
 The button `Canvas` is now `HorizontalAlignment.Left` + `VerticalAlignment.Top`, so a tab narrower than the (locked) window width sits at the top-left edge-gap instead of being centred. (Done alongside #8/#9.)
 
 13. Add a favourites section at the top of the Emojis tab that is configurable by the user.
+
+14. **DONE** — Label sections in a tab.
+Implemented as a *header row* (not a new container): a row with a `section` key is a header that labels the rows beneath it until the next header — `{"section": "My group"}` for a labelled divider, `{"section": ""}` for a plain line, optional `headerHeight` (px, default `Layout.SectionHeaderHeight` = 24). Backward compatible (existing flat `rows` files are unchanged; a tab with no header rows is one implicit unnamed section) and the merge needed no new nesting — header rows carry through `TabSig`/`NormalizeRows`/merge like blank rows, with their buttons cleared on load. Renders as a bold label on a separator line spanning the columns (`DataTabModel` emits `TabModel.SectionHeader`; `HotkeyWindow.BuildSectionHeader` draws it). Cheat-sheet updated.
+*Bonus fix:* the merge row-rebuild used to drop the `blank` flag — it now preserves `blank`/`section`/`headerHeight` via `CloneRow`.
+
+15. It would be pretty cool if the user could drag a tab to a new position in the tab list, and have that new order saved to the json. This would be a nice feature for the user to be able to customize their experience.
