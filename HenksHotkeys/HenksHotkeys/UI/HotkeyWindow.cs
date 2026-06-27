@@ -469,8 +469,11 @@ internal sealed class HotkeyWindow : Window
       maxContentW = Math.Max( maxContentW, m.ContentWidth );
     }
     // tab content (already includes the buttons' TabEdgeGap inset) + scrollbar +
-    // the window-edge gap (EdgeGap, same as every control) + window border.
-    m_fullWidth = maxContentW + Layout.ScrollBarWidth + 2 * Layout.EdgeGap + 2 * Theme.BorderThickness;
+    // the window-edge gap (EdgeGap, same as every control) + window border. Reserve
+    // the *actual* scrollbar width so a tab that fills the width (proportional) isn't
+    // overlapped by the scrollbar, which would eat its trailing TabEdgeGap.
+    double scrollBar = Math.Ceiling( SystemParameters.VerticalScrollBarWidth );
+    m_fullWidth = maxContentW + scrollBar + 2 * Layout.EdgeGap + 2 * Theme.BorderThickness;
   }
 
   private void ComputeFullSize()

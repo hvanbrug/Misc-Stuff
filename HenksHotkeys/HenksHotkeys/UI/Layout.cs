@@ -19,10 +19,6 @@ internal static class Layout
   /// tab control itself still hugs the window with the regular edge gap.</summary>
   public const int TabEdgeGap = 8;
 
-  /// <summary>Width reserved for the vertical scrollbar so the locked window
-  /// width doesn't clip the rightmost buttons when it appears.</summary>
-  public const int ScrollBarWidth = 14;
-
   /// <summary>Default height of a section-header label (device-independent px)
   /// when a header row doesn't set its own <c>headerHeight</c>.</summary>
   public const int SectionHeaderHeight = 24;
