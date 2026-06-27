@@ -193,7 +193,9 @@ internal abstract class TabModel
     string hk = hotkey ?? "";
     string d  = desc   ?? ch;
 
-    var clickAction = action ?? (() => TextSender.SendText( TransformSendText( ch ) ));
+    // Sends are async now; buttons/hotkeys fire-and-forget (the send serialises
+    // itself and swallows its own errors), so the click returns immediately.
+    Action clickAction = action ?? (() => { _ = TextSender.SendText( TransformSendText( ch ) ); });
 
     Symbols.Add( new SymbolElement
     {

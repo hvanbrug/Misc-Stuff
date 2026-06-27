@@ -10,8 +10,8 @@ Partly modernised: data tabs lay out from `rows` + `columns` + `gapBefore`/`inde
 3. Drop the static globals → DI + MVVM-lite.
 **Unchanged / open.** `AppState` is still a static bag and the window news up everything. A small service container + a `MainViewModel` (inject `SettingsStore`, hotkey manager, sender) would make it testable and cleaner. Medium effort.
 
-4. Async sending.
-**Unchanged / open.** `TextSender` still does `Thread.Sleep(100)` on the UI thread during the activate→send dance. `async`/`await` with `Task.Delay` would keep the UI responsive. Small, isolated.
+4. **DONE** — Async sending.
+`TextSender`'s activate→send dance now `await`s `Task.Delay` instead of `Thread.Sleep`, so the message pump keeps running and the window stays responsive (draggable/scrollable) mid-send. The entry points (`SendText`/`SendInputKeys`/`GetSelectedTextThroughClipboard`) return `Task`; buttons and hotkeys fire-and-forget them. Continuations stay on the UI/STA thread (no `ConfigureAwait(false)`), so `Clipboard` access remains valid. A `SemaphoreSlim` gate serialises sends — the synchronous version got that for free by blocking the UI thread, so concurrent clicks can't interleave keystrokes now. Verified end-to-end (UI-Automation invoke → text lands once in Notepad).
 
 5. **DONE** — Unit tests for the pure logic.
 `HenksHotkeys.Tests` exists (52 tests): HotkeyParser, EmojiImageProvider.ToTwemojiStem, AppState.StripEmojis, the `{Enter}`/brace send tokenizer, and TabModel geometry — plus the newer Secrets (passphrase/DPAPI), versioning/merge (CRDT, reconcile, collapse), and layout (gap / blank / normalize) tests.

@@ -22,70 +22,91 @@ internal static class TextSender
   private const ushort VK_RIGHT  = 0x27;
   private const ushort VK_DOWN   = 0x28;
 
+  // Serialises sends so the now-responsive UI can't fire two overlapping sends
+  // (which would interleave keystrokes). The synchronous version got this for
+  // free by blocking the UI thread; the async version makes it explicit.
+  private static readonly SemaphoreSlim s_sendGate = new( 1, 1 );
+
   // ── Public entry points ──────────────────────────────────────────
 
-  /// <summary>Send text, honouring clipboard-send mode (DoSendText).</summary>
-  public static void SendText( string msg )
+  /// <summary>Send text, honouring clipboard-send mode (DoSendText). Runs on the
+  /// UI thread but awaits its waits, so the window stays responsive mid-send.</summary>
+  public static async Task SendText( string msg )
   {
-    if( AppState.UseClipSend )
+    await s_sendGate.WaitAsync();
+    try
     {
-      SendViaClipboard( msg );
-      return;
+      if( AppState.UseClipSend )
+      {
+        await SendViaClipboard( msg );
+      }
+      else
+      {
+        await ActivateTarget();
+        SendKeystrokes( msg );
+      }
     }
-    ActivateTarget();
-    SendKeystrokes( msg );
+    catch { /* a failed send shouldn't crash the app (calls are fire-and-forget) */ }
+    finally { s_sendGate.Release(); }
   }
 
   /// <summary>Send a key sequence, always as input events (DoSendInput).</summary>
-  public static void SendInputKeys( string msg )
+  public static async Task SendInputKeys( string msg )
   {
-    ActivateTarget();
-    SendKeystrokes( msg );
+    await s_sendGate.WaitAsync();
+    try
+    {
+      await ActivateTarget();
+      SendKeystrokes( msg );
+    }
+    catch { /* ignore */ }
+    finally { s_sendGate.Release(); }
   }
 
   /// <summary>Copy the current selection and return it (GetSelectedTextThroughClipboard).</summary>
-  public static string GetSelectedTextThroughClipboard()
+  public static async Task<string> GetSelectedTextThroughClipboard()
   {
+    await s_sendGate.WaitAsync();
     string backup = SafeGetClipboardText();
     try
     {
       Clipboard.Clear();
       SendKeyVk( 0x43, NativeMethods.MOD_CONTROL ); // Ctrl+C
-      Thread.Sleep( 150 );
-      string txt = SafeGetClipboardText();
-      return txt;
+      await Task.Delay( 150 );
+      return SafeGetClipboardText();
     }
     finally
     {
       if( backup.Length > 0 )
       {
-        TrySetClipboardText( backup );
+        await TrySetClipboardText( backup );
       }
+      s_sendGate.Release();
     }
   }
 
   // ── Internals ────────────────────────────────────────────────────
 
-  private static void ActivateTarget()
+  private static async Task ActivateTarget()
   {
     IntPtr target = AppState.ActiveWindow;
     if( target != IntPtr.Zero && IsWindow( target ) )
     {
       SetForegroundWindow( target );
-      Thread.Sleep( 100 );
+      await Task.Delay( 100 );
     }
   }
 
-  private static void SendViaClipboard( string rawText )
+  private static async Task SendViaClipboard( string rawText )
   {
     string backup = SafeGetClipboardText();
-    TrySetClipboardText( rawText );
-    ActivateTarget();
+    await TrySetClipboardText( rawText );
+    await ActivateTarget();
     SendKeyVk( 0x56, NativeMethods.MOD_CONTROL ); // Ctrl+V
-    Thread.Sleep( 150 );
+    await Task.Delay( 150 );
     if( backup.Length > 0 )
     {
-      TrySetClipboardText( backup );
+      await TrySetClipboardText( backup );
     }
   }
 
@@ -101,7 +122,7 @@ internal static class TextSender
     }
   }
 
-  private static void TrySetClipboardText( string text )
+  private static async Task TrySetClipboardText( string text )
   {
     for( int attempt = 0; attempt < 3; attempt++ )
     {
@@ -112,7 +133,7 @@ internal static class TextSender
       }
       catch
       {
-        Thread.Sleep( 20 );
+        await Task.Delay( 20 );
       }
     }
   }

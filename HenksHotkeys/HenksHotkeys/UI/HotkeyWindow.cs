@@ -367,7 +367,7 @@ internal sealed class HotkeyWindow : Window
       if( pair )
       {
         last = 0;
-        try { TextSender.SendInputKeys( "{Enter}" ); } catch { /* ignore */ }
+        _ = TextSender.SendInputKeys( "{Enter}" ); // queues after the first click's send
         return;
       }
       try { click(); } catch { /* never let a send failure kill the UI */ }
@@ -393,9 +393,9 @@ internal sealed class HotkeyWindow : Window
     };
     RaiseTop( 1, MakeButton( "🔄",  "Repaint / Refresh",          "Segoe UI Symbol", 10f, ForceRepaint ) );
     RaiseTop( 0, MakeBtnGap( 38 ) );
-    RaiseTop( 3, MakeButton( "⌫.", "Back 3, Replace with period", "Segoe UI Symbol", 12f, () => TextSender.SendInputKeys( "\b\b\b. " ) ) );
-    RaiseTop( 9, MakeButton( "⇚,", "Back 3, Insert Comma",        "Segoe UI Symbol", 18f, () => TextSender.SendInputKeys( "{Left}{Left}{Left}, " ) ) );
-    RaiseTop( 0, MakeButton( "↩",  "Enter / Newline",             "Segoe UI Symbol", 12f, () => TextSender.SendInputKeys( "{Enter}" ) ) );
+    RaiseTop( 3, MakeButton( "⌫.", "Back 3, Replace with period", "Segoe UI Symbol", 12f, () => { _ = TextSender.SendInputKeys( "\b\b\b. " ); } ) );
+    RaiseTop( 9, MakeButton( "⇚,", "Back 3, Insert Comma",        "Segoe UI Symbol", 18f, () => { _ = TextSender.SendInputKeys( "{Left}{Left}{Left}, " ); } ) );
+    RaiseTop( 0, MakeButton( "↩",  "Enter / Newline",             "Segoe UI Symbol", 12f, () => { _ = TextSender.SendInputKeys( "{Enter}" ); } ) );
     RaiseTop( 0, MakeButton( "▲",  "Shrink window",               "Segoe UI Symbol", 11f, ToggleCollapsed ) );
 
     UpdateClipIndicator(  AppState.UseClipSend     );

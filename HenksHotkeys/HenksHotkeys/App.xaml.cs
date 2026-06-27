@@ -75,7 +75,7 @@ public partial class App
 
     m_hotkeys.Register( "^+x", () => m_window!.ToggleCollapsed() );
     m_hotkeys.Register( "^+a", AppActions.ListHotkeys );
-    m_hotkeys.Register( "^+s", AppActions.SrefToFullPrompt );
+    m_hotkeys.Register( "^+s", () => { _ = AppActions.SrefToFullPrompt(); } );
   }
 
   // One definition drives both the tray menu and the window's right-click menu.

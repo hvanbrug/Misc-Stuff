@@ -96,9 +96,9 @@ internal static class AppActions
 
   // SREFtoFullPrompt in PromptHelpers.ahk: replace " | " separators in the
   // selected text with ", " and put the result on the clipboard.
-  public static void SrefToFullPrompt()
+  public static async Task SrefToFullPrompt()
   {
-    string haystack = TextSender.GetSelectedTextThroughClipboard();
+    string haystack = await TextSender.GetSelectedTextThroughClipboard();
     string replaced = Regex.Replace( haystack, @"\s*\|\s*", ", " );
     if( replaced.Length > 0 )
     {
