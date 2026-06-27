@@ -10,22 +10,65 @@ namespace HenksHotkeys.UI;
 /// </summary>
 internal sealed class DataTabModel : TabModel
 {
+  private readonly TabEntry m_entry;
+  private int m_cols;
+
   public DataTabModel( TabEntry e ) : base( e.Name ?? "Tab" )
   {
+    m_entry           = e;
     FontSize          = (float)e.FontSize;
     FontName          = e.FontName;
     SymBtnSizeX       = e.ButtonWidth;
-    SymBtnSizeY       = e.ButtonHeight;
+    SymBtnSizeY       = e.Square ? e.ButtonWidth : e.ButtonHeight; // square: height = width
     UseEmojiImages    = e.EmojiImages;
     EnableStripEmojis = e.StripEmojis;
+    m_cols            = e.Columns;
 
-    m_cols = e.Columns;
-    SetRowsOf( e.Columns );
-    BuildRows( e.Rows );
-    RecalcSizes();
+    if( e.Proportional )
+    {
+      // Defer the layout until the locked window width is known: the cells expand
+      // to fill it (see ApplyProportionalLayout). Until then expose the natural
+      // minimum width so the window can still be sized from the widest tab.
+      MinContentWidth = 2 * Layout.TabEdgeGap + m_cols * e.ButtonWidth
+                      + Math.Max( 0, m_cols - 1 ) * Layout.ButtonGap;
+    }
+    else
+    {
+      SetRowsOf( m_cols );
+      BuildRows( e.Rows );
+      RecalcSizes();
+    }
   }
 
-  private int m_cols;
+  /// <summary>A proportional tab's natural minimum width (its width at the natural
+  /// <c>buttonWidth</c>); 0 for a fixed tab, which sizes from its laid-out content.</summary>
+  public int MinContentWidth { get; }
+
+  public override int SizingWidth => Math.Max( ContentWidth, MinContentWidth );
+
+  /// <summary>For a proportional tab, expand the cells to fill <paramref name="contentWidth"/>
+  /// and lay the buttons out (done once, after the window width is known). The cell
+  /// never shrinks below the natural <c>buttonWidth</c>. No-op for a fixed tab.</summary>
+  public void ApplyProportionalLayout( int contentWidth )
+  {
+    if( !m_entry.Proportional )
+    {
+      return;
+    }
+    int gaps = 2 * Layout.TabEdgeGap + Math.Max( 0, m_cols - 1 ) * Layout.ButtonGap;
+    int cell = m_cols > 0 ? Math.Max( m_entry.ButtonWidth, ( contentWidth - gaps ) / m_cols )
+                          : m_entry.ButtonWidth;
+
+    SymBtnSizeX = cell;
+    if( m_entry.Square )
+    {
+      SymBtnSizeY = cell; // square: the height grows with the (now wider) cell
+    }
+
+    SetRowsOf( m_cols );
+    BuildRows( m_entry.Rows );
+    RecalcSizes();
+  }
 
   private void BuildRows( List<RowDef>? rows )
   {

@@ -23,6 +23,11 @@ internal abstract class TabModel
   public int ContentWidth  { get; private set; }
   public int ContentHeight { get; private set; }
 
+  /// <summary>The width this tab wants when sizing the (locked-width) window. Fixed
+  /// tabs report their laid-out content; a proportional tab overrides this with its
+  /// natural minimum so it can be sized before it expands to fill.</summary>
+  public virtual int SizingWidth => ContentWidth;
+
   public List<SymbolElement> Symbols { get; } = new();
 
   /// <summary>Section-header labels laid out among the rows (data tabs only).</summary>

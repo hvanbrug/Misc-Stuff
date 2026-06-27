@@ -79,7 +79,8 @@ internal static class VersionStamp
   public static string TabSig( TabEntry t )
   {
     string attrs = string.Join( Sep, t.Builtin, t.Name, t.Columns, t.FontSize, t.FontName,
-                                t.ButtonWidth, t.ButtonHeight, t.EmojiImages, t.StripEmojis );
+                                t.ButtonWidth, t.ButtonHeight, t.EmojiImages, t.StripEmojis,
+                                t.Proportional, t.Square );
     string layout = t.Rows is null
       ? ""
       : string.Join( Sep, t.Rows.Select( r => r.GapBefore + "/" + r.Indent + "/" + r.Blank + "/" +
@@ -407,6 +408,7 @@ internal static class VersionMerge
     FontSize = s.FontSize, FontName = s.FontName,
     ButtonWidth = s.ButtonWidth, ButtonHeight = s.ButtonHeight,
     EmojiImages = s.EmojiImages, StripEmojis = s.StripEmojis,
+    Proportional = s.Proportional, Square = s.Square,
     Id = s.Id, Mod = s.Mod,
   };
 

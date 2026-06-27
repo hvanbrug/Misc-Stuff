@@ -66,6 +66,21 @@ public partial class App
     {
       AppState.Tabs.Add( tab );
     }
+
+    // The window width locks to the widest tab. Size it from every tab's natural
+    // width, then let the proportional tabs expand their cells to fill that width.
+    int targetWidth = 0;
+    foreach( TabModel tab in AppState.Tabs )
+    {
+      targetWidth = Math.Max( targetWidth, tab.SizingWidth );
+    }
+    foreach( TabModel tab in AppState.Tabs )
+    {
+      if( tab is DataTabModel data )
+      {
+        data.ApplyProportionalLayout( targetWidth );
+      }
+    }
   }
 
   private void RegisterHotkeys()

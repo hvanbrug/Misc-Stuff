@@ -82,6 +82,18 @@ internal sealed class TabEntry
   [JsonProperty( "stripEmojis" ), DefaultValue( false )]
   public bool StripEmojis { get; set; }
 
+  /// <summary>Buttons fill the tab width: each cell is 1/<see cref="Columns"/> of the
+  /// available width (after gaps), expanding past <see cref="ButtonWidth"/> (which
+  /// then acts as the natural minimum). Off = fixed <see cref="ButtonWidth"/>.</summary>
+  [JsonProperty( "proportional" ), DefaultValue( false )]
+  public bool Proportional { get; set; }
+
+  /// <summary>Button height tracks its width (keeps glyph buttons square). With
+  /// <see cref="Proportional"/> the square grows to fill the cell; without it the
+  /// button is a fixed <see cref="ButtonWidth"/> square. Off = <see cref="ButtonHeight"/>.</summary>
+  [JsonProperty( "square" ), DefaultValue( false )]
+  public bool Square { get; set; }
+
   [JsonProperty( "rows", NullValueHandling = NullValueHandling.Ignore )]
   public List<RowDef>? Rows { get; set; }
 
