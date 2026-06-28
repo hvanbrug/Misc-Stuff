@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
@@ -15,62 +14,21 @@ namespace HenksHotkeys.UI;
 /// </summary>
 internal static class DialogChrome
 {
-  private static Color C( byte r, byte g, byte b ) => Color.FromRgb( r, g, b );
-
-  private static readonly Dictionary<string, Color> Light = new()
-  {
-    ["WindowBg"]        = C( 0xF3, 0xF3, 0xF3 ),
-    ["CardBg"]          = C( 0xFF, 0xFF, 0xFF ),
-    ["CardBorder"]      = C( 0xE0, 0xE0, 0xE0 ),
-    ["AccentBarBg"]     = C( 0xE8, 0xF0, 0xFE ),
-    ["AccentBarBorder"] = C( 0xC5, 0xD6, 0xF2 ),
-    ["AccentText"]      = C( 0x5B, 0x6B, 0x8C ),
-    ["TextPrimary"]     = C( 0x22, 0x22, 0x22 ),
-    ["TextBody"]        = C( 0x44, 0x44, 0x44 ),
-    ["TextSecondary"]   = C( 0x75, 0x75, 0x75 ),
-    ["ControlBg"]       = C( 0xFF, 0xFF, 0xFF ),
-    ["ControlBorder"]   = C( 0xC8, 0xC8, 0xC8 ),
-    ["ControlHover"]    = C( 0xF0, 0xF0, 0xF0 ),
-    ["ControlPressed"]  = C( 0xE4, 0xE4, 0xE4 ),
-    ["InputBg"]         = C( 0xFF, 0xFF, 0xFF ),
-    ["SwitchOn"]        = C( 0x2F, 0x6F, 0xD6 ),
-  };
-
-  private static readonly Dictionary<string, Color> Dark = new()
-  {
-    ["WindowBg"]        = C( 0x1E, 0x1E, 0x20 ),
-    ["CardBg"]          = C( 0x2A, 0x2A, 0x2D ),
-    ["CardBorder"]      = C( 0x3C, 0x3C, 0x40 ),
-    ["AccentBarBg"]     = C( 0x26, 0x33, 0x49 ),
-    ["AccentBarBorder"] = C( 0x39, 0x4B, 0x68 ),
-    ["AccentText"]      = C( 0x9D, 0xB4, 0xD8 ),
-    ["TextPrimary"]     = C( 0xE8, 0xE8, 0xE8 ),
-    ["TextBody"]        = C( 0xC4, 0xC4, 0xC4 ),
-    ["TextSecondary"]   = C( 0x9A, 0x9A, 0x9E ),
-    ["ControlBg"]       = C( 0x3A, 0x3A, 0x3E ),
-    ["ControlBorder"]   = C( 0x55, 0x55, 0x5A ),
-    ["ControlHover"]    = C( 0x46, 0x46, 0x4B ),
-    ["ControlPressed"]  = C( 0x52, 0x52, 0x58 ),
-    ["InputBg"]         = C( 0x33, 0x33, 0x37 ),
-    ["SwitchOn"]        = C( 0x4C, 0x8B, 0xF5 ),
-  };
-
-  /// <summary>Theme a dialog: install the palette + rounded-button style, set the
-  /// window background, and darken the title bar when in dark mode.</summary>
+  /// <summary>Theme a dialog: install the shared palette + rounded-button / switch
+  /// styles into the window scope, set the background, and darken / round the frame.</summary>
   public static void Apply( Window win )
   {
     var rd = new ResourceDictionary();
-    foreach( (string key, Color color) in ( Theme.IsDark ? Dark : Light ) )
-    {
-      var brush = new SolidColorBrush( color );
-      brush.Freeze();
-      rd[key] = brush;
-    }
+    Palette.Install( rd, Theme.IsDark );      // same palette as the main window
     rd.MergedDictionaries.Add( Styles() );
     win.Resources  = rd;
     win.Background  = (Brush)rd["WindowBg"];
     win.SourceInitialized += ( _, _ ) =>
-      Theme.ApplyDarkFrame( new WindowInteropHelper( win ).Handle );
+    {
+      IntPtr h = new WindowInteropHelper( win ).Handle;
+      Theme.ApplyDarkFrame( h );
+      Theme.ApplyRoundedCorners( h );
+    };
   }
 
   public static Brush Brush( Window win, string key ) => (Brush)win.FindResource( key );

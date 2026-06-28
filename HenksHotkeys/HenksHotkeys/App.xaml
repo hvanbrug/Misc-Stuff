@@ -4,45 +4,35 @@
              ShutdownMode="OnExplicitShutdown">
   <Application.Resources>
 
-    <!-- Dark palette (matches Theme.cs and the NetworkShares dark scheme:
-         layered greys with a faint cool tint). -->
-    <SolidColorBrush x:Key="DarkBg"        Color="#FF1E1E20"/>
-    <SolidColorBrush x:Key="DarkText"      Color="#FFE8E8E8"/>
-    <SolidColorBrush x:Key="BtnFace"       Color="#FF3A3A3E"/>
-    <SolidColorBrush x:Key="BtnHover"      Color="#FF46464B"/>
-    <SolidColorBrush x:Key="BtnPressed"    Color="#FF525258"/>
-    <SolidColorBrush x:Key="BtnBorder"     Color="#FF55555A"/>
-    <SolidColorBrush x:Key="EmojiBackdrop" Color="#FF44444A"/>
-    <SolidColorBrush x:Key="WinBorder"     Color="#FFAAAAAA"/>
+    <!-- Palette brushes (WindowBg, ControlBg, AccentBarBg, …) are installed at startup
+         by Palette.Install for the current light/dark theme; the styles below resolve
+         them via DynamicResource. -->
 
-    <!-- Dark push button (symbol / helper buttons). -->
-    <Style x:Key="DarkButton" TargetType="Button">
-      <Setter Property="Foreground"          Value="{StaticResource DarkText}"/>
-      <Setter Property="Background"           Value="{StaticResource BtnFace}"/>
-      <Setter Property="BorderBrush"          Value="{StaticResource BtnBorder}"/>
-      <Setter Property="BorderThickness"      Value="1"/>
-      <Setter Property="Margin"               Value="1"/>
-      <Setter Property="Padding"              Value="2,0"/>
-      <Setter Property="SnapsToDevicePixels"  Value="True"/>
-      <Setter Property="FocusVisualStyle"     Value="{x:Null}"/>
+    <!-- Rounded grid / helper button. -->
+    <Style x:Key="GridButton" TargetType="Button">
+      <Setter Property="Foreground"         Value="{DynamicResource TextPrimary}"/>
+      <Setter Property="Background"          Value="{DynamicResource ControlBg}"/>
+      <Setter Property="BorderBrush"         Value="{DynamicResource ControlBorder}"/>
+      <Setter Property="BorderThickness"     Value="1"/>
+      <Setter Property="Padding"             Value="2,0"/>
+      <Setter Property="SnapsToDevicePixels" Value="True"/>
+      <Setter Property="FocusVisualStyle"    Value="{x:Null}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="bd"
+            <Border x:Name="bd" CornerRadius="5"
                     Background="{TemplateBinding Background}"
                     BorderBrush="{TemplateBinding BorderBrush}"
-                    BorderThickness="{TemplateBinding BorderThickness}">
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    SnapsToDevicePixels="True">
               <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                 VerticalAlignment="Center"
                                 Margin="{TemplateBinding Padding}"/>
             </Border>
             <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="bd" Property="Background" Value="{StaticResource BtnHover}"/>
-              </Trigger>
-              <Trigger Property="IsPressed" Value="True">
-                <Setter TargetName="bd" Property="Background" Value="{StaticResource BtnPressed}"/>
-              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bd" Property="Background" Value="{DynamicResource ControlHover}"/></Trigger>
+              <Trigger Property="IsPressed"   Value="True"><Setter TargetName="bd" Property="Background" Value="{DynamicResource ControlPressed}"/></Trigger>
+              <Trigger Property="IsEnabled"   Value="False"><Setter TargetName="bd" Property="Opacity" Value="0.5"/></Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
@@ -50,31 +40,81 @@
     </Style>
 
     <!-- Emoji buttons sit on a slightly lighter backdrop so the glyphs pop. -->
-    <Style x:Key="DarkEmojiButton" TargetType="Button" BasedOn="{StaticResource DarkButton}">
-      <Setter Property="Background" Value="{StaticResource EmojiBackdrop}"/>
+    <Style x:Key="GridEmojiButton" TargetType="Button" BasedOn="{StaticResource GridButton}">
+      <Setter Property="Background" Value="{DynamicResource EmojiBg}"/>
     </Style>
 
-    <!-- Dark tab strip. -->
-    <Style x:Key="DarkTabControl" TargetType="TabControl">
-      <Setter Property="Background"      Value="{StaticResource DarkBg}"/>
+    <!-- Tab strip. -->
+    <Style x:Key="AppTabControl" TargetType="TabControl">
+      <Setter Property="Background"      Value="{DynamicResource WindowBg}"/>
       <Setter Property="BorderThickness" Value="0"/>
       <Setter Property="Padding"         Value="0"/>
     </Style>
 
-    <Style x:Key="DarkTabItem" TargetType="TabItem">
-      <Setter Property="Foreground" Value="{StaticResource DarkText}"/>
+    <Style x:Key="AppTabItem" TargetType="TabItem">
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="TabItem">
-            <Border x:Name="bd" Background="{StaticResource BtnFace}" Margin="0,0,2,0" Padding="8,4">
-              <ContentPresenter ContentSource="Header" VerticalAlignment="Center"/>
-            </Border>
+            <Grid>
+              <Border x:Name="bd" CornerRadius="5,5,0,0" Padding="10,5" Margin="0,0,2,0" Background="Transparent"/>
+              <Border x:Name="ul" Height="2" Margin="0,0,2,0" VerticalAlignment="Bottom" Background="Transparent"/>
+              <ContentPresenter x:Name="cp" ContentSource="Header" Margin="10,5" VerticalAlignment="Center"/>
+            </Grid>
             <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bd" Property="Background" Value="{DynamicResource ControlHover}"/></Trigger>
               <Trigger Property="IsSelected" Value="True">
-                <Setter TargetName="bd" Property="Background" Value="{StaticResource BtnPressed}"/>
+                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ControlBg}"/>
+                <Setter TargetName="ul" Property="Background" Value="{DynamicResource SwitchOn}"/>
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
               </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- Minimal thumb-only scrollbar (applied app-wide). Keep the 11px width in sync
+         with Layout.ScrollBarWidth, which reserves space for it. -->
+    <Style x:Key="ThemedThumb" TargetType="Thumb">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Thumb">
+            <Border x:Name="th" CornerRadius="4" Margin="2"
+                    Background="{DynamicResource ScrollThumb}" SnapsToDevicePixels="True"/>
+            <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="bd" Property="Background" Value="{StaticResource BtnHover}"/>
+                <Setter TargetName="th" Property="Background" Value="{DynamicResource ScrollThumbHover}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style TargetType="ScrollBar">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ScrollBar">
+            <Grid Background="Transparent">
+              <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="True">
+                <Track.Thumb>
+                  <Thumb Style="{StaticResource ThemedThumb}"/>
+                </Track.Thumb>
+                <Track.IncreaseRepeatButton>
+                  <RepeatButton Command="ScrollBar.PageDownCommand" Opacity="0" Focusable="False"/>
+                </Track.IncreaseRepeatButton>
+                <Track.DecreaseRepeatButton>
+                  <RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0" Focusable="False"/>
+                </Track.DecreaseRepeatButton>
+              </Track>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="Orientation" Value="Vertical"><Setter Property="Width" Value="11"/></Trigger>
+              <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Height" Value="11"/>
+                <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/>
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>

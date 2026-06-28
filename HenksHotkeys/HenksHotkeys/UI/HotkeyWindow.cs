@@ -110,8 +110,9 @@ internal sealed class HotkeyWindow : Window
     BuildCornerControls();
 
     // The strip auto-sizes to its corner controls; the window border's EdgeGap
-    // padding provides the gap to the window edges (no hand-tuned margins).
-    var strip = new Grid { Background = Theme.WindowBackground };
+    // padding provides the gap to the window edges (no hand-tuned margins). The accent
+    // background turns it into a subtle toolbar (size unchanged, so collapse still fits).
+    var strip = new Grid { Background = Palette.Brush( "AccentBarBg" ) };
 
     m_leftStrip = new StackPanel
     {
@@ -147,10 +148,7 @@ internal sealed class HotkeyWindow : Window
 
   private void BuildTabs()
   {
-    if( Theme.IsDark )
-    {
-      m_tabs.Style = (Style)Application.Current.FindResource( "DarkTabControl" );
-    }
+    m_tabs.Style = (Style)Application.Current.FindResource( "AppTabControl" );
 
     PopulateTabs();
 
@@ -220,11 +218,12 @@ internal sealed class HotkeyWindow : Window
         AttachAddHereMenu( sv, canvas, dataModel );
       }
 
-      var item = new TabItem { Header = model.Name, Content = sv };
-      if( Theme.IsDark )
+      var item = new TabItem
       {
-        item.Style = (Style)Application.Current.FindResource( "DarkTabItem" );
-      }
+        Header = model.Name,
+        Content = sv,
+        Style = (Style)Application.Current.FindResource( "AppTabItem" ),
+      };
       m_tabs.Items.Add( item );
     }
 
@@ -312,10 +311,7 @@ internal sealed class HotkeyWindow : Window
       };
     }
 
-    if( Theme.IsDark )
-    {
-      btn.Style = (Style)Application.Current.FindResource( isEmoji ? "DarkEmojiButton" : "DarkButton" );
-    }
+    btn.Style = (Style)Application.Current.FindResource( isEmoji ? "GridEmojiButton" : "GridButton" );
 
     if( sym.Hotkey.Length > 0 ) tip = Append( tip, HotkeyParser.Label( sym.Hotkey ) );
     if( sym.TipChar )           tip = Append( tip, sym.Char );
@@ -398,7 +394,7 @@ internal sealed class HotkeyWindow : Window
       FontFamily          = new FontFamily( model.FontName ),
       FontSize            = PtToDip( model.FontSize ),
       FontWeight          = FontWeights.SemiBold,
-      Foreground          = Theme.TextColor,
+      Foreground          = Palette.Brush( "AccentText" ),
       VerticalAlignment   = VerticalAlignment.Bottom,
       HorizontalAlignment = HorizontalAlignment.Left,
       Margin              = new Thickness( Layout.EdgeGap, 0, 0, Layout.EdgeGap ),
@@ -408,8 +404,8 @@ internal sealed class HotkeyWindow : Window
     {
       Width           = hdr.Width,
       Height          = hdr.Height,
-      BorderBrush     = Theme.BorderColor,
-      BorderThickness = new Thickness( 0, 0, 0, Theme.BorderThickness ), // separator line
+      BorderBrush     = Palette.Brush( "AccentBarBorder" ),
+      BorderThickness = new Thickness( 0, 0, 0, 1 ), // separator line
       Child           = text,
     };
   }
@@ -509,11 +505,8 @@ internal sealed class HotkeyWindow : Window
       Height     = 22,
       ToolTip    = tip,
       Focusable  = false,
+      Style      = (Style)Application.Current.FindResource( "GridButton" ),
     };
-    if( Theme.IsDark )
-    {
-      btn.Style = (Style)Application.Current.FindResource( "DarkButton" );
-    }
     btn.Click += ( _, _ ) => { try { onClick(); } catch { /* ignore */ } };
 
     if( addToCluster )
@@ -538,12 +531,9 @@ internal sealed class HotkeyWindow : Window
     {
       maxContentW = Math.Max( maxContentW, m.ContentWidth );
     }
-    // tab content (already includes the buttons' TabEdgeGap inset) + scrollbar +
-    // the window-edge gap (EdgeGap, same as every control) + window border. Reserve
-    // the *actual* scrollbar width so a tab that fills the width (proportional) isn't
-    // overlapped by the scrollbar, which would eat its trailing TabEdgeGap.
-    double scrollBar = Math.Ceiling( SystemParameters.VerticalScrollBarWidth );
-    m_fullWidth = maxContentW + scrollBar + 2 * Layout.EdgeGap + 2 * Theme.BorderThickness;
+    // tab content (already includes the buttons' TabEdgeGap inset) + the themed
+    // scrollbar + the window-edge gap (EdgeGap) + window border.
+    m_fullWidth = maxContentW + Layout.ScrollBarWidth + 2 * Layout.EdgeGap + 2 * Theme.BorderThickness;
   }
 
   private void ComputeFullSize()
@@ -783,6 +773,7 @@ internal sealed class HotkeyWindow : Window
 
     DisableMaximize();
     Theme.ApplyDarkFrame( m_hwnd );
+    Theme.ApplyRoundedCorners( m_hwnd );
 
     HwndSource.FromHwnd( m_hwnd )?.AddHook( WndHook );
   }

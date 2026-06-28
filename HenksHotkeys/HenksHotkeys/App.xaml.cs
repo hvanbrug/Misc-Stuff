@@ -43,6 +43,10 @@ public partial class App
     AppState.UseClipSend     = AppState.Settings.IsClipSendMode;
     AppState.StripSendEmojis = AppState.Settings.IsStripCommentEmojis;
 
+    // Publish the light/dark palette into the app resources before any window or
+    // style is built, so the App.xaml styles resolve their DynamicResource brushes.
+    Theme.Apply();
+
     // Place context menus / tooltips to the right of the cursor even when Windows'
     // "left-handed" menu setting is on.
     //MenuAlignment.ForceRightHanded();

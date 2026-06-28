@@ -53,14 +53,17 @@ internal static class Theme
   // Greys matching the NetworkShares dark scheme (layered, faint cool tint).
   public static readonly Brush DarkBackground  = Frozen( 0x1E, 0x1E, 0x20 );
   public static readonly Brush DarkText        = Frozen( 0xE8, 0xE8, 0xE8 );
-  public static readonly Brush DarkModeBorder  = Frozen( 0xAA, 0xAA, 0xAA );
-  public static readonly Brush LightModeBorder = Frozen( 0x55, 0x55, 0x55 );
 
   public const int BorderThickness = 1;
 
-  public static Brush WindowBackground => IsDark ? DarkBackground : SystemColors.ControlBrush;
-  public static Brush BorderColor      => IsDark ? DarkModeBorder : LightModeBorder;
-  public static Brush TextColor        => IsDark ? DarkText : SystemColors.ControlTextBrush;
+  /// <summary>Publish the palette for the current system theme into the app resources.
+  /// Call once at startup before any window/style is built.</summary>
+  public static void Apply() => Palette.Install( Application.Current.Resources, IsDark );
+
+  // Convenience brushes for the code-built chrome, sourced from the shared palette.
+  public static Brush WindowBackground => Palette.Brush( "WindowBg" );
+  public static Brush BorderColor      => Palette.Brush( "CardBorder" );
+  public static Brush TextColor        => Palette.Brush( "TextPrimary" );
 
   // Tell DWM to render the window frame dark (Win10 2004+/Win11), so the thin
   // resize frame doesn't show up white.
@@ -77,6 +80,18 @@ internal static class Theme
 
     int border = 0x201E1E; // COLORREF (0x00BBGGRR) for #1E1E20 — matches DarkBackground
     try { NativeMethods.DwmSetWindowAttribute( hwnd, NativeMethods.DWMWA_BORDER_COLOR, ref border, sizeof( int ) ); }
+    catch { /* Win11 only */ }
+  }
+
+  /// <summary>Round the window corners (Win11). No-op on older Windows.</summary>
+  public static void ApplyRoundedCorners( IntPtr hwnd )
+  {
+    if( hwnd == IntPtr.Zero )
+    {
+      return;
+    }
+    int pref = NativeMethods.DWMWCP_ROUND;
+    try { NativeMethods.DwmSetWindowAttribute( hwnd, NativeMethods.DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, sizeof( int ) ); }
     catch { /* Win11 only */ }
   }
 }

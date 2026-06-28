@@ -240,6 +240,10 @@ internal static class NativeMethods
 
   // DWMWA_USE_IMMERSIVE_DARK_MODE
   public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+  // DWMWA_WINDOW_CORNER_PREFERENCE (Win11): 0 default, 1 do-not-round, 2 round, 3 round-small
+  public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+  public const int DWMWCP_ROUND      = 2;
+  public const int DWMWCP_ROUNDSMALL = 3;
   // DWMWA_BORDER_COLOR (Win11)
   public const int DWMWA_BORDER_COLOR = 34;
 
