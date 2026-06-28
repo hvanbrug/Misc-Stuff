@@ -51,6 +51,16 @@ internal sealed class HotkeyWindow : Window
   private bool m_snappedToFav;
   private bool m_dragging;
 
+  // Button drag-to-reposition (distinct from the window-move drag above).
+  private SymbolElement? m_btnDragSym;
+  private Canvas?        m_btnDragCanvas;
+  private DataTabModel?  m_btnDragModel;
+  private Point          m_btnDragStart;
+  private Vector         m_btnDragGrab;
+  private bool           m_btnDragging;
+  private Border?        m_btnDragGhost;
+  private Border?        m_btnDropHi;
+
   private IntPtr m_hwnd;
   private readonly DispatcherTimer m_activeWinTimer = new() { Interval = TimeSpan.FromMilliseconds( 200 ) };
 
@@ -192,6 +202,18 @@ internal sealed class HotkeyWindow : Window
         Canvas.SetLeft( btn, sym.X );
         Canvas.SetTop( btn, sym.Y );
         canvas.Children.Add( btn );
+
+        // Data-tab cells (incl. blanks) can be dragged to a new slot.
+        if( model is DataTabModel dragModel && sym.Source is not null )
+        {
+          WireDrag( btn, sym, canvas, dragModel );
+        }
+      }
+      if( model is DataTabModel )
+      {
+        canvas.MouseMove           += OnButtonDragMove;
+        canvas.MouseLeftButtonUp   += OnButtonDragDrop;
+        canvas.LostMouseCapture    += ( _, _ ) => CancelButtonDrag();
       }
       foreach( TabModel.SectionHeader hdr in model.Headers )
       {
@@ -373,6 +395,227 @@ internal sealed class HotkeyWindow : Window
     menu.Items.Add( edit );
     menu.Items.Add( del );
     return menu;
+  }
+
+  // ── Drag a button to a new slot (swaps with the cell dropped on) ───
+  private void WireDrag( FrameworkElement el, SymbolElement sym, Canvas canvas, DataTabModel model )
+  {
+    // Record the press; a real drag only starts once the pointer moves past the
+    // threshold (below that it's a normal click, so the send still fires).
+    el.PreviewMouseLeftButtonDown += ( _, e ) =>
+    {
+      m_btnDragSym    = sym;
+      m_btnDragCanvas = canvas;
+      m_btnDragModel  = model;
+      m_btnDragStart  = e.GetPosition( canvas );
+      m_btnDragging   = false;
+    };
+    el.PreviewMouseMove += ( _, e ) =>
+    {
+      if( m_btnDragging || m_btnDragSym != sym || e.LeftButton != MouseButtonState.Pressed )
+      {
+        return;
+      }
+      Point p = e.GetPosition( canvas );
+      if( Math.Abs( p.X - m_btnDragStart.X ) < SystemParameters.MinimumHorizontalDragDistance &&
+          Math.Abs( p.Y - m_btnDragStart.Y ) < SystemParameters.MinimumVerticalDragDistance )
+      {
+        return;
+      }
+      BeginButtonDrag( p );
+      e.Handled = true; // capturing the canvas also cancels the would-be click/send
+    };
+  }
+
+  private void BeginButtonDrag( Point at )
+  {
+    if( m_btnDragSym is not { } sym || m_btnDragCanvas is not { } canvas )
+    {
+      return;
+    }
+    m_btnDragging = true;
+    m_activeWinTimer.Stop(); // don't let background ticks disturb the drag
+    m_btnDragGrab = at - new Point( sym.X, sym.Y );
+
+    if( sym.Ctrl is UIElement dragged )
+    {
+      dragged.Opacity = 0.35; // dim the original while its ghost is in flight
+    }
+
+    m_btnDragGhost = MakeGhost( sym );
+    Panel.SetZIndex( m_btnDragGhost, 1000 );
+    canvas.Children.Add( m_btnDragGhost );
+
+    m_btnDropHi = new Border
+    {
+      BorderBrush      = Palette.Brush( "SwitchOn" ),
+      BorderThickness  = new Thickness( 2 ),
+      CornerRadius     = new CornerRadius( 5 ),
+      Background       = Brushes.Transparent,
+      IsHitTestVisible = false,
+      Visibility       = Visibility.Collapsed,
+    };
+    Panel.SetZIndex( m_btnDropHi, 999 );
+    canvas.Children.Add( m_btnDropHi );
+
+    UpdateButtonDrag( at );
+    Mouse.Capture( canvas );
+  }
+
+  private void OnButtonDragMove( object sender, MouseEventArgs e )
+  {
+    if( m_btnDragging && m_btnDragCanvas is { } canvas )
+    {
+      UpdateButtonDrag( e.GetPosition( canvas ) );
+    }
+  }
+
+  private void UpdateButtonDrag( Point at )
+  {
+    if( m_btnDragGhost is { } ghost )
+    {
+      Canvas.SetLeft( ghost, at.X - m_btnDragGrab.X );
+      Canvas.SetTop(  ghost, at.Y - m_btnDragGrab.Y );
+    }
+    SymbolElement? target = FindDropTarget( at );
+    if( m_btnDropHi is { } hi )
+    {
+      if( target is null )
+      {
+        hi.Visibility = Visibility.Collapsed;
+      }
+      else
+      {
+        hi.Width  = target.W;
+        hi.Height = target.H;
+        Canvas.SetLeft( hi, target.X );
+        Canvas.SetTop(  hi, target.Y );
+        hi.Visibility = Visibility.Visible;
+      }
+    }
+  }
+
+  private void OnButtonDragDrop( object sender, MouseButtonEventArgs e )
+  {
+    if( !m_btnDragging )
+    {
+      return;
+    }
+    Point          drop   = m_btnDragCanvas is { } c ? e.GetPosition( c ) : default;
+    SymbolElement? source = m_btnDragSym;
+    SymbolElement? target = FindDropTarget( drop );
+    CancelButtonDrag(); // release capture, remove ghost/highlight, restore opacity
+
+    if( source?.Source is { } moving    &&
+        target?.Source is { } targetDef &&
+        !ReferenceEquals( source, target ) )
+    {
+      // Below the target's row, or past its right half, drops *after* it; otherwise before.
+      bool after;
+      if( drop.Y > (target.Y + target.H) )
+      {
+        after = true;
+      }
+      else if( drop.Y < target.Y )
+      {
+        after = false;
+      }
+      else
+      {
+        after = drop.X >= (target.X + (target.W * 0.5));
+      }
+
+      //bool after = drop.Y > target.Y + target.H ? true
+      //           : drop.Y < target.Y            ? false
+      //           : drop.X >= target.X + target.W * 0.5;
+
+      // Default closes the gap (reorder); hold Shift to leave a blank where it was.
+      bool leaveBlank = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+
+      if( TabStore.MoveButton( moving, targetDef, after, leaveBlank ) )
+      {
+        AppState.RequestReload?.Invoke(); // rebuilds the tab at the new layout
+      }
+    }
+  }
+
+  // The nearest data cell to the pointer (within the content), excluding the dragged one.
+  private SymbolElement? FindDropTarget( Point at )
+  {
+    if( m_btnDragModel is not {} model )
+    {
+      return null;
+    }
+    SymbolElement? best = null;
+    double bestD = double.MaxValue;
+    foreach( SymbolElement s in model.Symbols )
+    {
+      if( s.Source is null || ReferenceEquals( s, m_btnDragSym ) )
+      {
+        continue;
+      }
+      double dx = at.X - ( s.X + s.W * 0.5 );
+      double dy = at.Y - ( s.Y + s.H * 0.5 );
+      double d  = dx * dx + dy * dy;
+      if( d < bestD )
+      {
+        bestD = d;
+        best  = s;
+      }
+    }
+    // Only accept a drop that lands roughly over the content (not flung far outside).
+    bool inside = at.X >= -model.ColWidth && at.X <= model.ContentWidth + model.ColWidth &&
+                  at.Y >= -model.RowHeight && at.Y <= model.ContentHeight + model.RowHeight;
+    return inside ? best : null;
+  }
+
+  private void CancelButtonDrag()
+  {
+    if( !m_btnDragging )
+    {
+      return;
+    }
+    m_btnDragging = false;
+    m_activeWinTimer.Start();
+    if( ReferenceEquals( Mouse.Captured, m_btnDragCanvas ) )
+    {
+      Mouse.Capture( null );
+    }
+    if( m_btnDragSym?.Ctrl is UIElement dragged )
+    {
+      dragged.Opacity = 1.0;
+    }
+    if( m_btnDragCanvas is { } canvas )
+    {
+      if( m_btnDragGhost is {} g ) canvas.Children.Remove( g );
+      if( m_btnDropHi    is {} h ) canvas.Children.Remove( h );
+    }
+    m_btnDragGhost = null;
+    m_btnDropHi    = null;
+  }
+
+  private static Border MakeGhost( SymbolElement sym )
+  {
+    string label = sym.IsBlank ? "" : UiText.NormalizeDisplayText( sym.ShowChar ? sym.Char : sym.Desc );
+    return new Border
+    {
+      Width            = sym.W,
+      Height           = sym.H,
+      CornerRadius     = new CornerRadius( 5 ),
+      Background       = Palette.Brush( "ControlHover" ),
+      BorderBrush      = Palette.Brush( "SwitchOn" ),
+      BorderThickness  = new Thickness( 2 ),
+      Opacity          = 0.9,
+      IsHitTestVisible = false,
+      Child = new TextBlock
+      {
+        Text                = label,
+        Foreground          = Palette.Brush( "TextPrimary" ),
+        HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment   = VerticalAlignment.Center,
+        TextTrimming        = TextTrimming.CharacterEllipsis,
+      },
+    };
   }
 
   // The open-area menu for a data tab: remembers where the right-click landed (in canvas

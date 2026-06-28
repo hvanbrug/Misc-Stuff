@@ -167,6 +167,69 @@ internal static class TabStore
     SaveCurrent();
   }
 
+  /// <summary>Move a button to sit before / after a target (drag-to-reposition), then
+  /// persist. By default the slot it came from closes up (the rest shift along); with
+  /// <paramref name="leaveBlank"/> a blank spacer is left in its place so the surrounding
+  /// layout doesn't move. Over-wide rows wrap on the next NormalizeRows. Returns false if
+  /// either button isn't found.</summary>
+  public static bool MoveButton( ButtonDef moving, ButtonDef target, bool after, bool leaveBlank )
+  {
+    if( s_file is null || ReferenceEquals( moving, target ) )
+    {
+      return false;
+    }
+    if( !Locate( moving, out RowDef rm, out int im ) || !Locate( target, out RowDef rt, out int it ) )
+    {
+      return false;
+    }
+
+    if( leaveBlank )
+    {
+      rm.Buttons[im] = new ButtonDef { Blank = true };   // leave a hole where it was
+    }
+    else
+    {
+      rm.Buttons.RemoveAt( im );                          // close the gap
+      if( ReferenceEquals( rm, rt ) && im < it )
+      {
+        it--;                                             // target shifted left by the removal
+      }
+    }
+
+    int insertIdx = Math.Clamp( after ? it + 1 : it, 0, rt.Buttons.Count );
+    rt.Buttons.Insert( insertIdx, moving );
+
+    SaveCurrent();
+    return true;
+  }
+
+  private static bool Locate( ButtonDef button, out RowDef row, out int index )
+  {
+    if( s_file is not null )
+    {
+      foreach( TabEntry t in s_file.Tabs )
+      {
+        if( t.Rows is null )
+        {
+          continue;
+        }
+        foreach( RowDef r in t.Rows )
+        {
+          int i = r.Buttons.IndexOf( button );
+          if( i >= 0 )
+          {
+            row = r;
+            index = i;
+            return true;
+          }
+        }
+      }
+    }
+    row = null!;
+    index = -1;
+    return false;
+  }
+
   /// <summary>Remove a button from the live config (and its row if that empties it),
   /// then persist — the re-stamp leaves a tombstone so the deletion propagates on merge.
   /// Returns false if the button wasn't found.</summary>
