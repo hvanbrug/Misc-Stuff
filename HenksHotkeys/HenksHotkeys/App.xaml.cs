@@ -43,6 +43,10 @@ public partial class App
     AppState.UseClipSend     = AppState.Settings.IsClipSendMode;
     AppState.StripSendEmojis = AppState.Settings.IsStripCommentEmojis;
 
+    // Place context menus / tooltips to the right of the cursor even when Windows'
+    // "left-handed" menu setting is on.
+    //MenuAlignment.ForceRightHanded();
+
     // Lets TabStore prompt for the master secrets passphrase when needed.
     PassphrasePrompt.Provider = PassphraseDialog.Ask;
 
