@@ -233,6 +233,10 @@ internal static class TabStore
     TabFile local = TryParse( ReadOrSeed() ) ?? new TabFile();
     VersionStamp.Stamp( local, LoadShadow() ); // capture local edits first
 
+    // The two machines seal secrets under their own per-file salts; re-seal the incoming
+    // secrets to this machine's salt (same passphrase) so they aren't orphaned on merge.
+    ReSealIncomingSecrets( incoming, local );
+
     // Heal any pre-existing duplicate tabs, then match the two files by identity
     // (name/content) so independently-stamped ids don't duplicate on merge.
     VersionMerge.CollapseDuplicateTabs( local );
@@ -314,16 +318,29 @@ internal static class TabStore
 
     bool dirty = false;
     byte[]? key = ObtainKey( file.Crypto, salt, iterations, ref dirty );
+
+    // Record the params so sends can re-derive the key; never keep the key itself.
+    SecretSession.Configure( salt, iterations, key is not null );
     if( key is null )
     {
+      foreach( ButtonDef b in secrets ) b.Locked = true;
+      LockedSecretCount = secrets.Count;
       return dirty; // no passphrase available / cancelled → leave secrets locked
     }
 
     dirty |= ApplySecrets( secrets, key );
+    LockedSecretCount = secrets.Count( b => b.Locked );
+    Array.Clear( key ); // the load-time key is done; send time re-derives its own
     return dirty;
   }
 
-  /// <summary>Decrypt / (re)seal each secret button with the given key. Testable.</summary>
+  /// <summary>Number of secret buttons that couldn't be decrypted on the last load
+  /// (orphaned by a passphrase/salt mismatch). Drives the one-time warning.</summary>
+  public static int LockedSecretCount { get; private set; }
+
+  /// <summary>(Re)seal the plaintext / legacy-DPAPI secrets so they're portable, and flag
+  /// any portable secret that can't be decrypted with the current key as locked. The
+  /// decrypted value is never retained. Returns true when the file changed. Testable.</summary>
   internal static bool ApplySecrets( List<ButtonDef> secrets, byte[] key )
   {
     bool dirty = false;
@@ -332,8 +349,7 @@ internal static class TabStore
       string s = b.Secret!;
       if( Secrets.IsPassSealed( s ) )
       {
-        try   { b.Plain = Secrets.Decrypt( key, s ); }
-        catch { b.Plain = ""; } // wrong key / corrupt
+        b.Locked = !Secrets.CanDecrypt( key, s ); // validate without keeping the plaintext
       }
       else if( Secrets.IsDpapiSealed( s ) )
       {
@@ -341,21 +357,55 @@ internal static class TabStore
         // the machine that originally sealed it; elsewhere it just stays locked).
         try
         {
-          string plain = Secrets.DpapiUnseal( s );
-          b.Plain  = plain;
-          b.Secret = Secrets.Encrypt( key, plain );
+          b.Secret = Secrets.Encrypt( key, Secrets.DpapiUnseal( s ) );
+          b.Locked = false;
           dirty    = true;
         }
-        catch { b.Plain = ""; }
+        catch { b.Locked = true; }
       }
-      else // plaintext the user typed in
+      else // plaintext the user just typed in (edit/add) → seal it
       {
-        b.Plain  = s;
         b.Secret = Secrets.Encrypt( key, s );
+        b.Locked = false;
         dirty    = true;
       }
     }
     return dirty;
+  }
+
+  // Re-encrypt the incoming file's portable secrets from its salt to the local salt so a
+  // merge doesn't orphan them. Requires the same passphrase on both machines (the usual
+  // case). No-op when the salts already match or either side has no crypto header.
+  private static void ReSealIncomingSecrets( TabFile incoming, TabFile local )
+  {
+    string? inSalt  = incoming.Crypto?.Salt;
+    string? locSalt = local.Crypto?.Salt;
+    if( string.IsNullOrEmpty( inSalt ) || string.IsNullOrEmpty( locSalt ) || inSalt == locSalt )
+    {
+      return;
+    }
+
+    string? pass = PassphraseStore.Load() ?? PassphrasePrompt.Ask( false, false );
+    if( string.IsNullOrEmpty( pass ) )
+    {
+      return; // no passphrase → can't re-seal (secrets may stay locked, as before)
+    }
+
+    byte[] keyIn  = Secrets.DeriveKey( pass, Convert.FromBase64String( inSalt ),
+                      incoming.Crypto!.Iterations > 0 ? incoming.Crypto.Iterations : Secrets.DefaultIterations );
+    byte[] keyLoc = Secrets.DeriveKey( pass, Convert.FromBase64String( locSalt ),
+                      local.Crypto!.Iterations > 0 ? local.Crypto.Iterations : Secrets.DefaultIterations );
+
+    foreach( ButtonDef b in incoming.Tabs.Where( t => t.Rows is not null )
+                                          .SelectMany( t => t.Rows! )
+                                          .SelectMany( r => r.Buttons ) )
+    {
+      if( b.Secret is { } s && Secrets.IsPassSealed( s ) )
+      {
+        try   { b.Secret = Secrets.Encrypt( keyLoc, Secrets.Decrypt( keyIn, s ) ); }
+        catch { /* different passphrase / already this salt → leave it */ }
+      }
+    }
   }
 
   // Resolve the AES key from the cached passphrase or by prompting (up to a few

@@ -70,6 +70,34 @@ internal static class Secrets
     catch { return false; }
   }
 
+  /// <summary>True if <paramref name="key"/> can decrypt the value, *without* materialising
+  /// the plaintext as a string (the bytes are zeroed immediately). Used to flag locked
+  /// secrets without keeping them in memory.</summary>
+  public static bool CanDecrypt( byte[] key, string sealedValue )
+  {
+    byte[]? blob = null;
+    byte[]? pt   = null;
+    try
+    {
+      blob = Convert.FromBase64String( sealedValue[PassPrefix.Length..] );
+      byte[] nonce = blob[..12];
+      byte[] tag   = blob[12..28];
+      byte[] ct    = blob[28..];
+      pt = new byte[ct.Length];
+      using var gcm = new AesGcm( key, 16 );
+      gcm.Decrypt( nonce, ct, tag, pt );
+      return true;
+    }
+    catch
+    {
+      return false;
+    }
+    finally
+    {
+      if( pt is not null ) Array.Clear( pt );
+    }
+  }
+
   // ── DPAPI (legacy-secret migration + local passphrase cache) ─────
   public static string DpapiUnseal( string sealedValue )
   {

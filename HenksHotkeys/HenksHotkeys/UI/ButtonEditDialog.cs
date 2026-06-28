@@ -45,7 +45,8 @@ internal static class ButtonEditDialog
     root.Children.Add( Header( B, title, blank ) );
 
     // ── Text + Description: multiline, wrapping, auto-growing (Enter = newline) ──
-    TextBox text = Multiline( B, root, "Text / value", b.IsSecret ? ( b.Plain ?? "" ) : b.Text );
+    // For a secret, reveal the current value on demand just to edit it (empty if locked).
+    TextBox text = Multiline( B, root, "Text / value", b.IsSecret ? ( SecretSession.Reveal( b.Secret ) ?? "" ) : b.Text );
     TextBox desc = Multiline( B, root, "Description (tooltip / face)", b.Desc ?? "" );
 
     // ── Short fields share one row — they never hold much ──
@@ -118,7 +119,7 @@ internal static class ButtonEditDialog
         b.Desc     = null;
         b.Hotkey   = null;
         b.Secret   = null;
-        b.Plain    = null;
+        b.Locked   = false;
         b.ShowText = true;
         b.TipText  = false;
       }
@@ -133,16 +134,16 @@ internal static class ButtonEditDialog
         string value = text.Text;
         if( sensitive.IsChecked == true )
         {
-          // Route the plaintext into Secret (sealed on save); never leave it in Text,
-          // which is written to disk in the clear.
+          // Put the plaintext into Secret (sealed by ProcessSecrets on save); never leave
+          // it in Text, which is written to disk in the clear. Re-entering unlocks it.
           b.Secret = value;
-          b.Plain  = value;
+          b.Locked = false;
           b.Text   = "";
         }
         else
         {
           b.Secret = null;
-          b.Plain  = null;
+          b.Locked = false;
           b.Text   = value;
         }
       }

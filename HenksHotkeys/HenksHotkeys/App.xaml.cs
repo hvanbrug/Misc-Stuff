@@ -67,6 +67,16 @@ public partial class App
 
     // The window is always shown — there is no hidden / "no UI" mode.
     m_window.ShowUi();
+
+    if( TabStore.LockedSecretCount > 0 )
+    {
+      MessageBox.Show(
+        $"{TabStore.LockedSecretCount} secret button(s) couldn't be decrypted on this machine " +
+        "(sealed with a different passphrase/salt). They show a 🔒 and won't send until you " +
+        "re-enter them: right-click → Edit → re-type the value.\n\n" +
+        "Importing your other machine's config will also re-seal shared secrets so this stops happening.",
+        "Secrets locked", MessageBoxButton.OK, MessageBoxImage.Warning );
+    }
   }
 
   private static void BuildTabModels()

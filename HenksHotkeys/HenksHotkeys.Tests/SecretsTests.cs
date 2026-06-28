@@ -35,20 +35,22 @@ public class SecretsTests
   }
 
   [Fact]
-  public void ApplySecrets_SealsPlaintext_AndDecryptsForUse()
+  public void ApplySecrets_SealsPlaintext_ThenDecryptsOnDemand()
   {
     byte[] key = TestKey();
     var btn = new ButtonDef { Secret = FakeSecret, Desc = "pswd" };
     var list = new List<ButtonDef> { btn };
 
-    // First pass: plaintext is sealed (dirty) and decrypted into Plain.
+    // First pass: plaintext is sealed (dirty). The value is never kept in memory — it's
+    // decryptable on demand from the ciphertext.
     Assert.True( TabStore.ApplySecrets( list, key ) );
     Assert.True( Secrets.IsPassSealed( btn.Secret! ) );
-    Assert.Equal( FakeSecret, btn.Plain );
+    Assert.False( btn.Locked );
+    Assert.Equal( FakeSecret, Secrets.Decrypt( key, btn.Secret! ) );
 
-    // Second pass: already sealed → nothing to persist, still decrypts.
+    // Second pass: already sealed → nothing to persist, still unlocked.
     Assert.False( TabStore.ApplySecrets( list, key ) );
-    Assert.Equal( FakeSecret, btn.Plain );
+    Assert.False( btn.Locked );
   }
 
   [Fact]
@@ -60,11 +62,20 @@ public class SecretsTests
 
     Assert.True( Secrets.IsDpapiSealed( btn.Secret! ) );
 
-    bool dirty = TabStore.ApplySecrets( list, key );
-
-    Assert.True( dirty );
+    Assert.True( TabStore.ApplySecrets( list, key ) );
     Assert.True( Secrets.IsPassSealed( btn.Secret! ) );          // now portable
-    Assert.Equal( FakeSecret, btn.Plain );                       // usable
+    Assert.False( btn.Locked );
     Assert.Equal( FakeSecret, Secrets.Decrypt( key, btn.Secret! ) );
+  }
+
+  [Fact]
+  public void ApplySecrets_FlagsLocked_WhenSealedWithADifferentKey()
+  {
+    // Sealed with one key, processed with another (the orphaned-secret case).
+    var btn = new ButtonDef { Secret = Secrets.Encrypt( TestKey( "other-pass" ), FakeSecret ), Desc = "pswd" };
+    var list = new List<ButtonDef> { btn };
+
+    Assert.False( TabStore.ApplySecrets( list, TestKey() ) ); // already sealed → no rewrite
+    Assert.True( btn.Locked );                                // but can't decrypt → locked
   }
 }

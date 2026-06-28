@@ -157,9 +157,10 @@ internal sealed class ButtonDef
   [JsonProperty( "secret", NullValueHandling = NullValueHandling.Ignore )]
   public string? Secret { get; set; }
 
-  /// <summary>Runtime-only decrypted secret (never serialized).</summary>
+  /// <summary>Runtime-only flag: the secret couldn't be decrypted with the current key
+  /// (orphaned — sealed under a different passphrase/salt). Never serialized.</summary>
   [JsonIgnore]
-  public string? Plain { get; set; }
+  public bool Locked { get; set; }
 
   /// <summary>True when this button carries a secret value.</summary>
   [JsonIgnore]

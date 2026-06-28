@@ -143,14 +143,15 @@ internal sealed class DataTabModel : TabModel
         }
         else
         {
-          // Secret buttons send the decrypted value but never show it (face = desc,
-          // no value in the tooltip), regardless of the show/tip flags.
-          string sendText = b.IsSecret ? ( b.Plain ?? "" ) : b.Text;
-          int    showText = b.IsSecret ? 0 : ( b.ShowText ? 1 : 0 );
-          int    tipText  = b.IsSecret ? 0 : ( b.TipText  ? 1 : 0 );
+          // Secret buttons decrypt their value on demand at send time (it is never kept
+          // in memory) and never show it (face = desc, no value in the tooltip).
+          Action? action   = b.IsSecret ? () => SecretCommands.Send( b ) : null;
+          string  ch       = b.IsSecret ? "" : b.Text;
+          int     showText = b.IsSecret ? 0 : ( b.ShowText ? 1 : 0 );
+          int     tipText  = b.IsSecret ? 0 : ( b.TipText  ? 1 : 0 );
 
           SymbolElement sym = PlaceSymbol( r + 1, (int)Math.Round( col ) + 1, b.Width, x, y,
-                                           sendText, b.Desc, b.Hotkey, null,
+                                           ch, b.Desc, b.Hotkey, action,
                                            b.Align, showText, tipText );
           sym.Source = b; // back-link to the model so the right-click menu can edit it
         }

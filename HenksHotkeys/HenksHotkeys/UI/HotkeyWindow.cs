@@ -276,7 +276,12 @@ internal sealed class HotkeyWindow : Window
     if( sym.Hotkey.Length > 0 ) buttonText = "• " + buttonText;
     if( sym.Align == "left" )   buttonText = " "  + buttonText;
 
+    // A locked secret (couldn't be decrypted) wears a padlock and says why.
+    bool locked = sym.Source is Core.ButtonDef sd && sd.IsSecret && sd.Locked;
+    if( locked ) buttonText = "🔒 " + buttonText;
+
     string tip  = UiText.NormalizeDisplayText( sym.Desc );
+    if( locked ) tip = Append( tip, "Locked — couldn't decrypt; right-click → Edit to re-enter." );
     string stem = "";
     bool   isEmoji = false;
 
