@@ -213,6 +213,13 @@ internal sealed class HotkeyWindow : Window
       };
       m_scrollers.Add( new SmoothScroller( sv ) );
 
+      // Right-click the open area of a data tab → "Add button here" (placed near the
+      // click). Buttons keep their own Edit/Delete menu, which takes precedence.
+      if( model is DataTabModel dataModel )
+      {
+        AttachAddHereMenu( sv, canvas, dataModel );
+      }
+
       var item = new TabItem { Header = model.Name, Content = sv };
       if( Theme.IsDark )
       {
@@ -251,6 +258,11 @@ internal sealed class HotkeyWindow : Window
 
   private FrameworkElement BuildButton( SymbolElement sym, TabModel model )
   {
+    if( sym.IsBlank )
+    {
+      return BuildBlankCell( sym );
+    }
+
     var btn = new Button
     {
       Width      = sym.W,
@@ -314,8 +326,66 @@ internal sealed class HotkeyWindow : Window
     }
 
     WireSymbolButton( btn, sym.ClickAction );
+
+    // Data-tab buttons get a right-click menu to edit / delete them. Built-in code
+    // tabs (Source == null) aren't JSON-editable, so they get none.
+    if( sym.Source is Core.ButtonDef def )
+    {
+      btn.ContextMenu = BuildButtonMenu( def );
+    }
+
     sym.Ctrl = btn;
     return btn;
+  }
+
+  // A blank cell: an invisible, hit-testable placeholder that shows a faint border on
+  // hover and carries the same edit/delete menu, so it can be turned into a real button.
+  private FrameworkElement BuildBlankCell( SymbolElement sym )
+  {
+    var cell = new Border
+    {
+      Width           = sym.W,
+      Height          = sym.H,
+      Background      = Brushes.Transparent,        // hit-testable for hover / right-click
+      BorderThickness = new Thickness( 1 ),
+      BorderBrush     = Brushes.Transparent,        // invisible until hovered
+      ToolTip         = "Blank cell — right-click to edit",
+    };
+    cell.MouseEnter += ( _, _ ) => cell.BorderBrush = Theme.BorderColor;
+    cell.MouseLeave += ( _, _ ) => cell.BorderBrush = Brushes.Transparent;
+
+    if( sym.Source is Core.ButtonDef def )
+    {
+      cell.ContextMenu = BuildButtonMenu( def );
+    }
+    sym.Ctrl = cell;
+    return cell;
+  }
+
+  private static ContextMenu BuildButtonMenu( Core.ButtonDef def )
+  {
+    var menu = new ContextMenu();
+    var edit = new MenuItem { Header = "Edit button…" };
+    edit.Click += ( _, _ ) => ButtonCommands.Edit( def );
+    var del  = new MenuItem { Header = "Delete button" };
+    del.Click += ( _, _ ) => ButtonCommands.Delete( def );
+    menu.Items.Add( edit );
+    menu.Items.Add( del );
+    return menu;
+  }
+
+  // The open-area menu for a data tab: remembers where the right-click landed (in canvas
+  // coordinates, so scrolling is accounted for) and adds a button there.
+  private static void AttachAddHereMenu( ScrollViewer sv, Canvas canvas, DataTabModel model )
+  {
+    Point clickPoint = default;
+    sv.PreviewMouseRightButtonDown += ( _, e ) => clickPoint = e.GetPosition( canvas );
+
+    var menu = new ContextMenu();
+    var add  = new MenuItem { Header = "Add button here…" };
+    add.Click += ( _, _ ) => ButtonCommands.AddHere( model, clickPoint );
+    menu.Items.Add( add );
+    sv.ContextMenu = menu;
   }
 
   // A section label: bold text sitting on a separator line spanning the columns.
@@ -941,13 +1011,43 @@ internal sealed class HotkeyWindow : Window
   }
 
   // Right-click menu only on the bare window / indicators / left collapse button;
-  // suppress it over the tab control (and its contents) and the helper buttons.
+  // suppress the window's app menu over the tab control (and its contents) and the
+  // helper buttons — but let a button's own edit/delete menu through.
   private void OnContextMenuOpening( object sender, ContextMenuEventArgs e )
   {
-    if( e.OriginalSource is DependencyObject d && ( IsInside( d, m_tabs ) || IsInside( d, m_rightCluster ) ) )
+    if( e.OriginalSource is not DependencyObject d )
+    {
+      return;
+    }
+    if( HasOwnContextMenu( d ) )
+    {
+      return; // a data-tab button's edit/delete menu — open it normally
+    }
+    if( IsInside( d, m_tabs ) || IsInside( d, m_rightCluster ) )
     {
       e.Handled = true;
     }
+  }
+
+  // True if the right-clicked element (or an ancestor below the window) carries its
+  // own ContextMenu — i.e. a per-button menu, not the window's app menu.
+  private bool HasOwnContextMenu( DependencyObject? node )
+  {
+    while( node != null )
+    {
+      if( ReferenceEquals( node, this ) )
+      {
+        return false; // reached the window itself → only the app menu remains
+      }
+      if( node is FrameworkElement fe && fe.ContextMenu != null )
+      {
+        return true;
+      }
+      DependencyObject? parent = node is Visual ? VisualTreeHelper.GetParent( node ) : null;
+      parent ??= LogicalTreeHelper.GetParent( node );
+      node = parent;
+    }
+    return false;
   }
 
   private static bool IsInside( DependencyObject? node, DependencyObject ancestor )

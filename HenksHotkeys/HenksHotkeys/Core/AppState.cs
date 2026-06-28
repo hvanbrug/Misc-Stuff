@@ -19,6 +19,10 @@ internal static class AppState
 
   public static HotkeyWindow Window { get; set; } = null!;
 
+  /// <summary>Rebuild the tabs/buttons/hotkeys from the (possibly just-edited) config.
+  /// Set by App; invoked after an in-app edit/delete so the change shows immediately.</summary>
+  public static Action? RequestReload { get; set; }
+
   public static List<TabModel> Tabs { get; } = new();
 
   /// <summary>(label, description) pairs for the ListHotkeys (^+a) view.</summary>

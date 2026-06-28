@@ -27,14 +27,16 @@ public class LayoutTests
   }
 
   [Fact]
-  public void BlankButton_LeavesAOneCellGap_AndDrawsNothing()
+  public void BlankButton_OccupiesACell_AsAnEditablePlaceholder()
   {
     DataTabModel t = Build( 10,
-      new RowDef { Buttons = { B( "A" ), new ButtonDef { Blank = true, Text = "ignored" }, B( "B" ) } } );
+      new RowDef { Buttons = { B( "A" ), new ButtonDef { Blank = true }, B( "B" ) } } );
 
-    Assert.Equal( 2, t.Symbols.Count );           // the blank cell is not drawn
+    Assert.Equal( 3, t.Symbols.Count );           // the blank is placed (hoverable / editable)
     Assert.Equal( EG, t.Symbols[0].X );
-    Assert.Equal( EG + 2 * CW, t.Symbols[1].X );  // B skipped the blank cell
+    Assert.True( t.Symbols[1].IsBlank );          // middle cell is the blank spacer
+    Assert.Equal( EG + CW, t.Symbols[1].X );
+    Assert.Equal( EG + 2 * CW, t.Symbols[2].X );  // B still sits in the third cell
   }
 
   [Fact]

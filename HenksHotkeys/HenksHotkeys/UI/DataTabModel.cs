@@ -13,6 +13,10 @@ internal sealed class DataTabModel : TabModel
   private readonly TabEntry m_entry;
   private int m_cols;
 
+  /// <summary>The underlying tab model (same instance held by <see cref="TabStore"/>),
+  /// so the editor can append a button to an otherwise-empty tab.</summary>
+  public TabEntry Entry => m_entry;
+
   public DataTabModel( TabEntry e ) : base( e.Name ?? "Tab" )
   {
     m_entry           = e;
@@ -125,20 +129,30 @@ internal sealed class DataTabModel : TabModel
       {
         ButtonDef b = row.Buttons[i];
         col += b.GapBefore;
+        int x = SymOrgX + (int)Math.Round( col * ColWidth );
 
-        if( !b.Blank )
+        if( b.Blank )
         {
-          int x = SymOrgX + (int)Math.Round( col * ColWidth );
-
+          // A blank occupies one cell, draws nothing, and sends nothing — but it is
+          // placed so it can be hovered / right-clicked / turned into a real button.
+          SymbolElement spacer = PlaceSymbol( r + 1, (int)Math.Round( col ) + 1, 1, x, y,
+                                              "", null, null, static () => { },
+                                              "center", 0, 0 );
+          spacer.Source  = b;
+          spacer.IsBlank = true;
+        }
+        else
+        {
           // Secret buttons send the decrypted value but never show it (face = desc,
           // no value in the tooltip), regardless of the show/tip flags.
           string sendText = b.IsSecret ? ( b.Plain ?? "" ) : b.Text;
           int    showText = b.IsSecret ? 0 : ( b.ShowText ? 1 : 0 );
           int    tipText  = b.IsSecret ? 0 : ( b.TipText  ? 1 : 0 );
 
-          PlaceSymbol( r + 1, (int)Math.Round( col ) + 1, b.Width, x, y,
-                       sendText, b.Desc, b.Hotkey, null,
-                       b.Align, showText, tipText );
+          SymbolElement sym = PlaceSymbol( r + 1, (int)Math.Round( col ) + 1, b.Width, x, y,
+                                           sendText, b.Desc, b.Hotkey, null,
+                                           b.Align, showText, tipText );
+          sym.Source = b; // back-link to the model so the right-click menu can edit it
         }
 
         col += 1.0; // the cell this entry occupies

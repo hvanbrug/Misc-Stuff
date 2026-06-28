@@ -54,6 +54,9 @@ public partial class App
     RegisterHotkeys();
     BuildMenusAndTray();
 
+    // Lets the per-button right-click menu refresh the UI after an edit / delete.
+    AppState.RequestReload = ReloadConfig;
+
     // The window is always shown — there is no hidden / "no UI" mode.
     m_window.ShowUi();
   }

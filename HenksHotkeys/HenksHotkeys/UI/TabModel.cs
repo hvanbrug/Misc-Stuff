@@ -179,18 +179,18 @@ internal abstract class TabModel
   /// shared core of <see cref="RegisterSymbol"/> (cursor-based) and the
   /// data-driven <see cref="DataTabModel"/>, so both produce identical elements.
   /// </summary>
-  protected void PlaceSymbol( int     line,
-                              int     slot,
-                              int     width,
-                              int     x,
-                              int     y,
-                              string  ch,
-                              string? desc,
-                              string? hotkey,
-                              Action? action,
-                              string  align,
-                              int     showChar,
-                              int     tipChar )
+  protected SymbolElement PlaceSymbol( int     line,
+                                       int     slot,
+                                       int     width,
+                                       int     x,
+                                       int     y,
+                                       string  ch,
+                                       string? desc,
+                                       string? hotkey,
+                                       Action? action,
+                                       string  align,
+                                       int     showChar,
+                                       int     tipChar )
   {
     int w = SymBtnSizeX * width + Layout.ButtonGap * ( width - 1 );
     int h = SymBtnSizeY;
@@ -202,7 +202,7 @@ internal abstract class TabModel
     // itself and swallows its own errors), so the click returns immediately.
     Action clickAction = action ?? (() => { _ = TextSender.SendText( TransformSendText( ch ) ); });
 
-    Symbols.Add( new SymbolElement
+    var element = new SymbolElement
     {
       Line     = line,
       Slot     = slot,
@@ -218,7 +218,8 @@ internal abstract class TabModel
       Hotkey   = hk,
       Align    = align,
       ClickAction = clickAction
-    } );
+    };
+    Symbols.Add( element );
 
     HotkeyRegistry.Add( hk, clickAction );
 
@@ -226,6 +227,8 @@ internal abstract class TabModel
     {
       AppState.HotkeyHelp.Add( (HotkeyParser.Label( hk ), d) );
     }
+
+    return element;
   }
 
   /// <summary>A laid-out section header: a label (blank = a plain separator line)

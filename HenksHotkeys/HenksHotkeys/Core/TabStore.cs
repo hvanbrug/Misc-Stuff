@@ -42,6 +42,11 @@ internal static class TabStore
   /// default was used instead (so a reload can warn about a bad edit).</summary>
   public static bool LastParseOk { get; private set; } = true;
 
+  /// <summary>The live config from the last <see cref="Load"/> — kept so in-app edits
+  /// can be persisted with the file-level crypto header and tombstones intact (a tab's
+  /// <c>m_entry</c> is the same instance held here, so editing a button mutates this).</summary>
+  private static TabFile? s_file;
+
   public static List<TabModel> Load()
   {
     TabFile? file = ReadAndSync();
@@ -90,7 +95,108 @@ internal static class TabStore
       TrySave( file );
     }
     SaveShadow( file );
+    s_file = file;
     return file;
+  }
+
+  /// <summary>Persist an in-app edit to the live config: re-stamp against the shadow
+  /// (which bumps the changed button's clock, or tombstones a removed one), reseal any
+  /// secrets, write the file, and refresh the shadow. The model objects were mutated in
+  /// place by the caller, so there is nothing to pass in.</summary>
+  public static void SaveCurrent()
+  {
+    if( s_file is null )
+    {
+      return;
+    }
+    foreach( TabEntry t in s_file.Tabs )
+    {
+      VersionStamp.NormalizeRows( t );
+    }
+    VersionStamp.Stamp( s_file, LoadShadow() );
+    ProcessSecrets( s_file );
+    TrySave( s_file );
+    SaveShadow( s_file );
+  }
+
+  /// <summary>Insert a new button into the live config next to an existing one (before
+  /// or after it in the same row), then persist. An over-wide row wraps on the next
+  /// NormalizeRows. Returns false if the anchor wasn't found.</summary>
+  public static bool InsertButton( ButtonDef anchor, ButtonDef newButton, bool after )
+  {
+    if( s_file is null )
+    {
+      return false;
+    }
+    foreach( TabEntry t in s_file.Tabs )
+    {
+      if( t.Rows is null )
+      {
+        continue;
+      }
+      foreach( RowDef r in t.Rows )
+      {
+        int idx = r.Buttons.IndexOf( anchor );
+        if( idx >= 0 )
+        {
+          // Prefer to consume a blank spacer adjacent on the insert side (so the row
+          // keeps its width) rather than pushing everything along.
+          int blankAt = after ? idx + 1 : idx - 1;
+          if( blankAt >= 0 && blankAt < r.Buttons.Count && r.Buttons[blankAt].Blank )
+          {
+            r.Buttons[blankAt] = newButton;
+          }
+          else
+          {
+            r.Buttons.Insert( after ? idx + 1 : idx, newButton );
+          }
+          SaveCurrent();
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// <summary>Append a new button to a tab as a fresh row at the end (used when the tab
+  /// has no buttons to anchor against), then persist.</summary>
+  public static void AddButton( TabEntry tab, ButtonDef newButton )
+  {
+    tab.Rows ??= new List<RowDef>();
+    tab.Rows.Add( new RowDef { Buttons = { newButton } } );
+    SaveCurrent();
+  }
+
+  /// <summary>Remove a button from the live config (and its row if that empties it),
+  /// then persist — the re-stamp leaves a tombstone so the deletion propagates on merge.
+  /// Returns false if the button wasn't found.</summary>
+  public static bool DeleteButton( ButtonDef button )
+  {
+    if( s_file is null )
+    {
+      return false;
+    }
+    foreach( TabEntry t in s_file.Tabs )
+    {
+      if( t.Rows is null )
+      {
+        continue;
+      }
+      foreach( RowDef r in t.Rows )
+      {
+        if( r.Buttons.Remove( button ) )
+        {
+          // Drop a now-empty content row so the layout doesn't keep a phantom gap.
+          if( r.Buttons.Count == 0 && !r.Blank && !r.IsSection )
+          {
+            t.Rows.Remove( r );
+          }
+          SaveCurrent();
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /// <summary>Write the current (stamped) config to <paramref name="targetPath"/> for sharing.</summary>
