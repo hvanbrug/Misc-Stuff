@@ -10,7 +10,10 @@ public class VersioningTests
     => new() { Id = id, Mod = mod, Text = text, Desc = desc };
 
   private static TabEntry Tab( string? id, long mod, string name, params ButtonDef[] btns )
-    => new() { Id = id, Mod = mod, Name = name, Columns = 3, Rows = new() { new RowDef { Buttons = btns.ToList() } } };
+  {
+    for( int i = 0; i < btns.Length; i++ ) { btns[i].Row = 0; btns[i].Col = i; }
+    return new() { Id = id, Mod = mod, Name = name, Columns = 3, Buttons = btns.ToList() };
+  }
 
   private static TabFile File( params TabEntry[] tabs ) => new() { Tabs = tabs.ToList() };
 
@@ -27,14 +30,14 @@ public class VersioningTests
   public void Stamp_AssignsIdsAndClocks_ToNewElements()
   {
     var f = File( new TabEntry { Name = "T", Columns = 3,
-      Rows = new() { new RowDef { Buttons = { new ButtonDef { Text = "A" } } } } } );
+      Buttons = new() { new ButtonDef { Text = "A", Row = 0, Col = 0 } } } );
 
     Assert.True( VersionStamp.Stamp( f, null ) );
 
     TabEntry t = f.Tabs[0];
     Assert.False( string.IsNullOrEmpty( t.Id ) );
     Assert.True( t.Mod > 0 );
-    ButtonDef b = t.Rows![0].Buttons[0];
+    ButtonDef b = t.Buttons![0];
     Assert.False( string.IsNullOrEmpty( b.Id ) );
     Assert.True( b.Mod > 0 );
   }
@@ -116,8 +119,8 @@ public class VersioningTests
     TabFile incoming = JsonConvert.DeserializeObject<TabFile>( baseJson )!;
 
     string tabId = local.Tabs[0].Id!;
-    local.Tabs[0].Rows![0].Buttons.Add( Btn( "loc", VersionStamp.Now() + 10, "FromLaptop" ) );
-    incoming.Tabs[0].Rows![0].Buttons.Add( Btn( "vm", VersionStamp.Now() + 20, "FromVM" ) );
+    local.Tabs[0].Buttons!.Add( Btn( "loc", VersionStamp.Now() + 10, "FromLaptop" ) );
+    incoming.Tabs[0].Buttons!.Add( Btn( "vm", VersionStamp.Now() + 20, "FromVM" ) );
 
     // Simulate writing/reading files, then merge incoming into local.
     local    = JsonConvert.DeserializeObject<TabFile>( JsonConvert.SerializeObject( local ) )!;
@@ -140,7 +143,7 @@ public class VersioningTests
     TabFile m = VersionMerge.Merge( vm, lap );
 
     Assert.Single( m.Tabs );                                  // one Symbols tab, not two
-    HashSet<string> texts = m.Tabs[0].Rows!.SelectMany( r => r.Buttons ).Select( b => b.Text ).ToHashSet();
+    HashSet<string> texts = m.Tabs[0].Buttons!.Select( b => b.Text ).ToHashSet();
     Assert.Equal( new HashSet<string> { "A", "VMonly", "LapOnly" }, texts ); // "A" unified, both extras kept
   }
 
@@ -155,20 +158,8 @@ public class VersioningTests
 
     Assert.Equal( 1, removed );
     Assert.Single( f.Tabs );
-    HashSet<string> texts = f.Tabs[0].Rows!.SelectMany( r => r.Buttons ).Select( b => b.Text ).ToHashSet();
+    HashSet<string> texts = f.Tabs[0].Buttons!.Select( b => b.Text ).ToHashSet();
     Assert.Equal( new HashSet<string> { "A", "B", "VMonly" }, texts ); // duplicate "A" dropped
-  }
-
-  [Fact]
-  public void NormalizeRows_SplitsAnOverWideRow_ToColumnWidth()
-  {
-    var btns = Enumerable.Range( 0, 7 ).Select( i => Btn( "b" + i, 1, "x" + i ) ).ToArray();
-    var t = new TabEntry { Name = "T", Columns = 3, Rows = new() { new RowDef { Buttons = btns.ToList() } } };
-
-    Assert.True( VersionStamp.NormalizeRows( t ) );
-    Assert.All( t.Rows!, r => Assert.True( r.Buttons.Count <= 3 ) );  // no row exceeds columns
-    Assert.Equal( 7, t.Rows!.Sum( r => r.Buttons.Count ) );          // nothing lost
-    Assert.False( VersionStamp.NormalizeRows( t ) );                 // idempotent
   }
 
   [Fact]

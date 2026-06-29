@@ -39,7 +39,7 @@ internal sealed class DataTabModel : TabModel
     else
     {
       SetRowsOf( m_cols );
-      BuildRows( e.Rows );
+      BuildGrid();
       RecalcSizes();
     }
   }
@@ -70,94 +70,75 @@ internal sealed class DataTabModel : TabModel
     }
 
     SetRowsOf( m_cols );
-    BuildRows( m_entry.Rows );
+    BuildGrid();
     RecalcSizes();
   }
 
-  private void BuildRows( List<RowDef>? rows )
+  /// <summary>Lay the buttons and section headers out from their explicit grid
+  /// coordinates. Empty cells/rows aren't materialised — they're simply the gaps in the
+  /// coordinates (so a skipped row index is a blank row, a skipped column a blank cell).
+  /// Section rows are variable-height, so each row's Y is the running sum of the heights
+  /// of the rows above it.</summary>
+  private void BuildGrid()
   {
-    if( rows is null )
+    List<ButtonDef>  buttons  = m_entry.Buttons  ?? new();
+    List<SectionDef> sections = m_entry.Sections ?? new();
+    if( buttons.Count == 0 && sections.Count == 0 )
     {
       return;
+    }
+
+    // How tall the grid is, and which rows are section headers.
+    int maxRow = 0;
+    foreach( ButtonDef b in buttons )  maxRow = Math.Max( maxRow, b.Row );
+    foreach( SectionDef s in sections ) maxRow = Math.Max( maxRow, s.Row );
+
+    var sectionAt = new Dictionary<int, SectionDef>();
+    foreach( SectionDef s in sections ) sectionAt[s.Row] = s; // later wins on a clash
+
+    int HeaderPx( SectionDef s ) => s.Height > 0 ? (int)Math.Round( s.Height ) : Layout.SectionHeaderHeight;
+
+    // Top Y of each row = sum of the heights of the rows above it (section rows take
+    // their own height; every other row — content or empty — takes one RowHeight).
+    var rowY = new int[maxRow + 1];
+    int y = SymOrgY;
+    for( int r = 0; r <= maxRow; r++ )
+    {
+      rowY[r] = y;
+      y += sectionAt.TryGetValue( r, out SectionDef? sec ) ? HeaderPx( sec ) : RowHeight;
     }
 
     // Width a section header spans: the full grid of columns.
     int headerWidth = m_cols > 0 ? SymBtnSizeX * m_cols + Layout.ButtonGap * ( m_cols - 1 )
                                  : SymBtnSizeX;
 
-    // The offset is accumulated in row-height units; a row consumes one unit,
-    // except a section header, which consumes its (pixel) height. prevAdvance
-    // carries the previous row's consumed height so the next row lands below it.
-    double rowOffset   = 0;
-    double prevAdvance = 0;
-    for( int r = 0; r < rows.Count; r++ )
+    foreach( SectionDef s in sections )
     {
-      RowDef row = rows[r];
-
-      // Row 0 sits at the origin plus any leading gap; each later row adds the
-      // previous row's height plus this row's gap. Round once per row, mirroring
-      // the cursor engine's CalcSymbolY.
-      rowOffset = r == 0 ? row.GapBefore : rowOffset + prevAdvance + row.GapBefore;
-      int y = SymOrgY + (int)Math.Round( rowOffset * RowHeight );
-
-      if( row.IsSection )
+      Headers.Add( new SectionHeader
       {
-        int hPx = row.HeaderHeight > 0 ? (int)Math.Round( row.HeaderHeight ) : Layout.SectionHeaderHeight;
-        Headers.Add( new SectionHeader
-        {
-          Name   = row.Section ?? "",
-          X      = SymOrgX,
-          Y      = y,
-          Width  = headerWidth,
-          Height = hPx,
-        } );
-        prevAdvance = (double)hPx / RowHeight; // header height back to row-units
-        continue;
-      }
+        Name   = s.Name,
+        X      = SymOrgX,
+        Y      = rowY[s.Row],
+        Width  = headerWidth,
+        Height = HeaderPx( s ),
+      } );
+    }
 
-      if( row.Blank )
-      {
-        prevAdvance = 1.0;
-        continue; // blank row: just occupies the vertical space
-      }
-      prevAdvance = 1.0;
+    foreach( ButtonDef b in buttons )
+    {
+      int x = SymOrgX + b.Col * ColWidth;
 
-      // Walk the row horizontally; every entry (button or blank) takes one cell,
-      // and a button's own gapBefore inserts space ahead of it.
-      double col = row.Indent;
-      for( int i = 0; i < row.Buttons.Count; i++ )
-      {
-        ButtonDef b = row.Buttons[i];
-        col += b.GapBefore;
-        int x = SymOrgX + (int)Math.Round( col * ColWidth );
+      // Secret buttons decrypt their value on demand at send time (it is never kept in
+      // memory) and never show it (face = desc, no value in the tooltip).
+      Action? action   = b.IsSecret ? () => SecretCommands.Send( b ) : null;
+      string  ch       = b.IsSecret ? "" : b.Text;
+      int     showText = b.IsSecret ? 0 : ( b.ShowText ? 1 : 0 );
+      int     tipText  = b.IsSecret ? 0 : ( b.TipText  ? 1 : 0 );
 
-        if( b.Blank )
-        {
-          // A blank occupies one cell, draws nothing, and sends nothing — but it is
-          // placed so it can be hovered / right-clicked / turned into a real button.
-          SymbolElement spacer = PlaceSymbol( r + 1, (int)Math.Round( col ) + 1, 1, x, y,
-                                              "", null, null, static () => { },
-                                              "center", 0, 0 );
-          spacer.Source  = b;
-          spacer.IsBlank = true;
-        }
-        else
-        {
-          // Secret buttons decrypt their value on demand at send time (it is never kept
-          // in memory) and never show it (face = desc, no value in the tooltip).
-          Action? action   = b.IsSecret ? () => SecretCommands.Send( b ) : null;
-          string  ch       = b.IsSecret ? "" : b.Text;
-          int     showText = b.IsSecret ? 0 : ( b.ShowText ? 1 : 0 );
-          int     tipText  = b.IsSecret ? 0 : ( b.TipText  ? 1 : 0 );
-
-          SymbolElement sym = PlaceSymbol( r + 1, (int)Math.Round( col ) + 1, b.Width, x, y,
-                                           ch, b.Desc, b.Hotkey, action,
-                                           b.Align, showText, tipText );
-          sym.Source = b; // back-link to the model so the right-click menu can edit it
-        }
-
-        col += 1.0; // the cell this entry occupies
-      }
+      SymbolElement sym = PlaceSymbol( b.Row + 1, b.Col + 1, b.Width, x, rowY[b.Row],
+                                       ch, b.Desc, b.Hotkey, action,
+                                       b.Align, showText, tipText );
+      sym.Source = b; // back-link to the model so the right-click menu can edit it
     }
   }
 }

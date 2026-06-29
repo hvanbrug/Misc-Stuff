@@ -94,6 +94,21 @@ internal sealed class TabEntry
   [JsonProperty( "square" ), DefaultValue( false )]
   public bool Square { get; set; }
 
+  /// <summary>The buttons on this data tab, each carrying its own grid coordinate
+  /// (<see cref="ButtonDef.Row"/>/<see cref="ButtonDef.Col"/>). Empty cells and empty
+  /// rows are not stored — they're implied by the gaps in the coordinates and filled
+  /// in at render time. Null for a built-in code tab.</summary>
+  [JsonProperty( "buttons", NullValueHandling = NullValueHandling.Ignore )]
+  public List<ButtonDef>? Buttons { get; set; }
+
+  /// <summary>Section-header dividers, each at a grid row index. Travels with the tab
+  /// (LWW at the tab level — not independently merged). Null/empty = none.</summary>
+  [JsonProperty( "sections", NullValueHandling = NullValueHandling.Ignore )]
+  public List<SectionDef>? Sections { get; set; }
+
+  /// <summary>LEGACY (pre-coordinate format): rows of buttons. Read only so an old
+  /// tabs.json can be migrated to <see cref="Buttons"/>/<see cref="Sections"/> on load,
+  /// then nulled (never written again). See <see cref="TabMigrate"/>.</summary>
   [JsonProperty( "rows", NullValueHandling = NullValueHandling.Ignore )]
   public List<RowDef>? Rows { get; set; }
 
@@ -143,8 +158,33 @@ internal sealed class RowDef
   public List<ButtonDef> Buttons { get; set; } = new();
 }
 
+/// <summary>A section-header divider at a grid row index (coordinate format). Draws
+/// its <see cref="Name"/> (a plain separator line when empty) spanning the columns and
+/// occupies one grid row of <see cref="Height"/> pixels (0 = the default height).</summary>
+internal sealed class SectionDef
+{
+  [JsonProperty( "row" )]
+  public int Row { get; set; }
+
+  [JsonProperty( "name" ), DefaultValue( "" )]
+  public string Name { get; set; } = "";
+
+  [JsonProperty( "height" ), DefaultValue( 0.0 )]
+  public double Height { get; set; }
+}
+
 internal sealed class ButtonDef
 {
+  /// <summary>Grid row index (0-based). Vertical gaps are skipped indices. Always
+  /// written (even when 0) so a button's position is explicit in the file.</summary>
+  [JsonProperty( "row", DefaultValueHandling = DefaultValueHandling.Include )]
+  public int Row { get; set; }
+
+  /// <summary>Grid column index (0-based). Empty cells are skipped indices. Always
+  /// written (even when 0) so a button's position is explicit in the file.</summary>
+  [JsonProperty( "col", DefaultValueHandling = DefaultValueHandling.Include )]
+  public int Col { get; set; }
+
   /// <summary>The character / text the button sends (and shows, unless ShowDesc).</summary>
   [JsonProperty( "text" ), DefaultValue( "" )]
   public string Text { get; set; } = "";
@@ -189,13 +229,13 @@ internal sealed class ButtonDef
   [JsonProperty( "tipText" ), DefaultValue( false )]
   public bool TipText { get; set; }
 
-  /// <summary>Horizontal gap before this button, in cell widths (like a row's
-  /// gapBefore but sideways). Fractional allowed.</summary>
+  /// <summary>LEGACY (pre-coordinate format): horizontal gap before this button, in
+  /// cell widths. Read only for migration to <see cref="Col"/>; never written.</summary>
   [JsonProperty( "gapBefore" ), DefaultValue( 0.0 )]
   public double GapBefore { get; set; }
 
-  /// <summary>A blank spacer cell: occupies one column but draws nothing. The
-  /// text, hotkey and tooltip (desc) are ignored.</summary>
+  /// <summary>LEGACY (pre-coordinate format): a blank spacer cell. Blanks are no longer
+  /// stored — read only for migration (dropped), never written.</summary>
   [JsonProperty( "blank" ), DefaultValue( false )]
   public bool Blank { get; set; }
 

@@ -81,12 +81,8 @@ internal static class TabStore
       return null;
     }
 
-    // Heal any over-wide rows (e.g. from an older merge/repair) before stamping.
-    bool dirty = false;
-    foreach( TabEntry t in file.Tabs )
-    {
-      dirty |= VersionStamp.NormalizeRows( t );
-    }
+    // Upgrade a legacy (rows-based) file to the coordinate format before stamping.
+    bool dirty = TabMigrate.Migrate( file );
 
     dirty |= VersionStamp.Stamp( file, LoadShadow() );
     dirty |= ProcessSecrets( file );
@@ -109,129 +105,147 @@ internal static class TabStore
     {
       return;
     }
-    foreach( TabEntry t in s_file.Tabs )
-    {
-      VersionStamp.NormalizeRows( t );
-    }
     VersionStamp.Stamp( s_file, LoadShadow() );
     ProcessSecrets( s_file );
     TrySave( s_file );
     SaveShadow( s_file );
   }
 
-  /// <summary>Insert a new button into the live config next to an existing one (before
-  /// or after it in the same row), then persist. An over-wide row wraps on the next
-  /// NormalizeRows. Returns false if the anchor wasn't found.</summary>
-  public static bool InsertButton( ButtonDef anchor, ButtonDef newButton, bool after )
+  /// <summary>Place a new button at an explicit grid cell of a tab, then persist. If the
+  /// cell is already occupied, the occupant and the contiguous run after it shift one
+  /// column to the right (wrapping to the next row at the column edge).</summary>
+  public static void AddButtonAt( TabEntry tab, int row, int col, ButtonDef newButton )
   {
-    if( s_file is null )
+    tab.Buttons ??= new List<ButtonDef>();
+    newButton.Row = row;
+    newButton.Col = Math.Max( 0, col );
+    if( Occupied( tab, row, newButton.Col ) )
     {
-      return false;
+      ShiftRight( tab, row, newButton.Col );
     }
-    foreach( TabEntry t in s_file.Tabs )
-    {
-      if( t.Rows is null )
-      {
-        continue;
-      }
-      foreach( RowDef r in t.Rows )
-      {
-        int idx = r.Buttons.IndexOf( anchor );
-        if( idx >= 0 )
-        {
-          // Prefer to consume a blank spacer adjacent on the insert side (so the row
-          // keeps its width) rather than pushing everything along.
-          int blankAt = after ? idx + 1 : idx - 1;
-          if( blankAt >= 0 && blankAt < r.Buttons.Count && r.Buttons[blankAt].Blank )
-          {
-            r.Buttons[blankAt] = newButton;
-          }
-          else
-          {
-            r.Buttons.Insert( after ? idx + 1 : idx, newButton );
-          }
-          SaveCurrent();
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  /// <summary>Append a new button to a tab as a fresh row at the end (used when the tab
-  /// has no buttons to anchor against), then persist.</summary>
-  public static void AddButton( TabEntry tab, ButtonDef newButton )
-  {
-    tab.Rows ??= new List<RowDef>();
-    tab.Rows.Add( new RowDef { Buttons = { newButton } } );
+    tab.Buttons.Add( newButton );
     SaveCurrent();
   }
 
-  /// <summary>Move a button to sit before / after a target (drag-to-reposition), then
-  /// persist. By default the slot it came from closes up (the rest shift along); with
-  /// <paramref name="leaveBlank"/> a blank spacer is left in its place so the surrounding
-  /// layout doesn't move. Over-wide rows wrap on the next NormalizeRows. Returns false if
-  /// either button isn't found.</summary>
-  public static bool MoveButton( ButtonDef moving, ButtonDef target, bool after, bool leaveBlank )
+  /// <summary>Insert a new button next to an existing one (before/after it in the same
+  /// row), shifting the row to make room, then persist. Returns false if the anchor
+  /// wasn't found.</summary>
+  public static bool InsertButton( ButtonDef anchor, ButtonDef newButton, bool after )
   {
-    if( s_file is null || ReferenceEquals( moving, target ) )
+    if( !Locate( anchor, out TabEntry tab ) )
     {
       return false;
     }
-    if( !Locate( moving, out RowDef rm, out int im ) || !Locate( target, out RowDef rt, out int it ) )
+    AddButtonAt( tab, anchor.Row, after ? anchor.Col + Math.Max( 1, anchor.Width ) : anchor.Col, newButton );
+    return true;
+  }
+
+  /// <summary>Append a new button at the start of a fresh row below everything on a tab
+  /// (used when the tab has no anchor), then persist.</summary>
+  public static void AddButton( TabEntry tab, ButtonDef newButton )
+  {
+    AddButtonAt( tab, NextEmptyRow( tab ), 0, newButton );
+  }
+
+  /// <summary>Move a button to a grid cell (drag-to-reposition), then persist. Dropping
+  /// on an empty cell places it there; dropping on a button inserts before/after it,
+  /// shifting that row. The cell it came from is simply left empty. Returns false if the
+  /// button isn't found.</summary>
+  public static bool MoveButtonToCell( ButtonDef moving, int row, int col )
+  {
+    if( !Locate( moving, out TabEntry tab ) )
     {
       return false;
     }
-
-    if( leaveBlank )
+    col = Math.Max( 0, col );
+    moving.Row = -1;                       // lift it out so it doesn't block itself
+    if( Occupied( tab, row, col ) )
     {
-      rm.Buttons[im] = new ButtonDef { Blank = true };   // leave a hole where it was
+      ShiftRight( tab, row, col );
     }
-    else
-    {
-      rm.Buttons.RemoveAt( im );                          // close the gap
-      if( ReferenceEquals( rm, rt ) && im < it )
-      {
-        it--;                                             // target shifted left by the removal
-      }
-    }
-
-    int insertIdx = Math.Clamp( after ? it + 1 : it, 0, rt.Buttons.Count );
-    rt.Buttons.Insert( insertIdx, moving );
-
+    moving.Row = row;
+    moving.Col = col;
     SaveCurrent();
     return true;
   }
 
-  private static bool Locate( ButtonDef button, out RowDef row, out int index )
+  /// <summary>Move a button to sit before / after a target button, then persist. Returns
+  /// false if either button isn't found.</summary>
+  public static bool MoveButton( ButtonDef moving, ButtonDef target, bool after )
+  {
+    if( s_file is null || ReferenceEquals( moving, target ) || !Locate( target, out _ ) )
+    {
+      return false;
+    }
+    return MoveButtonToCell( moving, target.Row, after ? target.Col + Math.Max( 1, target.Width ) : target.Col );
+  }
+
+  /// <summary>Move a button to a brand-new empty row below everything on its tab, then
+  /// persist. Returns false if the button isn't found.</summary>
+  public static bool MoveButtonToNewRow( ButtonDef moving, int col )
+  {
+    if( !Locate( moving, out TabEntry tab ) )
+    {
+      return false;
+    }
+    moving.Row = -1;
+    int row = NextEmptyRow( tab );
+    moving.Row = row;
+    moving.Col = Math.Max( 0, col );
+    SaveCurrent();
+    return true;
+  }
+
+  // True when a real button already occupies cell (row, col) of the tab.
+  private static bool Occupied( TabEntry tab, int row, int col )
+    => tab.Buttons is not null && tab.Buttons.Any( b => b.Row == row && b.Col == col );
+
+  // Push the button at (row, col) and the contiguous run to its right one column along,
+  // wrapping past the last column onto the next row, so a fresh cell opens at (row, col).
+  private static void ShiftRight( TabEntry tab, int row, int col )
+  {
+    if( tab.Buttons is null )
+    {
+      return;
+    }
+    int cols = tab.Columns > 0 ? tab.Columns : int.MaxValue;
+    int c    = col;
+    while( tab.Buttons.FirstOrDefault( b => b.Row == row && b.Col == c ) is { } b )
+    {
+      b.Col++;
+      if( b.Col >= cols ) { b.Col = 0; b.Row++; row = b.Row; }
+      c = b.Col;
+    }
+  }
+
+  // The first row index below all current content (and sections) — a fresh empty row.
+  private static int NextEmptyRow( TabEntry tab )
+  {
+    int max = -1;
+    if( tab.Buttons is not null )  foreach( ButtonDef b in tab.Buttons )  max = Math.Max( max, b.Row );
+    if( tab.Sections is not null ) foreach( SectionDef s in tab.Sections ) max = Math.Max( max, s.Row );
+    return max + 1;
+  }
+
+  private static bool Locate( ButtonDef button, out TabEntry tab )
   {
     if( s_file is not null )
     {
       foreach( TabEntry t in s_file.Tabs )
       {
-        if( t.Rows is null )
+        if( t.Buttons is not null && t.Buttons.Contains( button ) )
         {
-          continue;
-        }
-        foreach( RowDef r in t.Rows )
-        {
-          int i = r.Buttons.IndexOf( button );
-          if( i >= 0 )
-          {
-            row = r;
-            index = i;
-            return true;
-          }
+          tab = t;
+          return true;
         }
       }
     }
-    row = null!;
-    index = -1;
+    tab = null!;
     return false;
   }
 
-  /// <summary>Remove a button from the live config (and its row if that empties it),
-  /// then persist — the re-stamp leaves a tombstone so the deletion propagates on merge.
+  /// <summary>Remove a button from the live config, then persist — the re-stamp leaves a
+  /// tombstone so the deletion propagates on merge. The cell simply becomes empty.
   /// Returns false if the button wasn't found.</summary>
   public static bool DeleteButton( ButtonDef button )
   {
@@ -241,22 +255,10 @@ internal static class TabStore
     }
     foreach( TabEntry t in s_file.Tabs )
     {
-      if( t.Rows is null )
+      if( t.Buttons is not null && t.Buttons.Remove( button ) )
       {
-        continue;
-      }
-      foreach( RowDef r in t.Rows )
-      {
-        if( r.Buttons.Remove( button ) )
-        {
-          // Drop a now-empty content row so the layout doesn't keep a phantom gap.
-          if( r.Buttons.Count == 0 && !r.Blank && !r.IsSection )
-          {
-            t.Rows.Remove( r );
-          }
-          SaveCurrent();
-          return true;
-        }
+        SaveCurrent();
+        return true;
       }
     }
     return false;
@@ -291,9 +293,11 @@ internal static class TabStore
     {
       return false;
     }
-    VersionStamp.Stamp( incoming, null ); // ensure ids/clocks if it was hand-made
+    TabMigrate.Migrate( incoming );           // a shared file may still be the old format
+    VersionStamp.Stamp( incoming, null );     // ensure ids/clocks if it was hand-made
 
     TabFile local = TryParse( ReadOrSeed() ) ?? new TabFile();
+    TabMigrate.Migrate( local );
     VersionStamp.Stamp( local, LoadShadow() ); // capture local edits first
 
     // The two machines seal secrets under their own per-file salts; re-seal the incoming
@@ -322,6 +326,7 @@ internal static class TabStore
     {
       return 0;
     }
+    TabMigrate.Migrate( file );
     VersionStamp.Stamp( file, LoadShadow() );
     int removed = VersionMerge.CollapseDuplicateTabs( file );
     ProcessSecrets( file );
@@ -358,9 +363,8 @@ internal static class TabStore
   internal static bool ProcessSecrets( TabFile file )
   {
     List<ButtonDef> secrets = file.Tabs
-      .Where( t => t.Rows is not null )
-      .SelectMany( t => t.Rows! )
-      .SelectMany( r => r.Buttons )
+      .Where( t => t.Buttons is not null )
+      .SelectMany( t => t.Buttons! )
       .Where( b => !string.IsNullOrEmpty( b.Secret ) )
       .ToList();
 
@@ -459,9 +463,8 @@ internal static class TabStore
     byte[] keyLoc = Secrets.DeriveKey( pass, Convert.FromBase64String( locSalt ),
                       local.Crypto!.Iterations > 0 ? local.Crypto.Iterations : Secrets.DefaultIterations );
 
-    foreach( ButtonDef b in incoming.Tabs.Where( t => t.Rows is not null )
-                                          .SelectMany( t => t.Rows! )
-                                          .SelectMany( r => r.Buttons ) )
+    foreach( ButtonDef b in incoming.Tabs.Where( t => t.Buttons is not null )
+                                          .SelectMany( t => t.Buttons! ) )
     {
       if( b.Secret is { } s && Secrets.IsPassSealed( s ) )
       {

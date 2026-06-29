@@ -11,17 +11,15 @@ public class ProportionalTests
   private const int EG  = Layout.TabEdgeGap;
   private const int BG  = Layout.ButtonGap;
 
-  private static ButtonDef B( string t ) => new() { Text = t };
-
   private static DataTabModel Make( bool proportional, bool square, int cols, int btnW, int btnH, int buttons )
   {
-    var row = new RowDef();
-    for( int i = 0; i < buttons; i++ ) row.Buttons.Add( B( "b" + i ) );
+    var list = new List<ButtonDef>();
+    for( int i = 0; i < buttons; i++ ) list.Add( new ButtonDef { Text = "b" + i, Row = 0, Col = i } );
     return new DataTabModel( new TabEntry
     {
       Name = "T", Columns = cols, ButtonWidth = btnW, ButtonHeight = btnH,
       Proportional = proportional, Square = square,
-      Rows = new() { row },
+      Buttons = list,
     } );
   }
 
@@ -90,7 +88,7 @@ public class ProportionalTests
   [Fact]
   public void TabSig_ChangesWithTheFlags()
   {
-    TabEntry Base() => new() { Name = "T", Columns = 3, Rows = new() { new RowDef { Buttons = { B( "a" ) } } } };
+    TabEntry Base() => new() { Name = "T", Columns = 3, Buttons = new() { new ButtonDef { Text = "a", Row = 0, Col = 0 } } };
     var plain = Base();
     var prop  = Base(); prop.Proportional = true;
     var sq    = Base(); sq.Square = true;

@@ -60,6 +60,7 @@ internal sealed class HotkeyWindow : Window
   private bool           m_btnDragging;
   private Border?        m_btnDragGhost;
   private Border?        m_btnDropHi;
+  private FrameworkElement? m_btnDragEl;   // the element holding the mouse capture
 
   private IntPtr m_hwnd;
   private readonly DispatcherTimer m_activeWinTimer = new() { Interval = TimeSpan.FromMilliseconds( 200 ) };
@@ -208,12 +209,6 @@ internal sealed class HotkeyWindow : Window
         {
           WireDrag( btn, sym, canvas, dragModel );
         }
-      }
-      if( model is DataTabModel )
-      {
-        canvas.MouseMove           += OnButtonDragMove;
-        canvas.MouseLeftButtonUp   += OnButtonDragDrop;
-        canvas.LostMouseCapture    += ( _, _ ) => CancelButtonDrag();
       }
       foreach( TabModel.SectionHeader hdr in model.Headers )
       {
@@ -369,13 +364,13 @@ internal sealed class HotkeyWindow : Window
     {
       Width           = sym.W,
       Height          = sym.H,
-      Background      = Brushes.Transparent,        // hit-testable for hover / right-click
-      BorderThickness = new Thickness( 1 ),
-      BorderBrush     = Brushes.Transparent,        // invisible until hovered
+      Background      = Theme.BlankBgColor,     // hit-testable for hover / right-click
+      BorderBrush     = Theme.BlankBorderColor, // invisible until hovered
+      BorderThickness = new Thickness( Theme.BorderThickness ),
       ToolTip         = "Blank cell — right-click to edit",
     };
     cell.MouseEnter += ( _, _ ) => cell.BorderBrush = Theme.BorderColor;
-    cell.MouseLeave += ( _, _ ) => cell.BorderBrush = Brushes.Transparent;
+    cell.MouseLeave += ( _, _ ) => cell.BorderBrush = Theme.BlankBorderColor;
 
     if( sym.Source is Core.ButtonDef def )
     {
@@ -398,10 +393,12 @@ internal sealed class HotkeyWindow : Window
   }
 
   // ── Drag a button to a new slot (swaps with the cell dropped on) ───
+  // The whole drag is driven from the dragged element's own preview events: it keeps the
+  // mouse capture it grabbed on press, so move/up fire reliably even off the element (the
+  // earlier approach handed capture to the canvas mid-press, which often didn't take — so
+  // the ghost/highlight were placed once and never moved).
   private void WireDrag( FrameworkElement el, SymbolElement sym, Canvas canvas, DataTabModel model )
   {
-    // Record the press; a real drag only starts once the pointer moves past the
-    // threshold (below that it's a normal click, so the send still fires).
     el.PreviewMouseLeftButtonDown += ( _, e ) =>
     {
       m_btnDragSym    = sym;
@@ -410,21 +407,39 @@ internal sealed class HotkeyWindow : Window
       m_btnDragStart  = e.GetPosition( canvas );
       m_btnDragging   = false;
     };
+
     el.PreviewMouseMove += ( _, e ) =>
     {
-      if( m_btnDragging || m_btnDragSym != sym || e.LeftButton != MouseButtonState.Pressed )
+      if( m_btnDragSym != sym || e.LeftButton != MouseButtonState.Pressed )
       {
         return;
       }
       Point p = e.GetPosition( canvas );
-      if( Math.Abs( p.X - m_btnDragStart.X ) < SystemParameters.MinimumHorizontalDragDistance &&
-          Math.Abs( p.Y - m_btnDragStart.Y ) < SystemParameters.MinimumVerticalDragDistance )
+      if( !m_btnDragging )
       {
-        return;
+        if( Math.Abs( p.X - m_btnDragStart.X ) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs( p.Y - m_btnDragStart.Y ) < SystemParameters.MinimumVerticalDragDistance )
+        {
+          return; // still a click, not a drag — let the send proceed
+        }
+        BeginButtonDrag( p );
+        m_btnDragEl = el;
+        el.CaptureMouse();   // ensure capture (esp. for blank Borders, which don't self-capture)
       }
-      BeginButtonDrag( p );
-      e.Handled = true; // capturing the canvas also cancels the would-be click/send
+      UpdateButtonDrag( p );
+      e.Handled = true;
     };
+
+    el.PreviewMouseLeftButtonUp += ( _, e ) =>
+    {
+      if( m_btnDragging && m_btnDragSym == sym )
+      {
+        DropButtonDrag( e.GetPosition( canvas ) );
+        e.Handled = true; // swallow the click so the drop doesn't also send
+      }
+    };
+
+    el.LostMouseCapture += ( _, _ ) => CancelButtonDrag();
   }
 
   private void BeginButtonDrag( Point at )
@@ -459,15 +474,6 @@ internal sealed class HotkeyWindow : Window
     canvas.Children.Add( m_btnDropHi );
 
     UpdateButtonDrag( at );
-    Mouse.Capture( canvas );
-  }
-
-  private void OnButtonDragMove( object sender, MouseEventArgs e )
-  {
-    if( m_btnDragging && m_btnDragCanvas is { } canvas )
-    {
-      UpdateButtonDrag( e.GetPosition( canvas ) );
-    }
   }
 
   private void UpdateButtonDrag( Point at )
@@ -495,44 +501,49 @@ internal sealed class HotkeyWindow : Window
     }
   }
 
-  private void OnButtonDragDrop( object sender, MouseButtonEventArgs e )
+  private void DropButtonDrag( Point drop )
   {
     if( !m_btnDragging )
     {
       return;
     }
-    Point          drop   = m_btnDragCanvas is { } c ? e.GetPosition( c ) : default;
     SymbolElement? source = m_btnDragSym;
-    SymbolElement? target = FindDropTarget( drop );
+    DataTabModel?  model  = m_btnDragModel;
     CancelButtonDrag(); // release capture, remove ghost/highlight, restore opacity
 
-    if( source?.Source is { } moving    &&
-        target?.Source is { } targetDef &&
-        !ReferenceEquals( source, target ) )
+    if( source?.Source is not { } moving || model is null )
     {
-      // Below the target's row, or past its right half, drops *after* it; otherwise before.
-      bool after;
-      if( drop.Y > (target.Y + target.H) )
-      {
-        after = true;
-      }
-      else if( drop.Y < target.Y )
-      {
-        after = false;
-      }
-      else
-      {
-        after = drop.X >= (target.X + (target.W * 0.5));
-      }
+      return;
+    }
 
-      //bool after = drop.Y > target.Y + target.H ? true
-      //           : drop.Y < target.Y            ? false
-      //           : drop.X >= target.X + target.W * 0.5;
+    // The cell the pointer is over, from the grid geometry (the dragged button has
+    // simply been lifted out — its old cell is left empty).
+    int col = Math.Max( 0, (int)Math.Round( (double)( drop.X - model.SymOrgX ) / model.ColWidth ) );
 
-      // Default closes the gap (reorder); hold Shift to leave a blank where it was.
-      bool leaveBlank = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+    // Below every row → a brand-new row at the end (it's a grid, not one line).
+    double bottom = 0;
+    foreach( SymbolElement s in model.Symbols )
+    {
+      if( s.Source is not null )
+      {
+        bottom = Math.Max( bottom, s.Y + s.H );
+      }
+    }
+    if( drop.Y > bottom )
+    {
+      if( TabStore.MoveButtonToNewRow( moving, col ) )
+      {
+        AppState.RequestReload?.Invoke();
+      }
+      return;
+    }
 
-      if( TabStore.MoveButton( moving, targetDef, after, leaveBlank ) )
+    SymbolElement? target = FindDropTarget( drop );
+    if( target?.Source is { } targetDef && !ReferenceEquals( source, target ) )
+    {
+      // Past the target's right half drops *after* it; otherwise *before*.
+      bool after = drop.X >= target.X + target.W * 0.5;
+      if( TabStore.MoveButton( moving, targetDef, after ) )
       {
         AppState.RequestReload?.Invoke(); // rebuilds the tab at the new layout
       }
@@ -577,10 +588,13 @@ internal sealed class HotkeyWindow : Window
     }
     m_btnDragging = false;
     m_activeWinTimer.Start();
-    if( ReferenceEquals( Mouse.Captured, m_btnDragCanvas ) )
+
+    if( m_btnDragEl is { } el && ReferenceEquals( Mouse.Captured, el ) )
     {
-      Mouse.Capture( null );
+      el.ReleaseMouseCapture();
     }
+    m_btnDragEl = null;
+
     if( m_btnDragSym?.Ctrl is UIElement dragged )
     {
       dragged.Opacity = 1.0;

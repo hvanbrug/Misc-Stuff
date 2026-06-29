@@ -63,6 +63,9 @@ internal static class Theme
   // Convenience brushes for the code-built chrome, sourced from the shared palette.
   public static Brush WindowBackground => Palette.Brush( "WindowBg" );
   public static Brush BorderColor      => Palette.Brush( "CardBorder" );
+  public static Brush BlankBgColor     => Brushes.Transparent;
+  //public static Brush BlankBorderColor => Brushes.Transparent;
+  public static Brush BlankBorderColor => Brushes.LightGray;
   public static Brush TextColor        => Palette.Brush( "TextPrimary" );
 
   // Tell DWM to render the window frame dark (Win10 2004+/Win11), so the thin

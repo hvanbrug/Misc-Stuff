@@ -17,11 +17,18 @@ internal static class VersionStamp
   public static string NewId() => Guid.NewGuid().ToString( "N" )[..12];
 
   public static IEnumerable<ButtonDef> Buttons( TabEntry t )
-    => t.Rows is null ? Enumerable.Empty<ButtonDef>() : t.Rows.SelectMany( r => r.Buttons );
+    => t.Buttons ?? Enumerable.Empty<ButtonDef>();
 
-  public static string ButtonSig( ButtonDef b )
+  /// <summary>A button's content only (no grid position) — used to match the "same"
+  /// button across machines, which may have moved it to different coordinates.</summary>
+  public static string ContentSig( ButtonDef b )
     => string.Join( Sep, b.Text, b.Secret, b.Desc, b.Hotkey, b.Width, b.Align,
-                    b.ShowText, b.TipText, b.GapBefore, b.Blank );
+                    b.ShowText, b.TipText );
+
+  /// <summary>Full signature: content plus grid position, so a move (row/col change)
+  /// bumps the button's clock and wins on merge.</summary>
+  public static string ButtonSig( ButtonDef b )
+    => ContentSig( b ) + Sep + b.Row + "/" + b.Col;
 
   /// <summary>Split any row wider than the tab's column count into multiple rows,
   /// so a merge/repair that piled buttons into one row can't make the tab (and
@@ -74,19 +81,17 @@ internal static class VersionStamp
     return changed;
   }
 
-  // Tab attributes + layout (row gaps/indents and the order of button ids), but
-  // NOT the buttons' own content — that is tracked per button.
+  // Tab attributes + section dividers (the tab-level layout), but NOT the buttons —
+  // each button's content and position are tracked per button.
   public static string TabSig( TabEntry t )
   {
     string attrs = string.Join( Sep, t.Builtin, t.Name, t.Columns, t.FontSize, t.FontName,
                                 t.ButtonWidth, t.ButtonHeight, t.EmojiImages, t.StripEmojis,
                                 t.Proportional, t.Square );
-    string layout = t.Rows is null
+    string sections = t.Sections is null
       ? ""
-      : string.Join( Sep, t.Rows.Select( r => r.GapBefore + "/" + r.Indent + "/" + r.Blank + "/" +
-                                              r.Section + "/" + r.HeaderHeight + "/" +
-                                              string.Join( ",", r.Buttons.Select( b => b.Id ) ) ) );
-    return attrs + Sep + layout;
+      : string.Join( ",", t.Sections.Select( s => s.Row + "/" + s.Name + "/" + s.Height ) );
+    return attrs + Sep + sections;
   }
 
   /// <summary>Assign ids, bump clocks for changes vs the shadow, and add tombstones
@@ -225,40 +230,49 @@ internal static class VersionMerge
   private static TabEntry BuildTab( TabEntry win, string tid, HashSet<string> belongs,
                                     Func<string, bool> live, Func<string, ButtonDef> winButton )
   {
-    var t = CloneAttrs( win );
-    if( win.Rows is null )
+    var t = CloneAttrs( win ); // carries the winning tab's attrs + section dividers
+    if( !string.IsNullOrEmpty( win.Builtin ) )
     {
       return t; // builtin tab — nothing to merge
     }
 
-    var placed = new HashSet<string>();
-    var rows   = new List<RowDef>();
-    foreach( RowDef r in win.Rows )
+    // Each button carries its own coordinate, so order doesn't matter: collect every
+    // live button that belongs to this tab, taking the last-writer-wins copy.
+    var placed  = new HashSet<string>();
+    var buttons = new List<ButtonDef>();
+    foreach( string id in belongs )
     {
-      var btns = new List<ButtonDef>();
-      foreach( ButtonDef b in r.Buttons )
+      if( live( id ) && placed.Add( id ) )
       {
-        if( b.Id is null || !live( b.Id ) || !placed.Add( b.Id ) ) continue;
-        btns.Add( winButton( b.Id ) );
-      }
-      if( btns.Count > 0 || r.Buttons.Count == 0 )
-      {
-        rows.Add( CloneRow( r, btns ) ); // keep blank/section spacer rows intact
+        buttons.Add( winButton( id ) );
       }
     }
-
-    // Any live button that belongs to this tab but wasn't placed by the winning
-    // layout (e.g. added on the other machine) — append so nothing is lost.
-    List<ButtonDef> orphans = belongs.Where( id => live( id ) && !placed.Contains( id ) )
-                                     .Select( winButton ).ToList();
-    if( orphans.Count > 0 )
-    {
-      rows.Add( new RowDef { Buttons = orphans } );
-    }
-
-    t.Rows = rows;
-    VersionStamp.NormalizeRows( t );
+    t.Buttons = ResolveCollisions( buttons, t.Columns );
     return t;
+  }
+
+  /// <summary>Two machines may independently drop different buttons on the same
+  /// (row, col). Keep them all: order deterministically and push each colliding button
+  /// to the next free cell (row-major), so a merge never silently overwrites one.</summary>
+  private static List<ButtonDef> ResolveCollisions( List<ButtonDef> buttons, int columns )
+  {
+    int cols = columns > 0 ? columns : int.MaxValue;
+    var taken = new HashSet<long>();
+    long Key( int r, int c ) => (long)r * ( cols == int.MaxValue ? 100000 : cols ) + c;
+
+    // Deterministic order: newest edit first, then by current position / id, so both
+    // machines converge on the same placement.
+    foreach( ButtonDef b in buttons.OrderByDescending( b => b.Mod )
+                                   .ThenBy( b => b.Row ).ThenBy( b => b.Col )
+                                   .ThenBy( b => b.Id ) )
+    {
+      while( !taken.Add( Key( b.Row, b.Col ) ) )
+      {
+        b.Col++;
+        if( b.Col >= cols ) { b.Col = 0; b.Row++; }
+      }
+    }
+    return buttons;
   }
 
   // ── Identity reconciliation (handles files that were stamped with separate
@@ -303,7 +317,9 @@ internal static class VersionMerge
     var bySig = new Dictionary<string, List<ButtonDef>>();
     foreach( ButtonDef b in VersionStamp.Buttons( local ) )
     {
-      string s = VersionStamp.ButtonSig( b );
+      // Match by content, not position — the same button may sit at a different cell
+      // on each machine.
+      string s = VersionStamp.ContentSig( b );
       ( bySig.TryGetValue( s, out List<ButtonDef>? l ) ? l : bySig[s] = new() ).Add( b );
     }
 
@@ -311,7 +327,7 @@ internal static class VersionMerge
     foreach( ButtonDef b in VersionStamp.Buttons( incoming ) )
     {
       if( b.Id is not null && localIds.Contains( b.Id ) ) { used.Add( b.Id ); continue; }
-      ButtonDef? cand = bySig.GetValueOrDefault( VersionStamp.ButtonSig( b ) )
+      ButtonDef? cand = bySig.GetValueOrDefault( VersionStamp.ContentSig( b ) )
                              ?.FirstOrDefault( x => x.Id is not null && !used.Contains( x.Id! ) );
       if( cand is not null ) { b.Id = cand.Id; used.Add( cand.Id! ); }
     }
@@ -347,11 +363,12 @@ internal static class VersionMerge
   {
     TabEntry win = list.Aggregate( ( a, b ) => b.Mod > a.Mod ? b : a );
     TabEntry t   = CloneAttrs( win );
-    if( win.Rows is null )
+    if( !string.IsNullOrEmpty( win.Builtin ) )
     {
       return t;
     }
 
+    // Last-writer-wins per id across all the duplicate copies.
     var byId = new Dictionary<string, ButtonDef>();
     foreach( TabEntry tab in list )
     {
@@ -364,43 +381,18 @@ internal static class VersionMerge
       }
     }
 
+    // Keep one button per distinct content (a duplicate tab often holds identical
+    // copies); coordinates then settle any cell clashes.
     var seenSig = new HashSet<string>();
-    var placed  = new HashSet<string>();
-    var rows    = new List<RowDef>();
-    foreach( RowDef r in win.Rows )
+    var buttons = new List<ButtonDef>();
+    foreach( ButtonDef b in byId.Values.OrderBy( b => b.Row ).ThenBy( b => b.Col ).ThenBy( b => b.Id ) )
     {
-      var btns = new List<ButtonDef>();
-      foreach( ButtonDef b in r.Buttons )
-      {
-        if( b.Id is null ) continue;
-        ButtonDef wb = byId.GetValueOrDefault( b.Id, b );
-        if( !placed.Add( b.Id ) || !seenSig.Add( VersionStamp.ButtonSig( wb ) ) ) continue;
-        btns.Add( wb );
-      }
-      if( btns.Count > 0 || r.Buttons.Count == 0 ) rows.Add( CloneRow( r, btns ) );
+      if( seenSig.Add( VersionStamp.ContentSig( b ) ) ) buttons.Add( b );
     }
 
-    List<ButtonDef> extra = byId.Values
-      .Where( b => !placed.Contains( b.Id! ) && seenSig.Add( VersionStamp.ButtonSig( b ) ) )
-      .ToList();
-    if( extra.Count > 0 ) rows.Add( new RowDef { Buttons = extra } );
-
-    t.Rows = rows;
-    VersionStamp.NormalizeRows( t );
+    t.Buttons = ResolveCollisions( buttons, t.Columns );
     return t;
   }
-
-  // Reconstruct a row with the winning button set but its original layout
-  // attributes (gap/indent and the blank/section spacer markers) preserved.
-  private static RowDef CloneRow( RowDef r, List<ButtonDef> btns ) => new()
-  {
-    GapBefore    = r.GapBefore,
-    Indent       = r.Indent,
-    Blank        = r.Blank,
-    Section      = r.Section,
-    HeaderHeight = r.HeaderHeight,
-    Buttons      = btns,
-  };
 
   private static TabEntry CloneAttrs( TabEntry s ) => new()
   {
@@ -409,6 +401,7 @@ internal static class VersionMerge
     ButtonWidth = s.ButtonWidth, ButtonHeight = s.ButtonHeight,
     EmojiImages = s.EmojiImages, StripEmojis = s.StripEmojis,
     Proportional = s.Proportional, Square = s.Square,
+    Sections = s.Sections?.Select( x => new SectionDef { Row = x.Row, Name = x.Name, Height = x.Height } ).ToList(),
     Id = s.Id, Mod = s.Mod,
   };
 
