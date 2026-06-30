@@ -1,17 +1,34 @@
+using System.Windows;
 using HenksHotkeys.Core;
 
 namespace HenksHotkeys.UI;
 
+/// <summary>How a drag/add resolves against the grid, for both the drop action and the
+/// on-screen indicator.</summary>
+internal enum DropKind { PlaceEmpty, InsertBefore, InsertAfter, NewRow }
+
+/// <summary>The resolved grid target for a pointer position: the cell to act on
+/// (<see cref="Row"/>/<see cref="Col"/>), what it means, and the pixel geometry the
+/// caret / cell highlight is drawn from.</summary>
+internal readonly record struct DropSpot(
+  int Row, int Col, DropKind Kind, Core.ButtonDef? Target,
+  int CellX, int CellY, int CellW, int CellH, int CaretX );
+
 /// <summary>
 /// A <see cref="TabModel"/> built from data (<see cref="TabEntry"/> / tabs.json)
-/// rather than hand-written C#. Lays buttons out row-primary, computing each
-/// button's pixel position directly so the result is identical to the equivalent
-/// code-built tab.
+/// rather than hand-written C#. Lays buttons out from their explicit grid coordinates,
+/// computing each button's pixel position directly so the result is identical to the
+/// equivalent code-built tab.
 /// </summary>
 internal sealed class DataTabModel : TabModel
 {
   private readonly TabEntry m_entry;
   private int m_cols;
+
+  // Row-top Y for rows 0..m_maxRow, plus the bottom at [m_maxRow+1]. Set by BuildGrid;
+  // drives hit-testing a pointer back to a grid cell.
+  private int[] m_rowTops = Array.Empty<int>();
+  private int   m_maxRow  = -1;
 
   /// <summary>The underlying tab model (same instance held by <see cref="TabStore"/>),
   /// so the editor can append a button to an otherwise-empty tab.</summary>
@@ -99,14 +116,18 @@ internal sealed class DataTabModel : TabModel
     int HeaderPx( SectionDef s ) => s.Height > 0 ? (int)Math.Round( s.Height ) : Layout.SectionHeaderHeight;
 
     // Top Y of each row = sum of the heights of the rows above it (section rows take
-    // their own height; every other row — content or empty — takes one RowHeight).
-    var rowY = new int[maxRow + 1];
+    // their own height; every other row — content or empty — takes one RowHeight). The
+    // extra slot [maxRow+1] holds the bottom, so a drop below everything finds a new row.
+    m_maxRow  = maxRow;
+    m_rowTops = new int[maxRow + 2];
+    int[] rowY = m_rowTops;
     int y = SymOrgY;
     for( int r = 0; r <= maxRow; r++ )
     {
       rowY[r] = y;
       y += sectionAt.TryGetValue( r, out SectionDef? sec ) ? HeaderPx( sec ) : RowHeight;
     }
+    rowY[maxRow + 1] = y;
 
     // Width a section header spans: the full grid of columns.
     int headerWidth = m_cols > 0 ? SymBtnSizeX * m_cols + Layout.ButtonGap * ( m_cols - 1 )
@@ -140,5 +161,92 @@ internal sealed class DataTabModel : TabModel
                                        b.Align, showText, tipText );
       sym.Source = b; // back-link to the model so the right-click menu can edit it
     }
+  }
+
+  // ── Hit-testing (pointer → grid cell) ────────────────────────────
+  /// <summary>The highest occupied/sectioned row index (−1 when the tab is empty).</summary>
+  public int MaxRow => m_maxRow;
+
+  /// <summary>The grid row whose vertical band contains <paramref name="y"/>, or
+  /// <see cref="MaxRow"/>+1 when the pointer is below every row (i.e. a new row).</summary>
+  public int RowAt( double y )
+  {
+    if( m_maxRow < 0 )
+    {
+      return 0;
+    }
+    for( int r = 0; r <= m_maxRow; r++ )
+    {
+      if( y < m_rowTops[r + 1] ) return r;
+    }
+    return m_maxRow + 1;
+  }
+
+  /// <summary>The grid column the pointer is physically over (the cell <paramref name="x"/>
+  /// falls in — floored, not rounded — so the whole width of an empty cell reads as that
+  /// cell rather than snapping onto a neighbour).</summary>
+  public int ColAt( double x ) => Math.Max( 0, (int)Math.Floor( ( x - SymOrgX ) / (double)ColWidth ) );
+
+  /// <summary>Top Y of a row, extrapolated past the last laid-out row with RowHeight.</summary>
+  public int RowTop( int row )
+  {
+    if( m_maxRow < 0 )                  return SymOrgY;
+    if( row <= m_maxRow )               return m_rowTops[row];
+    return m_rowTops[m_maxRow + 1] + ( row - ( m_maxRow + 1 ) ) * RowHeight;
+  }
+
+  /// <summary>The placed button covering cell (<paramref name="row"/>, <paramref name="col"/>)
+  /// — accounting for multi-column width — excluding <paramref name="exclude"/>. Null if the
+  /// cell is empty.</summary>
+  public SymbolElement? SymbolAt( int row, int col, Core.ButtonDef? exclude )
+  {
+    foreach( SymbolElement s in Symbols )
+    {
+      if( s.Source is null || ReferenceEquals( s.Source, exclude ) || s.Line - 1 != row )
+      {
+        continue;
+      }
+      int c0 = s.Slot - 1;
+      if( (col >= c0) &&
+          (col <= (c0 + Math.Max( 1, s.Width )) - 1) )
+      {
+        return s;
+      }
+    }
+    return null;
+  }
+
+  /// <summary>Resolve a pointer position to a grid action + the geometry to indicate it.
+  /// Dropping on an empty cell places there; on a button inserts before/after it (by which
+  /// half); below every row makes a new row. <paramref name="dragging"/> (if any) is ignored
+  /// when probing, so a button never collides with itself.</summary>
+  public DropSpot ResolveDrop( Point p, Core.ButtonDef? dragging )
+  {
+    int row = RowAt( p.Y );
+    int col = ColAt( p.X );
+    if( m_cols > 0 ) col = Math.Min( col, m_cols - 1 ); // never past the last column
+    int h   = SymBtnSizeY;
+    int w   = SymBtnSizeX;
+
+    if( row > m_maxRow )
+    {
+      int ny = RowTop( row );
+      return new DropSpot( row, col, DropKind.NewRow, null,
+                           SymOrgX + col * ColWidth, ny, w, h, 0 );
+    }
+
+    int top = RowTop( row );
+    SymbolElement? hit = SymbolAt( row, col, dragging );
+    if( hit?.Source is not Core.ButtonDef tb )
+    {
+      return new DropSpot( row, col, DropKind.PlaceEmpty, null,
+                           SymOrgX + col * ColWidth, top, w, h, 0 );
+    }
+
+    bool after  = p.X >= hit.X + hit.W * 0.5;
+    int  insCol = after ? tb.Col + Math.Max( 1, tb.Width ) : tb.Col;
+    int  caretX = SymOrgX + insCol * ColWidth - ( Layout.ButtonGap + 2 ) / 2;
+    return new DropSpot( row, insCol, after ? DropKind.InsertAfter : DropKind.InsertBefore, tb,
+                         SymOrgX + insCol * ColWidth, top, w, h, caretX );
   }
 }

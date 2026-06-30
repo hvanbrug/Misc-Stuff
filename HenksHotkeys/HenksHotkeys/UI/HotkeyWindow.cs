@@ -34,7 +34,7 @@ internal sealed class HotkeyWindow : Window
   private TextBlock  m_clipIndicator  = null!;
   private TextBlock  m_stripIndicator = null!;
   private Button     m_toggleBtn      = null!;
-  private StackPanel m_leftStrip      = null!;
+  private StackPanel m_leftCluster      = null!;
   private StackPanel m_rightCluster   = null!;
 
   private double m_fullWidth;
@@ -59,7 +59,8 @@ internal sealed class HotkeyWindow : Window
   private Vector         m_btnDragGrab;
   private bool           m_btnDragging;
   private Border?        m_btnDragGhost;
-  private Border?        m_btnDropHi;
+  private Border?        m_btnDropHi;       // filled cell highlight (drop on an empty cell)
+  private Border?        m_btnDropCaret;    // thin insertion caret (drop between buttons)
   private FrameworkElement? m_btnDragEl;   // the element holding the mouse capture
 
   private IntPtr m_hwnd;
@@ -95,7 +96,7 @@ internal sealed class HotkeyWindow : Window
     ComputeFullSize();
 
     MinWidth  = MaxWidth = m_fullWidth;
-    MinHeight = 140;
+    MinHeight = Layout.WindowMinHeight;
     MaxHeight = SystemParameters.PrimaryScreenHeight;
     Width     = m_fullWidth;
     Height    = m_fullHeight;
@@ -118,31 +119,21 @@ internal sealed class HotkeyWindow : Window
   private void BuildContent()
   {
     BuildTabs();
-    BuildCornerControls();
+    BuildLeftCornerControls();
+    BuildRightCornerControls();
 
     // The strip auto-sizes to its corner controls; the window border's EdgeGap
     // padding provides the gap to the window edges (no hand-tuned margins). The accent
     // background turns it into a subtle toolbar (size unchanged, so collapse still fits).
     var strip = new Grid { Background = Palette.Brush( "AccentBarBg" ) };
-
-    m_leftStrip = new StackPanel
-    {
-      Orientation         = Orientation.Horizontal,
-      HorizontalAlignment = HorizontalAlignment.Left,
-      VerticalAlignment   = VerticalAlignment.Center,
-    };
-    m_leftStrip.Children.Add( m_clipIndicator  );
-    m_leftStrip.Children.Add( m_toggleBtn      );
-    m_leftStrip.Children.Add( m_stripIndicator );
-
-    strip.Children.Add( m_leftStrip );
+    strip.Children.Add( m_leftCluster  );
     strip.Children.Add( m_rightCluster );
     strip.MouseLeftButtonDown += OnStripDragStart;
 
     var grid = new Grid();
     grid.RowDefinitions.Add( new RowDefinition { Height = GridLength.Auto } );
     grid.RowDefinitions.Add( new RowDefinition { Height = new GridLength( 1, GridUnitType.Star ) } );
-    Grid.SetRow( strip, 0 );
+    Grid.SetRow( strip,  0 );
     Grid.SetRow( m_tabs, 1 );
     grid.Children.Add( strip );
     grid.Children.Add( m_tabs );
@@ -189,8 +180,8 @@ internal sealed class HotkeyWindow : Window
     {
       var canvas = new Canvas
       {
-        Width      = model.ContentWidth,
-        Height     = model.ContentHeight,
+        Width       = model.ContentWidth,
+        Height      = model.ContentHeight,
         Background  = Theme.WindowBackground,
         // Sit at the top-left so the edge gap is a consistent 2px instead of the
         // buttons being centred in the (wider) locked-width window.
@@ -204,12 +195,19 @@ internal sealed class HotkeyWindow : Window
         Canvas.SetTop( btn, sym.Y );
         canvas.Children.Add( btn );
 
-        // Data-tab cells (incl. blanks) can be dragged to a new slot.
+        // Data-tab buttons can be dragged to a new cell.
         if( model is DataTabModel dragModel && sym.Source is not null )
         {
           WireDrag( btn, sym, canvas, dragModel );
         }
       }
+
+      // Every empty cell behaves like a drop target: hovering one shows its outline.
+      if( model is DataTabModel hoverModel )
+      {
+        AttachEmptyCellHover( canvas, hoverModel );
+      }
+
       foreach( TabModel.SectionHeader hdr in model.Headers )
       {
         FrameworkElement label = BuildSectionHeader( hdr, model );
@@ -239,12 +237,12 @@ internal sealed class HotkeyWindow : Window
       {
         Header = model.Name,
         Content = sv,
-        Style = (Style)Application.Current.FindResource( "AppTabItem" ),
+        Style = (Style)Application.Current.FindResource( "AppTabItem" )!,
       };
       m_tabs.Items.Add( item );
     }
 
-    m_tabs.SelectedIndex = targetTab >= 0 && targetTab < m_tabs.Items.Count ? targetTab : 0;
+    m_tabs.SelectedIndex = (targetTab >= 0) && (targetTab < m_tabs.Items.Count) ? targetTab : 0;
     m_suppressTabPersist = false;
   }
 
@@ -274,11 +272,6 @@ internal sealed class HotkeyWindow : Window
 
   private FrameworkElement BuildButton( SymbolElement sym, TabModel model )
   {
-    if( sym.IsBlank )
-    {
-      return BuildBlankCell( sym );
-    }
-
     var btn = new Button
     {
       Width      = sym.W,
@@ -294,7 +287,7 @@ internal sealed class HotkeyWindow : Window
     if( sym.Align == "left" )   buttonText = " "  + buttonText;
 
     // A locked secret (couldn't be decrypted) wears a padlock and says why.
-    bool locked = sym.Source is Core.ButtonDef sd && sd.IsSecret && sd.Locked;
+    bool locked = sym.Source is { IsSecret: true, Locked: true };
     if( locked ) buttonText = "🔒 " + buttonText;
 
     string tip  = UiText.NormalizeDisplayText( sym.Desc );
@@ -304,7 +297,7 @@ internal sealed class HotkeyWindow : Window
 
     if( model.UseEmojiImages )
     {
-      int emojiPx = (int)Math.Round( model.SymBtnSizeX * 0.8 );
+      int emojiPx = (int)Math.Round( model.SymBtnSizeX * Layout.SymbolScale );
       EmojiImageProvider.Result res = EmojiImageProvider.Get( sym.Char, emojiPx );
       stem = res.Stem;
       if( res.Image is not null )
@@ -313,8 +306,8 @@ internal sealed class HotkeyWindow : Window
         btn.Content = new Image
         {
           Source = res.Image,
-          Width  = model.SymBtnSizeX * 0.8,
-          Height = model.SymBtnSizeY * 0.8,
+          Width  = model.SymBtnSizeX * Layout.SymbolScale,
+          Height = model.SymBtnSizeY * Layout.SymbolScale,
           Stretch = Stretch.Uniform,
           HorizontalAlignment = HorizontalAlignment.Center,
           VerticalAlignment   = VerticalAlignment.Center,
@@ -326,14 +319,14 @@ internal sealed class HotkeyWindow : Window
     {
       btn.Content = new TextBlock
       {
-        Text         = buttonText,
-        TextAlignment = sym.Align == "left" ? TextAlignment.Left : TextAlignment.Center,
-        TextTrimming = sym.Align == "left" ? TextTrimming.CharacterEllipsis : TextTrimming.None,
+        Text              = buttonText,
+        TextAlignment     = sym.Align == "left" ? TextAlignment.Left : TextAlignment.Center,
+        TextTrimming      = sym.Align == "left" ? TextTrimming.CharacterEllipsis : TextTrimming.None,
         VerticalAlignment = VerticalAlignment.Center,
       };
     }
 
-    btn.Style = (Style)Application.Current.FindResource( isEmoji ? "GridEmojiButton" : "GridButton" );
+    btn.Style = (Style)Application.Current.FindResource( isEmoji ? "GridEmojiButton" : "GridButton" )!;
 
     if( sym.Hotkey.Length > 0 ) tip = Append( tip, HotkeyParser.Label( sym.Hotkey ) );
     if( sym.TipChar )           tip = Append( tip, sym.Char );
@@ -347,7 +340,7 @@ internal sealed class HotkeyWindow : Window
 
     // Data-tab buttons get a right-click menu to edit / delete them. Built-in code
     // tabs (Source == null) aren't JSON-editable, so they get none.
-    if( sym.Source is Core.ButtonDef def )
+    if( sym.Source is {} def )
     {
       btn.ContextMenu = BuildButtonMenu( def );
     }
@@ -356,37 +349,13 @@ internal sealed class HotkeyWindow : Window
     return btn;
   }
 
-  // A blank cell: an invisible, hit-testable placeholder that shows a faint border on
-  // hover and carries the same edit/delete menu, so it can be turned into a real button.
-  private FrameworkElement BuildBlankCell( SymbolElement sym )
-  {
-    var cell = new Border
-    {
-      Width           = sym.W,
-      Height          = sym.H,
-      Background      = Theme.BlankBgColor,     // hit-testable for hover / right-click
-      BorderBrush     = Theme.BlankBorderColor, // invisible until hovered
-      BorderThickness = new Thickness( Theme.BorderThickness ),
-      ToolTip         = "Blank cell — right-click to edit",
-    };
-    cell.MouseEnter += ( _, _ ) => cell.BorderBrush = Theme.BorderColor;
-    cell.MouseLeave += ( _, _ ) => cell.BorderBrush = Theme.BlankBorderColor;
-
-    if( sym.Source is Core.ButtonDef def )
-    {
-      cell.ContextMenu = BuildButtonMenu( def );
-    }
-    sym.Ctrl = cell;
-    return cell;
-  }
-
-  private static ContextMenu BuildButtonMenu( Core.ButtonDef def )
+  private static ContextMenu BuildButtonMenu( ButtonDef def )
   {
     var menu = new ContextMenu();
     var edit = new MenuItem { Header = "Edit button…" };
-    edit.Click += ( _, _ ) => ButtonCommands.Edit( def );
     var del  = new MenuItem { Header = "Delete button" };
-    del.Click += ( _, _ ) => ButtonCommands.Delete( def );
+    edit.Click += ( _, _ ) => ButtonCommands.Edit(   def );
+    del.Click  += ( _, _ ) => ButtonCommands.Delete( def );
     menu.Items.Add( edit );
     menu.Items.Add( del );
     return menu;
@@ -444,12 +413,14 @@ internal sealed class HotkeyWindow : Window
 
   private void BeginButtonDrag( Point at )
   {
-    if( m_btnDragSym is not { } sym || m_btnDragCanvas is not { } canvas )
+    if( m_btnDragSym    is not {} sym ||
+        m_btnDragCanvas is not {} canvas )
     {
       return;
     }
-    m_btnDragging = true;
+
     m_activeWinTimer.Stop(); // don't let background ticks disturb the drag
+    m_btnDragging = true;
     m_btnDragGrab = at - new Point( sym.X, sym.Y );
 
     if( sym.Ctrl is UIElement dragged )
@@ -461,43 +432,75 @@ internal sealed class HotkeyWindow : Window
     Panel.SetZIndex( m_btnDragGhost, 1000 );
     canvas.Children.Add( m_btnDragGhost );
 
+    // Drop on an empty cell → a filled, outlined cell highlight.
     m_btnDropHi = new Border
     {
       BorderBrush      = Palette.Brush( "SwitchOn" ),
       BorderThickness  = new Thickness( 2 ),
-      CornerRadius     = new CornerRadius( 5 ),
-      Background       = Brushes.Transparent,
+      CornerRadius     = new CornerRadius( Layout.ButtonCornerRadius ),
+      Background       = Translucent( Palette.Colour( "SwitchOn" ), 0.22 ),
       IsHitTestVisible = false,
       Visibility       = Visibility.Collapsed,
     };
-    Panel.SetZIndex( m_btnDropHi, 999 );
+    Panel.SetZIndex( m_btnDropHi, 1001 ); // above the ghost so the drop cue is never hidden
     canvas.Children.Add( m_btnDropHi );
+
+    // Drop between two buttons → a thin insertion caret on the before/after edge.
+    m_btnDropCaret = new Border
+    {
+      Width            = 3,
+      Background       = Palette.Brush( "SwitchOn" ),
+      CornerRadius     = new CornerRadius( 1.5 ),
+      IsHitTestVisible = false,
+      Visibility       = Visibility.Collapsed,
+    };
+    Panel.SetZIndex(     m_btnDropCaret, 1001 );
+    canvas.Children.Add( m_btnDropCaret );
 
     UpdateButtonDrag( at );
   }
 
+  private static SolidColorBrush Translucent( Color c, double opacity )
+  {
+    var b = new SolidColorBrush( c ) { Opacity = opacity };
+    b.Freeze();
+    return b;
+  }
+
   private void UpdateButtonDrag( Point at )
   {
-    if( m_btnDragGhost is { } ghost )
+    if( m_btnDragGhost is {} ghost )
     {
       Canvas.SetLeft( ghost, at.X - m_btnDragGrab.X );
       Canvas.SetTop(  ghost, at.Y - m_btnDragGrab.Y );
     }
-    SymbolElement? target = FindDropTarget( at );
-    if( m_btnDropHi is { } hi )
+
+    if( m_btnDragModel is not {} model ||
+        m_btnDropHi    is not {} hi    ||
+        m_btnDropCaret is not {} caret )
     {
-      if( target is null )
-      {
-        hi.Visibility = Visibility.Collapsed;
-      }
-      else
-      {
-        hi.Width  = target.W;
-        hi.Height = target.H;
-        Canvas.SetLeft( hi, target.X );
-        Canvas.SetTop(  hi, target.Y );
-        hi.Visibility = Visibility.Visible;
-      }
+      return;
+    }
+
+    DropSpot spot = model.ResolveDrop( at, m_btnDragSym?.Source );
+    if( spot.Kind is DropKind.InsertBefore or DropKind.InsertAfter )
+    {
+      // A thin caret on the insertion edge (which of rule a/b will fire is visible).
+      caret.Height = spot.CellH;
+      Canvas.SetLeft( caret, spot.CaretX );
+      Canvas.SetTop(  caret, spot.CellY  );
+      caret.Visibility = Visibility.Visible;
+      hi.Visibility    = Visibility.Collapsed;
+    }
+    else
+    {
+      // Empty cell (or a brand-new row) — a filled cell highlight ("place here").
+      hi.Width  = spot.CellW;
+      hi.Height = spot.CellH;
+      Canvas.SetLeft( hi, spot.CellX );
+      Canvas.SetTop(  hi, spot.CellY );
+      hi.Visibility    = Visibility.Visible;
+      caret.Visibility = Visibility.Collapsed;
     }
   }
 
@@ -511,73 +514,20 @@ internal sealed class HotkeyWindow : Window
     DataTabModel?  model  = m_btnDragModel;
     CancelButtonDrag(); // release capture, remove ghost/highlight, restore opacity
 
-    if( source?.Source is not { } moving || model is null )
+    if( source?.Source is not {} moving || model is null )
     {
       return;
     }
 
-    // The cell the pointer is over, from the grid geometry (the dragged button has
-    // simply been lifted out — its old cell is left empty).
-    int col = Math.Max( 0, (int)Math.Round( (double)( drop.X - model.SymOrgX ) / model.ColWidth ) );
+    DropSpot spot = model.ResolveDrop( drop, moving );
+    bool ok = spot.Kind == DropKind.NewRow
+                ? TabStore.MoveButtonToNewRow( moving, spot.Col )
+                : TabStore.MoveButtonToCell(   moving, spot.Row, spot.Col ); // empty → place; on a button → insert (shift)
 
-    // Below every row → a brand-new row at the end (it's a grid, not one line).
-    double bottom = 0;
-    foreach( SymbolElement s in model.Symbols )
+    if( ok )
     {
-      if( s.Source is not null )
-      {
-        bottom = Math.Max( bottom, s.Y + s.H );
-      }
+      AppState.RequestReload?.Invoke(); // rebuilds the tab at the new layout
     }
-    if( drop.Y > bottom )
-    {
-      if( TabStore.MoveButtonToNewRow( moving, col ) )
-      {
-        AppState.RequestReload?.Invoke();
-      }
-      return;
-    }
-
-    SymbolElement? target = FindDropTarget( drop );
-    if( target?.Source is { } targetDef && !ReferenceEquals( source, target ) )
-    {
-      // Past the target's right half drops *after* it; otherwise *before*.
-      bool after = drop.X >= target.X + target.W * 0.5;
-      if( TabStore.MoveButton( moving, targetDef, after ) )
-      {
-        AppState.RequestReload?.Invoke(); // rebuilds the tab at the new layout
-      }
-    }
-  }
-
-  // The nearest data cell to the pointer (within the content), excluding the dragged one.
-  private SymbolElement? FindDropTarget( Point at )
-  {
-    if( m_btnDragModel is not {} model )
-    {
-      return null;
-    }
-    SymbolElement? best = null;
-    double bestD = double.MaxValue;
-    foreach( SymbolElement s in model.Symbols )
-    {
-      if( s.Source is null || ReferenceEquals( s, m_btnDragSym ) )
-      {
-        continue;
-      }
-      double dx = at.X - ( s.X + s.W * 0.5 );
-      double dy = at.Y - ( s.Y + s.H * 0.5 );
-      double d  = dx * dx + dy * dy;
-      if( d < bestD )
-      {
-        bestD = d;
-        best  = s;
-      }
-    }
-    // Only accept a drop that lands roughly over the content (not flung far outside).
-    bool inside = at.X >= -model.ColWidth && at.X <= model.ContentWidth + model.ColWidth &&
-                  at.Y >= -model.RowHeight && at.Y <= model.ContentHeight + model.RowHeight;
-    return inside ? best : null;
   }
 
   private void CancelButtonDrag()
@@ -589,7 +539,7 @@ internal sealed class HotkeyWindow : Window
     m_btnDragging = false;
     m_activeWinTimer.Start();
 
-    if( m_btnDragEl is { } el && ReferenceEquals( Mouse.Captured, el ) )
+    if( m_btnDragEl is {} el && ReferenceEquals( Mouse.Captured, el ) )
     {
       el.ReleaseMouseCapture();
     }
@@ -601,25 +551,27 @@ internal sealed class HotkeyWindow : Window
     }
     if( m_btnDragCanvas is { } canvas )
     {
-      if( m_btnDragGhost is {} g ) canvas.Children.Remove( g );
-      if( m_btnDropHi    is {} h ) canvas.Children.Remove( h );
+      if( m_btnDragGhost  is {} g ) canvas.Children.Remove( g );
+      if( m_btnDropHi     is {} h ) canvas.Children.Remove( h );
+      if( m_btnDropCaret  is {} c ) canvas.Children.Remove( c );
     }
     m_btnDragGhost = null;
     m_btnDropHi    = null;
+    m_btnDropCaret = null;
   }
 
   private static Border MakeGhost( SymbolElement sym )
   {
-    string label = sym.IsBlank ? "" : UiText.NormalizeDisplayText( sym.ShowChar ? sym.Char : sym.Desc );
+    string label = UiText.NormalizeDisplayText( sym.ShowChar ? sym.Char : sym.Desc );
     return new Border
     {
       Width            = sym.W,
       Height           = sym.H,
-      CornerRadius     = new CornerRadius( 5 ),
+      CornerRadius     = new CornerRadius( Layout.ButtonCornerRadius ),
       Background       = Palette.Brush( "ControlHover" ),
-      BorderBrush      = Palette.Brush( "SwitchOn" ),
-      BorderThickness  = new Thickness( 2 ),
-      Opacity          = 0.9,
+      BorderBrush      = Palette.Brush( "TextSecondary" ), // neutral, so blue = the drop cue only
+      BorderThickness  = new Thickness( 1 ),
+      Opacity          = 0.8,
       IsHitTestVisible = false,
       Child = new TextBlock
       {
@@ -630,6 +582,46 @@ internal sealed class HotkeyWindow : Window
         TextTrimming        = TextTrimming.CharacterEllipsis,
       },
     };
+  }
+
+  // Faint outline that follows the pointer over the tab's empty cells, so every cell reads
+  // as a place you can drop / add a button (the old materialised "blank" cells, computed).
+  private void AttachEmptyCellHover( Canvas canvas, DataTabModel model )
+  {
+    var hover = new Border
+    {
+      BorderBrush      = Theme.BlankBorderColor,
+      BorderThickness  = new Thickness( Theme.BorderThickness ),
+      CornerRadius     = new CornerRadius( 4 ),
+      IsHitTestVisible = false,
+      Visibility       = Visibility.Collapsed,
+    };
+    Panel.SetZIndex( hover, 1 ); // above the canvas, below the buttons
+    canvas.Children.Add( hover );
+
+    canvas.MouseMove += ( _, e ) =>
+    {
+      if( m_btnDragging ) { hover.Visibility = Visibility.Collapsed; return; } // the drag has its own cues
+      Point p    = e.GetPosition( canvas );
+      int   row  = model.RowAt( p.Y );
+      int   col  = model.ColAt( p.X );
+      bool  free = row <= model.MaxRow                       &&
+                   col <  Math.Max( 1, model.Entry.Columns ) &&
+                   model.SymbolAt( row, col, null ) is null;
+      if( free )
+      {
+        hover.Width  = model.SymBtnSizeX;
+        hover.Height = model.SymBtnSizeY;
+        Canvas.SetLeft( hover, model.SymOrgX + col * model.ColWidth );
+        Canvas.SetTop(  hover, model.RowTop( row ) );
+        hover.Visibility = Visibility.Visible;
+      }
+      else
+      {
+        hover.Visibility = Visibility.Collapsed;
+      }
+    };
+    canvas.MouseLeave += ( _, _ ) => hover.Visibility = Visibility.Collapsed;
   }
 
   // The open-area menu for a data tab: remembers where the right-click landed (in canvas
@@ -702,17 +694,34 @@ internal sealed class HotkeyWindow : Window
     };
   }
 
-  private void BuildCornerControls()
+  private void BuildLeftCornerControls()
   {
     m_clipIndicator  = MakeIndicator( "○", AppActions.ToggleClipboardSendMode );
     m_stripIndicator = MakeIndicator( "☺", AppActions.ToggleStripSendEmojis );
 
     m_toggleBtn = MakeButton( "▲", "Shrink window", "Segoe UI Symbol", 11f, ToggleCollapsed, addToCluster: false );
+    m_toggleBtn.Margin = new Thickness( Layout.EdgeGap, 0, Layout.EdgeGap, 0 );
     // The left collapse button also doubles as a drag handle. MakeDragOrClick
     // handles the press at the preview stage, so the button's own Click never
     // fires (no double toggle) — a plain click toggles, a press-drag moves.
     MakeDragOrClick( m_toggleBtn, ToggleCollapsed );
 
+    m_leftCluster = new StackPanel
+    {
+      Orientation         = Orientation.Horizontal,
+      HorizontalAlignment = HorizontalAlignment.Left,
+      VerticalAlignment   = VerticalAlignment.Center,
+    };
+    m_leftCluster.Children.Add( m_clipIndicator  );
+    m_leftCluster.Children.Add( m_toggleBtn      );
+    m_leftCluster.Children.Add( m_stripIndicator );
+
+    UpdateClipIndicator(  AppState.UseClipSend     );
+    UpdateStripIndicator( AppState.StripSendEmojis );
+  }
+
+  private void BuildRightCornerControls()
+  {
     m_rightCluster = new StackPanel
     {
       Orientation         = Orientation.Horizontal,
@@ -720,14 +729,11 @@ internal sealed class HotkeyWindow : Window
       VerticalAlignment   = VerticalAlignment.Center,
     };
     RaiseTop( 1, MakeButton( "🔄",  "Repaint / Refresh",          "Segoe UI Symbol", 10f, ForceRepaint ) );
-    RaiseTop( 0, MakeBtnGap( 38 ) );
+    RaiseTop( 0, MakeBtnGap( Layout.CornerButtonWidth / 2 ) );
     RaiseTop( 3, MakeButton( "⌫.", "Back 3, Replace with period", "Segoe UI Symbol", 12f, () => { _ = TextSender.SendInputKeys( "\b\b\b. " ); } ) );
     RaiseTop( 9, MakeButton( "⇚,", "Back 3, Insert Comma",        "Segoe UI Symbol", 18f, () => { _ = TextSender.SendInputKeys( "{Left}{Left}{Left}, " ); } ) );
     RaiseTop( 0, MakeButton( "↩",  "Enter / Newline",             "Segoe UI Symbol", 12f, () => { _ = TextSender.SendInputKeys( "{Enter}" ); } ) );
     RaiseTop( 0, MakeButton( "▲",  "Shrink window",               "Segoe UI Symbol", 11f, ToggleCollapsed ) );
-
-    UpdateClipIndicator(  AppState.UseClipSend     );
-    UpdateStripIndicator( AppState.StripSendEmojis );
   }
 
   private void RaiseTop( int padValue, Control cc )
@@ -738,7 +744,10 @@ internal sealed class HotkeyWindow : Window
   }
 
   private void RaiseTop( int unused1, FrameworkElement unused2 )
-  {}
+  {
+     // This exists literally so that it can keep the button gap row
+     // looking the same as the rest. It has no functional purpose.
+  }
 
   private TextBlock MakeIndicator( string glyph, Action onClick )
   {
@@ -763,11 +772,12 @@ internal sealed class HotkeyWindow : Window
       Content    = text,
       FontFamily = new FontFamily( fontName ),
       FontSize   = PtToDip( fontSize ),
-      Width      = 38,
-      Height     = 22,
+      Width      = Layout.CornerButtonWidth,
+      Height     = Layout.CornerButtonHeight,
       ToolTip    = tip,
+      Margin     = new Thickness( Layout.ButtonGap, 0, 0, 0 ),
       Focusable  = false,
-      Style      = (Style)Application.Current.FindResource( "GridButton" ),
+      Style      = (Style)Application.Current?.FindResource( "GridButton" )!,
     };
     btn.Click += ( _, _ ) => { try { onClick(); } catch { /* ignore */ } };
 
@@ -795,7 +805,10 @@ internal sealed class HotkeyWindow : Window
     }
     // tab content (already includes the buttons' TabEdgeGap inset) + the themed
     // scrollbar + the window-edge gap (EdgeGap) + window border.
-    m_fullWidth = maxContentW + Layout.ScrollBarWidth + 2 * Layout.EdgeGap + 2 * Theme.BorderThickness;
+    m_fullWidth = maxContentW +
+                  Layout.ScrollBarWidth +
+                  Layout.EdgeGap        * 2 +
+                  Theme.BorderThickness * 2;
   }
 
   private void ComputeFullSize()
@@ -813,7 +826,9 @@ internal sealed class HotkeyWindow : Window
 
     double screenH = SystemParameters.PrimaryScreenHeight;
     int    savedH  = AppState.Settings.WndHeight;
-    m_fullHeight = savedH >= 140 && savedH <= screenH ? savedH : defaultH;
+    bool   hgtLim  = savedH >= Layout.WindowMinHeight &&
+                     savedH <= screenH;
+    m_fullHeight = hgtLim ? savedH : defaultH;
   }
 
   // ── Show / summon ────────────────────────────────────────────────
@@ -869,7 +884,8 @@ internal sealed class HotkeyWindow : Window
       return;
     }
 
-    if( AppState.Settings.WndX is int px && AppState.Settings.WndY is int py )
+    if( AppState.Settings.WndX is {} px &&
+        AppState.Settings.WndY is {} py )
     {
       MoveTo( px, py );
       return;
@@ -879,8 +895,8 @@ internal sealed class HotkeyWindow : Window
     // landing at (0, 0), which sits in the top-of-screen snap zone.
     NativeMethods.RECT area = NativeMethods.GetPrimaryWorkArea();
     NativeMethods.GetWindowRect( m_hwnd, out NativeMethods.RECT rc );
-    MoveTo( area.Left + ( area.Width - rc.Width ) / 2,
-            area.Top  + ( area.Height - rc.Height ) / 2 );
+    MoveTo( area.Left + (area.Width  - rc.Width)  / 2,
+            area.Top  + (area.Height - rc.Height) / 2 );
   }
 
   private void MoveTo( int x, int y )
@@ -936,7 +952,7 @@ internal sealed class HotkeyWindow : Window
         MinWidth   = m_fullWidth;
         MaxWidth   = m_fullWidth;
         Width      = m_fullWidth;
-        MinHeight  = 140;
+        MinHeight  = Layout.WindowMinHeight;
         MaxHeight  = SystemParameters.PrimaryScreenHeight;
         Height     = m_fullHeight;
       }
@@ -956,10 +972,11 @@ internal sealed class HotkeyWindow : Window
   // its edge-gap padding — derived, so it tracks the controls and the constants.
   private Size CollapsedSize()
   {
-    m_leftStrip.Measure( new Size( double.PositiveInfinity, double.PositiveInfinity ) );
-    Size   s      = m_leftStrip.DesiredSize;
-    double chrome = 2 * ( Theme.BorderThickness + Layout.EdgeGap );
-    return new Size( Math.Ceiling( s.Width + chrome ), Math.Ceiling( s.Height + chrome ) );
+    m_leftCluster.Measure( new Size( double.PositiveInfinity, double.PositiveInfinity ) );
+    Size   s      = m_leftCluster.DesiredSize;
+    double chrome = (Theme.BorderThickness + Layout.EdgeGap) * 2;
+    return new Size( Math.Ceiling( s.Width  + chrome ),
+                     Math.Ceiling( s.Height + chrome ) );
   }
 
   private void ForceRepaint()
@@ -988,8 +1005,8 @@ internal sealed class HotkeyWindow : Window
   {
     m_favX = AppState.Settings.FavX;
     m_favY = AppState.Settings.FavY;
-    if( (m_favX is int fx) &&
-        (m_favY is int fy) &&
+    if( (m_favX is {} fx) &&
+        (m_favY is {} fy) &&
         (m_hwnd != nint.Zero) )
     {
       MoveTo( fx, fy );
@@ -1001,20 +1018,21 @@ internal sealed class HotkeyWindow : Window
   public void UpdateClipIndicator( bool on )
   {
     m_clipIndicator.Text    = on ? "●" : "○";
-    m_clipIndicator.ToolTip = "Clipboard send mode: " + ( on ? "ON" : "OFF" );
+    m_clipIndicator.ToolTip = "Clipboard send mode: " + (on ? "ON" : "OFF");
   }
 
   public void UpdateStripIndicator( bool on )
   {
     m_stripIndicator.Text    = on ? "☻" : "☺";
-    m_stripIndicator.ToolTip = "Strip emojis from comments: " + ( on ? "ON" : "OFF" );
+    m_stripIndicator.ToolTip = "Strip emojis from comments: " + (on ? "ON" : "OFF");
   }
 
   // ── Active-window tracking ───────────────────────────────────────
   private void TrackActiveWindow()
   {
-    IntPtr h = NativeMethods.GetForegroundWindow();
-    if( h == IntPtr.Zero || h == m_hwnd )
+    nint h = NativeMethods.GetForegroundWindow();
+    if( h == nint.Zero ||
+        h == m_hwnd )
     {
       return;
     }
@@ -1059,7 +1077,7 @@ internal sealed class HotkeyWindow : Window
 
   private void EnsureHwnd()
   {
-    if( m_hwnd == IntPtr.Zero )
+    if( m_hwnd == nint.Zero )
     {
       m_hwnd = new WindowInteropHelper( this ).EnsureHandle();
     }
@@ -1098,13 +1116,13 @@ internal sealed class HotkeyWindow : Window
     // narrow size.
     double scale = NativeMethods.GetDpiForWindow( m_hwnd ) / 96.0;
     int width = (int)Math.Round( m_fullWidth * scale );
-    int minH  = (int)Math.Round( 140 * scale );
+    int minH  = (int)Math.Round( Layout.WindowMinHeight * scale );
     int maxH  = Math.Max( minH, work.Height - margin );
 
     mmi.ptMaxPosition  = new NativeMethods.POINT { X = work.Left, Y = work.Top };
-    mmi.ptMaxSize      = new NativeMethods.POINT { X = width, Y = maxH };
-    mmi.ptMinTrackSize = new NativeMethods.POINT { X = width, Y = minH };
-    mmi.ptMaxTrackSize = new NativeMethods.POINT { X = width, Y = maxH };
+    mmi.ptMaxSize      = new NativeMethods.POINT { X = width,     Y = maxH };
+    mmi.ptMinTrackSize = new NativeMethods.POINT { X = width,     Y = minH };
+    mmi.ptMaxTrackSize = new NativeMethods.POINT { X = width,     Y = maxH };
 
     Marshal.StructureToPtr( mmi, lParam, false );
   }
@@ -1142,8 +1160,11 @@ internal sealed class HotkeyWindow : Window
 
     NativeMethods.GetCursorPos( out NativeMethods.POINT cur );
     ( int left, int top ) = ApplyDragSnap( cur.X - m_dragOffsetX, cur.Y - m_dragOffsetY );
-    NativeMethods.SetWindowPos( m_hwnd, IntPtr.Zero, left, top, 0, 0,
-      NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE );
+    NativeMethods.SetWindowPos( m_hwnd, IntPtr.Zero,
+                                left, top, 0, 0,
+                                NativeMethods.SWP_NOSIZE   |
+                                NativeMethods.SWP_NOZORDER |
+                                NativeMethods.SWP_NOACTIVATE );
   }
 
   protected override void OnMouseLeftButtonUp( MouseButtonEventArgs e )
@@ -1176,24 +1197,27 @@ internal sealed class HotkeyWindow : Window
     const int snapThreshold    = 20;
     const int releaseThreshold = 30;
 
-    if( m_favX is int favX && m_favY is int favY )
+    if( m_favX is {} favX &&
+        m_favY is {} favY )
     {
       if( m_snappedToFav )
       {
-        if( Math.Abs( left - favX ) >= releaseThreshold || Math.Abs( top - favY ) >= releaseThreshold )
+        if( (Math.Abs( left - favX ) >= releaseThreshold) ||
+            (Math.Abs( top  - favY ) >= releaseThreshold) )
         {
           m_snappedToFav = false;
         }
         else
         {
-          return ( favX, favY );
+          return (favX, favY);
         }
       }
-      else if( Math.Abs( left - favX ) <= snapThreshold && Math.Abs( top - favY ) <= snapThreshold )
+      else if( (Math.Abs( left - favX ) <= snapThreshold) &&
+               (Math.Abs( top  - favY ) <= snapThreshold) )
       {
         m_snappedToFav = true;
         m_snappedToTop = false;
-        return ( favX, favY );
+        return (favX, favY);
       }
     }
 
@@ -1205,16 +1229,16 @@ internal sealed class HotkeyWindow : Window
       }
       else
       {
-        return ( left, 0 ); // stay snapped to the top edge, allow horizontal movement
+        return (left, 0); // stay snapped to the top edge, allow horizontal movement
       }
     }
     else if( top <= snapThreshold )
     {
       m_snappedToTop = true;
-      return ( left, 0 );
+      return (left, 0);
     }
 
-    return ( left, top );
+    return (left, top);
   }
 
   // Make a corner control double as a drag handle: a plain click runs <paramref
@@ -1242,7 +1266,8 @@ internal sealed class HotkeyWindow : Window
         return;
       }
       NativeMethods.GetCursorPos( out NativeMethods.POINT cur );
-      if( Math.Abs( cur.X - start.X ) >= 4 || Math.Abs( cur.Y - start.Y ) >= 4 )
+      if( Math.Abs( cur.X - start.X ) >= 4 ||
+          Math.Abs( cur.Y - start.Y ) >= 4 )
       {
         dragged = true;
         armed   = false;
@@ -1276,7 +1301,8 @@ internal sealed class HotkeyWindow : Window
     {
       return; // a data-tab button's edit/delete menu — open it normally
     }
-    if( IsInside( d, m_tabs ) || IsInside( d, m_rightCluster ) )
+    if( IsInside( d, m_tabs ) ||
+        IsInside( d, m_rightCluster ) )
     {
       e.Handled = true;
     }

@@ -27,4 +27,13 @@ internal static class Layout
   /// width doesn't clip the rightmost buttons. Keep in sync with the ScrollBar style
   /// width in App.xaml.</summary>
   public const int ScrollBarWidth = 11;
+
+  public const int CornerButtonWidth  = 38;
+  public const int CornerButtonHeight = 22;
+
+  public const int WindowMinHeight = 140;
+
+  public const double SymbolScale = 0.8;
+
+  public const double ButtonCornerRadius = 5.0;
 }

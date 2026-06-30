@@ -18,9 +18,9 @@ internal static class ButtonCommands
     }
   }
 
-  /// <summary>Add a new button where the user right-clicked the open tab area. The new
-  /// button is placed next to the nearest existing button (after it when the click is to
-  /// its right or below, before it otherwise); an empty tab just gets a first row.</summary>
+  /// <summary>Add a new button at the grid cell the user right-clicked. An empty cell takes
+  /// the button directly; clicking on a button inserts before/after it (shifting the row);
+  /// below everything starts a new row.</summary>
   public static void AddHere( DataTabModel model, System.Windows.Point at )
   {
     var newButton = new ButtonDef();
@@ -29,33 +29,8 @@ internal static class ButtonCommands
       return;
     }
 
-    SymbolElement? nearest = null;
-    double best = double.MaxValue;
-    foreach( SymbolElement s in model.Symbols )
-    {
-      if( s.Source is null )
-      {
-        continue;
-      }
-      double dx = at.X - ( s.X + s.W * 0.5 );
-      double dy = at.Y - ( s.Y + s.H * 0.5 );
-      double d2 = dx * dx + dy * dy;
-      if( d2 < best )
-      {
-        best    = d2;
-        nearest = s;
-      }
-    }
-
-    if( nearest?.Source is ButtonDef anchor )
-    {
-      bool after = at.Y > nearest.Y + nearest.H || at.X >= nearest.X + nearest.W * 0.5;
-      TabStore.InsertButton( anchor, newButton, after );
-    }
-    else
-    {
-      TabStore.AddButton( model.Entry, newButton );
-    }
+    DropSpot spot = model.ResolveDrop( at, null );
+    TabStore.AddButtonAt( model.Entry, spot.Row, spot.Col, newButton );
     AppState.RequestReload?.Invoke();
   }
 

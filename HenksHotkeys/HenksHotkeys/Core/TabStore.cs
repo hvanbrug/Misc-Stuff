@@ -127,26 +127,6 @@ internal static class TabStore
     SaveCurrent();
   }
 
-  /// <summary>Insert a new button next to an existing one (before/after it in the same
-  /// row), shifting the row to make room, then persist. Returns false if the anchor
-  /// wasn't found.</summary>
-  public static bool InsertButton( ButtonDef anchor, ButtonDef newButton, bool after )
-  {
-    if( !Locate( anchor, out TabEntry tab ) )
-    {
-      return false;
-    }
-    AddButtonAt( tab, anchor.Row, after ? anchor.Col + Math.Max( 1, anchor.Width ) : anchor.Col, newButton );
-    return true;
-  }
-
-  /// <summary>Append a new button at the start of a fresh row below everything on a tab
-  /// (used when the tab has no anchor), then persist.</summary>
-  public static void AddButton( TabEntry tab, ButtonDef newButton )
-  {
-    AddButtonAt( tab, NextEmptyRow( tab ), 0, newButton );
-  }
-
   /// <summary>Move a button to a grid cell (drag-to-reposition), then persist. Dropping
   /// on an empty cell places it there; dropping on a button inserts before/after it,
   /// shifting that row. The cell it came from is simply left empty. Returns false if the
@@ -167,17 +147,6 @@ internal static class TabStore
     moving.Col = col;
     SaveCurrent();
     return true;
-  }
-
-  /// <summary>Move a button to sit before / after a target button, then persist. Returns
-  /// false if either button isn't found.</summary>
-  public static bool MoveButton( ButtonDef moving, ButtonDef target, bool after )
-  {
-    if( s_file is null || ReferenceEquals( moving, target ) || !Locate( target, out _ ) )
-    {
-      return false;
-    }
-    return MoveButtonToCell( moving, target.Row, after ? target.Col + Math.Max( 1, target.Width ) : target.Col );
   }
 
   /// <summary>Move a button to a brand-new empty row below everything on its tab, then
@@ -209,12 +178,33 @@ internal static class TabStore
       return;
     }
     int cols = tab.Columns > 0 ? tab.Columns : int.MaxValue;
-    int c    = col;
-    while( tab.Buttons.FirstOrDefault( b => b.Row == row && b.Col == c ) is { } b )
+
+    // Collect the contiguous run of occupied cells from (row, col) rightward (stop at the
+    // first gap). Gather first, then move each exactly once — re-scanning after a move would
+    // keep finding the just-moved button and loop forever.
+    var run = new List<ButtonDef>();
+    for( int c = col; tab.Buttons.FirstOrDefault( b => b.Row == row && b.Col == c ) is { } b; c++ )
     {
-      b.Col++;
-      if( b.Col >= cols ) { b.Col = 0; b.Row++; row = b.Row; }
-      c = b.Col;
+      run.Add( b );
+    }
+    if( run.Count == 0 )
+    {
+      return;
+    }
+
+    // If the run reaches the last column, its tail must wrap onto the next row — open a
+    // slot there first (recurses down rows, always toward a gap, so it terminates).
+    if( col + run.Count >= cols )
+    {
+      ShiftRight( tab, row + 1, 0 );
+    }
+
+    // Right-to-left so each button lands on a cell just vacated (or the freed gap).
+    for( int i = run.Count - 1; i >= 0; i-- )
+    {
+      ButtonDef b = run[i];
+      if( b.Col + 1 >= cols ) { b.Col = 0; b.Row++; }
+      else                      b.Col++;
     }
   }
 

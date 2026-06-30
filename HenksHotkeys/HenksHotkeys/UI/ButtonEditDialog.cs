@@ -33,16 +33,7 @@ internal static class ButtonEditDialog
 
     var root = new StackPanel { Margin = new Thickness( 14 ), Width = 440 };
 
-    // ── Header bar with the Blank toggle at the top-right ──
-    var blank = new CheckBox
-    {
-      Content           = "Blank",
-      IsChecked         = b.Blank,
-      Foreground        = B( "TextPrimary" ),
-      VerticalAlignment = VerticalAlignment.Center,
-      ToolTip           = "A blank spacer cell: holds its place but draws and sends nothing.",
-    };
-    root.Children.Add( Header( B, title, blank ) );
+    root.Children.Add( Header( B, title ) );
 
     // ── Text + Description: multiline, wrapping, auto-growing (Enter = newline) ──
     // For a secret, reveal the current value on demand just to edit it (empty if locked).
@@ -52,11 +43,9 @@ internal static class ButtonEditDialog
     // ── Short fields share one row — they never hold much ──
     TextBox hotkey = SmallBox( B, b.Hotkey ?? "", 150 );
     TextBox width  = SmallBox( B, b.Width.ToString( CultureInfo.InvariantCulture ), 56 );
-    TextBox gap    = SmallBox( B, b.GapBefore.ToString( CultureInfo.InvariantCulture ), 70 );
     var shortRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness( 0, 0, 0, 12 ) };
     shortRow.Children.Add( Labeled( B, "Hotkey (e.g. #!1)", hotkey, 0 ) );
-    shortRow.Children.Add( Labeled( B, "Width", width, 14 ) );
-    shortRow.Children.Add( Labeled( B, "Gap before", gap, 14 ) );
+    shortRow.Children.Add( Labeled( B, "Width (columns)", width, 14 ) );
     root.Children.Add( shortRow );
 
     // ── Checkboxes, grouped logically: display first, then security ──
@@ -85,67 +74,34 @@ internal static class ButtonEditDialog
     bar.Children.Add( cancel );
     root.Children.Add( bar );
 
-    // A blank cell ignores its content, so grey those fields out while it's ticked.
-    void SyncBlank()
-    {
-      bool bl = blank.IsChecked == true;
-      text.IsEnabled = desc.IsEnabled = hotkey.IsEnabled = !bl;
-      showText.IsEnabled = leftAlign.IsEnabled = tipText.IsEnabled = sensitive.IsEnabled = !bl;
-    }
-    blank.Checked   += ( _, _ ) => SyncBlank();
-    blank.Unchecked += ( _, _ ) => SyncBlank();
-    SyncBlank();
-
     ok.Click += ( _, _ ) =>
     {
       if( !int.TryParse( width.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int w ) || w < 1 )
       {
         error.Text = "Width must be a whole number ≥ 1."; return;
       }
-      if( !double.TryParse( gap.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double g ) || g < 0 )
-      {
-        error.Text = "Gap before must be a number ≥ 0."; return;
-      }
 
-      b.Width     = w;
-      b.GapBefore = g;
-      b.Align     = leftAlign.IsChecked == true ? "left" : "center";
+      b.Width  = w;
+      b.Align  = leftAlign.IsChecked == true ? "left" : "center";
+      b.Desc   = string.IsNullOrEmpty( desc.Text )   ? null : desc.Text;
+      b.Hotkey = string.IsNullOrEmpty( hotkey.Text ) ? null : hotkey.Text.Trim();
+      b.ShowText = showText.IsChecked == true;
+      b.TipText  = tipText.IsChecked  == true;
 
-      if( blank.IsChecked == true )
+      string value = text.Text;
+      if( sensitive.IsChecked == true )
       {
-        // A blank cell carries no content — clear it all so nothing stale lingers.
-        b.Blank    = true;
-        b.Text     = "";
-        b.Desc     = null;
-        b.Hotkey   = null;
-        b.Secret   = null;
-        b.Locked   = false;
-        b.ShowText = true;
-        b.TipText  = false;
+        // Put the plaintext into Secret (sealed by ProcessSecrets on save); never leave
+        // it in Text, which is written to disk in the clear. Re-entering unlocks it.
+        b.Secret = value;
+        b.Locked = false;
+        b.Text   = "";
       }
       else
       {
-        b.Blank    = false;
-        b.Desc     = string.IsNullOrEmpty( desc.Text )   ? null : desc.Text;
-        b.Hotkey   = string.IsNullOrEmpty( hotkey.Text ) ? null : hotkey.Text.Trim();
-        b.ShowText = showText.IsChecked == true;
-        b.TipText  = tipText.IsChecked  == true;
-
-        string value = text.Text;
-        if( sensitive.IsChecked == true )
-        {
-          // Put the plaintext into Secret (sealed by ProcessSecrets on save); never leave
-          // it in Text, which is written to disk in the clear. Re-entering unlocks it.
-          b.Secret = value;
-          b.Locked = false;
-          b.Text   = "";
-        }
-        else
-        {
-          b.Secret = null;
-          b.Locked = false;
-          b.Text   = value;
-        }
+        b.Secret = null;
+        b.Locked = false;
+        b.Text   = value;
       }
 
       saved            = true;
@@ -159,20 +115,11 @@ internal static class ButtonEditDialog
   }
 
   // ── Builders ─────────────────────────────────────────────────────
-  private static Border Header( Func<string, Brush> B, string title, CheckBox blank )
+  private static Border Header( Func<string, Brush> B, string title )
   {
-    var grid = new Grid();
-    grid.ColumnDefinitions.Add( new ColumnDefinition { Width = new GridLength( 1, GridUnitType.Star ) } );
-    grid.ColumnDefinitions.Add( new ColumnDefinition { Width = GridLength.Auto } );
-
     var titles = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
     titles.Children.Add( new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeights.Bold, Foreground = B( "TextPrimary" ) } );
     titles.Children.Add( new TextBlock { Text = "Set the button’s text, behaviour and look.", FontSize = 11, Foreground = B( "AccentText" ) } );
-    Grid.SetColumn( titles, 0 );
-    grid.Children.Add( titles );
-
-    Grid.SetColumn( blank, 1 );
-    grid.Children.Add( blank );
 
     return new Border
     {
@@ -182,7 +129,7 @@ internal static class ButtonEditDialog
       CornerRadius    = new CornerRadius( 6 ),
       Padding         = new Thickness( 12 ),
       Margin          = new Thickness( 0, 0, 0, 14 ),
-      Child           = grid,
+      Child           = titles,
     };
   }
 

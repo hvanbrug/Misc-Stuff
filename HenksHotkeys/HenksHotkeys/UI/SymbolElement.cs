@@ -29,9 +29,4 @@ internal sealed class SymbolElement
   /// built-in code tabs (Emojis / Tools), which aren't JSON-editable. Gives the
   /// right-click menu a handle on the underlying model to edit / delete.</summary>
   public Core.ButtonDef? Source;
-
-  /// <summary>True when this element is a blank spacer cell: it occupies its cell but
-  /// draws nothing (a faint border on hover) and sends nothing — still right-click
-  /// editable so it can be turned into a real button.</summary>
-  public bool IsBlank;
 }

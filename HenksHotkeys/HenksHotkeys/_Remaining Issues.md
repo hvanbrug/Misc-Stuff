@@ -51,3 +51,11 @@ Implemented as a *header row* (not a new container): a row with a `section` key 
 *Bonus fix:* the merge row-rebuild used to drop the `blank` flag — it now preserves `blank`/`section`/`headerHeight` via `CloneRow`.
 
 15. It would be pretty cool if the user could drag a tab to a new position in the tab list, and have that new order saved to the json. This would be a nice feature for the user to be able to customize their experience.
+
+
+### Oddities
+- In the `WireSymbolButton` function, why aren't we just catching the `MouseDoubleClick` event instead of the mess we are doing now?
+- In the `PtToDip` function, what do the magic numbers mean: 4.0, 3.0?
+- In the `ComputeFullSize` function, what do the following magic numbers mean: 330, 320, 64?
+- I'm not sure the SettingsStore is initialized yet in the HotkeyWindow constructor. When config says collapsed, the window starts up uncollapsed, and then immediately collapses.
+- 
