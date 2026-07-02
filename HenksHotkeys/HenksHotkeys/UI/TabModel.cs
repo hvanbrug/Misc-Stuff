@@ -240,6 +240,7 @@ internal abstract class TabModel
     public int    Y      { get; init; }
     public int    Width  { get; init; }
     public int    Height { get; init; }
+    public string Align  { get; init; } = "left";
 
     /// <summary>The heading/section this was built from (data tabs only), so the right-click
     /// menu can edit / delete it. Null for headers with no editable source.</summary>

@@ -133,6 +133,19 @@ internal static class NativeMethods
 
   [DllImport( "user32.dll" )]
   [return: MarshalAs( UnmanagedType.Bool )]
+  public static extern bool BringWindowToTop( IntPtr hWnd );
+
+  [DllImport( "kernel32.dll" )]
+  public static extern uint GetCurrentThreadId();
+
+  // Attach our input queue to the foreground thread's so SetForegroundWindow is honoured even when
+  // the app doesn't currently own the foreground (our main window is WS_EX_NOACTIVATE).
+  [DllImport( "user32.dll" )]
+  [return: MarshalAs( UnmanagedType.Bool )]
+  public static extern bool AttachThreadInput( uint idAttach, uint idAttachTo, [MarshalAs( UnmanagedType.Bool )] bool fAttach );
+
+  [DllImport( "user32.dll" )]
+  [return: MarshalAs( UnmanagedType.Bool )]
   public static extern bool IsWindow( IntPtr hWnd );
 
   [DllImport( "user32.dll" )]

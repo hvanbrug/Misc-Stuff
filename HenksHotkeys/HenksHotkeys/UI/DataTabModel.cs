@@ -150,6 +150,7 @@ internal sealed class DataTabModel : TabModel
         Y      = rowY[s.Row],
         Width  = width,
         Height = HeaderPx( s ),
+        Align  = s.Align,
         Source = s,
       } );
     }

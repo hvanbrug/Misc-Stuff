@@ -1,1 +1,8 @@
-{}
+{
+  "favorites.resources": [
+    {
+      "filePath": "_claude_vscode_fs_readonly:/temp/readonly/command%20%281phfc5%29",
+      "group": "Default"
+    }
+  ]
+}

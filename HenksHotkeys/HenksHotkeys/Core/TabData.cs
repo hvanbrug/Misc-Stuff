@@ -181,6 +181,10 @@ internal sealed class SectionDef
   /// the same height as a button row.</summary>
   [JsonProperty( "span" ), DefaultValue( 0 )]
   public int Span { get; set; }
+
+  /// <summary>Text alignment of the heading label: "left" (default), "center" or "right".</summary>
+  [JsonProperty( "align" ), DefaultValue( "left" )]
+  public string Align { get; set; } = "left";
 }
 
 internal sealed class ButtonDef

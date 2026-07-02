@@ -263,6 +263,124 @@ internal static class TabStore
     SaveCurrent();
   }
 
+  // ── Multi-selection operations (buttons + headings together) ─────
+  /// <summary>Move a whole selection (buttons + headings) by (<paramref name="dRow"/>,
+  /// <paramref name="dCol"/>) within a tab — but only if every moved item lands in-bounds and on
+  /// cells not occupied by any *unselected* item. Collisions are prevented and nothing is
+  /// inserted/shifted; on any conflict the whole move is refused and nothing changes. Returns
+  /// true when the move was applied. (Designed to extend to cross-tab moves later.)</summary>
+  public static bool MoveSelection( TabEntry tab, IReadOnlyCollection<ButtonDef> buttons,
+                                    IReadOnlyCollection<SectionDef> sections, int dRow, int dCol )
+  {
+    if( ( dRow == 0 && dCol == 0 ) || ( buttons.Count == 0 && sections.Count == 0 ) )
+    {
+      return false;
+    }
+    int cols = tab.Columns > 0 ? tab.Columns : int.MaxValue;
+    int SpanOf( SectionDef s ) => s.Span > 0 ? s.Span : ( cols == int.MaxValue ? 1 : cols );
+
+    var moving = new HashSet<object>();
+    foreach( ButtonDef b in buttons )   moving.Add( b );
+    foreach( SectionDef s in sections ) moving.Add( s );
+
+    // Every cell occupied by an item that is NOT moving.
+    var taken = new HashSet<(int Row, int Col)>();
+    if( tab.Buttons is not null )
+      foreach( ButtonDef b in tab.Buttons )
+        if( !moving.Contains( b ) )
+          for( int c = 0; c < Math.Max( 1, b.Width ); c++ ) taken.Add( ( b.Row, b.Col + c ) );
+    if( tab.Sections is not null )
+      foreach( SectionDef s in tab.Sections )
+        if( !moving.Contains( s ) )
+          for( int c = 0; c < SpanOf( s ); c++ ) taken.Add( ( s.Row, s.Col + c ) );
+
+    bool Fits( int row, int col, int extent )
+    {
+      if( row < 0 || col < 0 ) return false;
+      if( cols != int.MaxValue && col + extent > cols ) return false;
+      for( int c = col; c < col + extent; c++ ) if( taken.Contains( ( row, c ) ) ) return false;
+      return true;
+    }
+
+    foreach( ButtonDef b in buttons )
+      if( !Fits( b.Row + dRow, b.Col + dCol, Math.Max( 1, b.Width ) ) ) return false;
+    foreach( SectionDef s in sections )
+      if( !Fits( s.Row + dRow, s.Col + dCol, SpanOf( s ) ) ) return false;
+
+    foreach( ButtonDef b in buttons )   { b.Row += dRow; b.Col += dCol; }
+    foreach( SectionDef s in sections ) { s.Row += dRow; s.Col += dCol; }
+    SaveCurrent();
+    return true;
+  }
+
+  /// <summary>Delete a whole selection (buttons + headings) from a tab, then persist. Returns
+  /// true if anything was removed (the re-stamp tombstones the deleted buttons for merge).</summary>
+  public static bool DeleteSelection( TabEntry tab, IReadOnlyCollection<ButtonDef> buttons,
+                                      IReadOnlyCollection<SectionDef> sections )
+  {
+    bool any = false;
+    if( tab.Buttons is not null )  foreach( ButtonDef b in buttons )   any |= tab.Buttons.Remove( b );
+    if( tab.Sections is not null ) foreach( SectionDef s in sections ) any |= tab.Sections.Remove( s );
+    if( any ) SaveCurrent();
+    return any;
+  }
+
+  /// <summary>Move a selection from <paramref name="src"/> to <paramref name="dst"/>, offset by
+  /// (<paramref name="dRow"/>, <paramref name="dCol"/>), keeping the items' relative layout. Only
+  /// applied if every item lands in-bounds of <paramref name="dst"/> and on a cell not already
+  /// occupied there (collisions prevented, nothing inserted); otherwise nothing changes. Returns
+  /// true when moved. The items keep their ids, so merge sees a re-homed element, not a delete+add.</summary>
+  public static bool MoveSelectionToTab( TabEntry src, TabEntry dst,
+                                         IReadOnlyCollection<ButtonDef> buttons,
+                                         IReadOnlyCollection<SectionDef> sections, int dRow, int dCol )
+  {
+    if( ReferenceEquals( src, dst ) || ( buttons.Count == 0 && sections.Count == 0 ) )
+    {
+      return false;
+    }
+    int cols = dst.Columns > 0 ? dst.Columns : int.MaxValue;
+    int SpanOf( SectionDef s ) => s.Span > 0 ? s.Span : ( cols == int.MaxValue ? 1 : cols );
+
+    // Everything already in the destination occupies cells the move must avoid.
+    var taken = new HashSet<(int Row, int Col)>();
+    if( dst.Buttons is not null )
+      foreach( ButtonDef b in dst.Buttons )
+        for( int c = 0; c < Math.Max( 1, b.Width ); c++ ) taken.Add( ( b.Row, b.Col + c ) );
+    if( dst.Sections is not null )
+      foreach( SectionDef s in dst.Sections )
+        for( int c = 0; c < SpanOf( s ); c++ ) taken.Add( ( s.Row, s.Col + c ) );
+
+    bool Fits( int row, int col, int extent )
+    {
+      if( row < 0 || col < 0 ) return false;
+      if( cols != int.MaxValue && col + extent > cols ) return false;
+      for( int c = col; c < col + extent; c++ ) if( taken.Contains( ( row, c ) ) ) return false;
+      return true;
+    }
+
+    foreach( ButtonDef b in buttons )
+      if( !Fits( b.Row + dRow, b.Col + dCol, Math.Max( 1, b.Width ) ) ) return false;
+    foreach( SectionDef s in sections )
+      if( !Fits( s.Row + dRow, s.Col + dCol, SpanOf( s ) ) ) return false;
+
+    dst.Buttons  ??= new List<ButtonDef>();
+    dst.Sections ??= new List<SectionDef>();
+    foreach( ButtonDef b in buttons )
+    {
+      src.Buttons?.Remove( b );
+      b.Row += dRow; b.Col += dCol;
+      dst.Buttons.Add( b );
+    }
+    foreach( SectionDef s in sections )
+    {
+      src.Sections?.Remove( s );
+      s.Row += dRow; s.Col += dCol;
+      dst.Sections.Add( s );
+    }
+    SaveCurrent();
+    return true;
+  }
+
   // Push every button and section at or below <paramref name="row"/> down one row, opening a
   // fresh row there.
   private static void ShiftRowsDown( TabEntry tab, int row )

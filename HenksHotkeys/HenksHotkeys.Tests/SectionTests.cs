@@ -189,6 +189,24 @@ public class SectionTests
   }
 
   [Fact]
+  public void Heading_CarriesItsTextAlignment()
+  {
+    DataTabModel t = Build( 6, new(),
+      new() { new SectionDef { Name = "H", Row = 0, Col = 1, Span = 3, Align = "right" } } );
+
+    Assert.Equal( "right", t.Headers[0].Align );
+  }
+
+  [Fact]
+  public void TabSig_ChangesWhenHeadingAlignChanges()
+  {
+    var a = new TabEntry { Name = "T", Columns = 6, Sections = new() { new SectionDef { Name = "H", Row = 0, Align = "left" } } };
+    var b = new TabEntry { Name = "T", Columns = 6, Sections = new() { new SectionDef { Name = "H", Row = 0, Align = "right" } } };
+
+    Assert.NotEqual( VersionStamp.TabSig( a ), VersionStamp.TabSig( b ) );
+  }
+
+  [Fact]
   public void TabSig_ChangesWhenHeadingColumnOrSpanChanges()
   {
     var a = new TabEntry { Name = "T", Columns = 8, Sections = new() { Head( "H", 0, 1, 2 ) } };

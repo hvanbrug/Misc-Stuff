@@ -90,7 +90,7 @@ internal static class VersionStamp
                                 t.Proportional, t.Square );
     string sections = t.Sections is null
       ? ""
-      : string.Join( ",", t.Sections.Select( s => s.Row + "/" + s.Name + "/" + s.Height + "/" + s.Col + "/" + s.Span ) );
+      : string.Join( ",", t.Sections.Select( s => s.Row + "/" + s.Name + "/" + s.Height + "/" + s.Col + "/" + s.Span + "/" + s.Align ) );
     return attrs + Sep + sections;
   }
 
@@ -402,7 +402,7 @@ internal static class VersionMerge
     ButtonWidth = s.ButtonWidth, ButtonHeight = s.ButtonHeight,
     EmojiImages = s.EmojiImages, StripEmojis = s.StripEmojis,
     Proportional = s.Proportional, Square = s.Square,
-    Sections = s.Sections?.Select( x => new SectionDef { Row = x.Row, Name = x.Name, Height = x.Height, Col = x.Col, Span = x.Span } ).ToList(),
+    Sections = s.Sections?.Select( x => new SectionDef { Row = x.Row, Name = x.Name, Height = x.Height, Col = x.Col, Span = x.Span, Align = x.Align } ).ToList(),
     Id = s.Id, Mod = s.Mod,
   };
 

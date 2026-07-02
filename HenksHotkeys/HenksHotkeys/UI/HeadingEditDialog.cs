@@ -44,9 +44,14 @@ internal static class HeadingEditDialog
     int     defSpan  = s.Span > 0 ? s.Span : Math.Max( 1, cols - Math.Max( 0, s.Col ) );
     TextBox span     = Small( B, defSpan.ToString( CultureInfo.InvariantCulture ) );
     var shortRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness( 0, 0, 0, 12 ) };
-    shortRow.Children.Add( Labeled( B, "Start column", startCol, 0 ) );
-    shortRow.Children.Add( Labeled( B, "Span (cols)", span, 16 ) );
+    shortRow.Children.Add( Labeled( B, "Start column", DialogControls.Spin( B, startCol, 0 ), 0 ) );
+    shortRow.Children.Add( Labeled( B, "Span (cols)",  DialogControls.Spin( B, span, 1 ), 16 ) );
     root.Children.Add( shortRow );
+
+    root.Children.Add( Label( B, "Text alignment" ) );
+    FrameworkElement alignPicker = DialogControls.AlignPicker( s.Align, out Func<string> getAlign );
+    alignPicker.Margin = new Thickness( 0, 0, 0, 12 );
+    root.Children.Add( alignPicker );
 
     var error = new TextBlock { Foreground = Brushes.IndianRed, TextWrapping = TextWrapping.Wrap, Margin = new Thickness( 0, 0, 0, 8 ) };
     root.Children.Add( error );
@@ -69,9 +74,10 @@ internal static class HeadingEditDialog
         error.Text = $"Span must be between 1 and {cols - c} at this start column."; return;
       }
 
-      s.Name = name.Text ?? "";
-      s.Col  = c;
-      s.Span = sp;
+      s.Name  = name.Text ?? "";
+      s.Col   = c;
+      s.Span  = sp;
+      s.Align = getAlign();
       saved            = true;
       win.DialogResult = true;
     };

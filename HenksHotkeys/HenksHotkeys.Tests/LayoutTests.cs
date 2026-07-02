@@ -46,4 +46,13 @@ public class LayoutTests
     Assert.Equal( EG, t.Symbols[0].Y );
     Assert.Equal( EG + 2 * CW, t.Symbols[1].Y );  // B is two rows down (row 1 left empty)
   }
+
+  [Fact]
+  public void ButtonAlignment_FlowsToTheSymbol()
+  {
+    DataTabModel t = new( new TabEntry { Name = "T", Columns = 6,
+      Buttons = new() { new ButtonDef { Text = "R", Row = 0, Col = 0, Align = "right" } } } );
+
+    Assert.Equal( "right", t.Symbols[0].Align );
+  }
 }

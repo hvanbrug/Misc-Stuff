@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
+using HenksHotkeys.Native;
 
 namespace HenksHotkeys.UI;
 
@@ -29,6 +30,35 @@ internal static class DialogChrome
       Theme.ApplyDarkFrame( h );
       Theme.ApplyRoundedCorners( h );
     };
+
+    // The app's main window is a non-activating tool window (WS_EX_NOACTIVATE), so when it spawns a
+    // dialog the process usually isn't the foreground one and Windows quietly refuses to activate the
+    // dialog — it appears on top but keystrokes go elsewhere. Force it to the foreground once shown.
+    win.Loaded += ( _, _ ) => ForceForeground( win );
+  }
+
+  /// <summary>Bring a just-shown dialog to the foreground and give it the keyboard, working around
+  /// the foreground lock by briefly attaching to the current foreground thread's input queue.</summary>
+  public static void ForceForeground( Window win )
+  {
+    IntPtr hwnd = new WindowInteropHelper( win ).Handle;
+    if( hwnd == IntPtr.Zero ) return;
+
+    IntPtr fg = NativeMethods.GetForegroundWindow();
+    uint   fgThread   = fg == IntPtr.Zero ? 0 : NativeMethods.GetWindowThreadProcessId( fg, out _ );
+    uint   thisThread = NativeMethods.GetCurrentThreadId();
+    bool   attached   = fgThread != 0 && fgThread != thisThread &&
+                        NativeMethods.AttachThreadInput( thisThread, fgThread, true );
+    try
+    {
+      NativeMethods.BringWindowToTop( hwnd );
+      NativeMethods.SetForegroundWindow( hwnd );
+      win.Activate();
+    }
+    finally
+    {
+      if( attached ) NativeMethods.AttachThreadInput( thisThread, fgThread, false );
+    }
   }
 
   public static Brush Brush( Window win, string key ) => (Brush)win.FindResource( key );
@@ -75,6 +105,34 @@ internal static class DialogChrome
     <Setter Property='Template'>
       <Setter.Value>
         <ControlTemplate TargetType='ToggleButton'>
+          <Border x:Name='bd' CornerRadius='5' BorderThickness='1'
+                  Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}'
+                  SnapsToDevicePixels='True'>
+            <ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='bd' Property='Background' Value='{DynamicResource ControlHover}'/></Trigger>
+            <Trigger Property='IsChecked' Value='True'>
+              <Setter TargetName='bd' Property='Background'  Value='{DynamicResource SwitchOn}'/>
+              <Setter TargetName='bd' Property='BorderBrush' Value='{DynamicResource SwitchOn}'/>
+              <Setter Property='Foreground' Value='White'/>
+            </Trigger>
+            <Trigger Property='IsEnabled' Value='False'><Setter TargetName='bd' Property='Opacity' Value='0.45'/></Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType='RadioButton'>
+    <Setter Property='FontSize'    Value='12'/>
+    <Setter Property='Cursor'      Value='Hand'/>
+    <Setter Property='Foreground'  Value='{DynamicResource TextBody}'/>
+    <Setter Property='Background'  Value='{DynamicResource ControlBg}'/>
+    <Setter Property='BorderBrush' Value='{DynamicResource ControlBorder}'/>
+    <Setter Property='Template'>
+      <Setter.Value>
+        <ControlTemplate TargetType='RadioButton'>
           <Border x:Name='bd' CornerRadius='5' BorderThickness='1'
                   Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}'
                   SnapsToDevicePixels='True'>

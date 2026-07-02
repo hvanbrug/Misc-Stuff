@@ -63,19 +63,23 @@ internal static class ButtonEditDialog
     hkRow.Children.Add( key );
     root.Children.Add( hkRow );
 
-    // ── Short fields share one row — they never hold much ──
-    TextBox width    = SmallBox( B, b.Width.ToString( CultureInfo.InvariantCulture ), 52 );
-    TextBox subCells = SmallBox( B, b.SubCells.ToString( CultureInfo.InvariantCulture ), 52 );
-    TextBox subCell  = SmallBox( B, ( b.SubCell + 1 ).ToString( CultureInfo.InvariantCulture ), 52 ); // shown 1-based
+    // ── Short numeric fields share one row, each with an up/down spinner ──
+    TextBox width    = SmallBox( B, b.Width.ToString( CultureInfo.InvariantCulture ), 42 );
+    TextBox subCells = SmallBox( B, b.SubCells.ToString( CultureInfo.InvariantCulture ), 42 );
+    TextBox subCell  = SmallBox( B, ( b.SubCell + 1 ).ToString( CultureInfo.InvariantCulture ), 42 ); // shown 1-based
     var shortRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness( 0, 0, 0, 12 ) };
-    shortRow.Children.Add( Labeled( B, "Width (cols)", width, 0 ) );
-    shortRow.Children.Add( Labeled( B, "Sub-cells", subCells, 14 ) );
-    shortRow.Children.Add( Labeled( B, "Sub-cell #", subCell, 14 ) );
+    shortRow.Children.Add( Labeled( B, "Width (cols)", DialogControls.Spin( B, width, 1 ), 0 ) );
+    shortRow.Children.Add( Labeled( B, "Sub-cells", DialogControls.Spin( B, subCells, 1 ), 14 ) );
+    shortRow.Children.Add( Labeled( B, "Sub-cell #", DialogControls.Spin( B, subCell, 1 ), 14 ) );
     root.Children.Add( shortRow );
 
-    // ── Checkboxes, grouped logically: display first, then security ──
+    // ── Text alignment (mutually-exclusive), then behaviour checkboxes ──
+    root.Children.Add( Label( B, "Text alignment" ) );
+    FrameworkElement alignPicker = DialogControls.AlignPicker( b.Align, out Func<string> getAlign );
+    alignPicker.Margin = new Thickness( 0, 0, 0, 10 );
+    root.Children.Add( alignPicker );
+
     CheckBox showText  = Check( B, root, "Show text on the button face",        b.ShowText );
-    CheckBox leftAlign = Check( B, root, "Left-align the text",                 b.Align == "left" );
     CheckBox tipText   = Check( B, root, "Include the text in the tooltip",     b.TipText );
     CheckBox sensitive = Check( B, root, "Sensitive — store the value encrypted", b.IsSecret );
 
@@ -129,7 +133,7 @@ internal static class ButtonEditDialog
       b.Width    = w;
       b.SubCells = sn;
       b.SubCell  = sn > 1 ? si - 1 : 0; // shown 1-based, stored 0-based
-      b.Align  = leftAlign.IsChecked == true ? "left" : "center";
+      b.Align  = getAlign();
       b.Desc   = string.IsNullOrEmpty( desc.Text ) ? null : desc.Text;
       b.Hotkey = hk.Length == 0 ? null : hk;
       b.ShowText = showText.IsChecked == true;

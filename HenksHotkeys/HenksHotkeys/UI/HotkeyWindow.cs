@@ -57,17 +57,45 @@ internal sealed class HotkeyWindow : Window
   private bool m_snappedToFav;
   private bool m_dragging;
 
-  // Button drag-to-reposition (distinct from the window-move drag above).
-  private SymbolElement? m_btnDragSym;
-  private Canvas?        m_btnDragCanvas;
-  private DataTabModel?  m_btnDragModel;
-  private Point          m_btnDragStart;
-  private Vector         m_btnDragGrab;
-  private bool           m_btnDragging;
-  private Border?        m_btnDragGhost;
-  private Border?        m_btnDropHi;       // filled cell highlight (drop on an empty cell)
-  private Border?        m_btnDropCaret;    // thin insertion caret (drop between buttons)
-  private FrameworkElement? m_btnDragEl;   // the element holding the mouse capture
+  // A drag in flight — either a single unselected button or the whole selection as a block.
+  // Both capture the (persistent) tab control and paint their ghost + drop cue on a window-level
+  // overlay, so the drag survives — and stays visible — when it crosses to another tab.
+  private enum DragMode { Single, Block }
+  private DragMode         m_dragMode;
+  private bool             m_dragArmed;    // a press landed; a move past the threshold starts the drag
+  private bool             m_dragActive;   // past the threshold — a drag is in flight
+  private DataTabModel?    m_dragSrcModel; // the tab the dragged item(s) belong to
+  private Canvas?          m_dragSrcCanvas;
+  private Point            m_dragStartSrc; // press point, in source-canvas coordinates
+  private Point            m_dragStartLayer; // press point, in overlay coordinates (block ghosts)
+  private Vector           m_dragGrab;     // press − grabbed-item top-left (single ghost offset)
+  private Rect             m_dragGrabRect; // grabbed item's rect (single ghost size)
+  private string           m_dragLabel = "";
+  private int              m_dragAnchorRow, m_dragAnchorCol; // grabbed item's cell (the move anchor)
+  private Core.ButtonDef?  m_dragButton;   // (single) the button being moved (for ResolveDrop)
+  private SymbolElement?   m_dragSym;       // (single) the on-screen button + its click action
+  private SymbolElement?   m_lastClickSym;  // double-click tracking for the data-button send
+  private long             m_lastClickTime;
+
+  // The always-visible overlay the ghost + drop cue live on (never clipped, above everything).
+  private Canvas  m_dragLayer = null!;
+  private Border? m_dragGhost;  // (single) the label ghost following the cursor
+  private Border? m_dragHi;     // filled "place here" cell highlight
+  private Border? m_dragCaret;  // thin insertion caret (single-button same-tab insert)
+  private readonly List<(Border box, Point p0)> m_blockGhosts = new(); // (block) one per selected item
+
+  // Multi-selection (Ctrl+click any buttons/headings) and moving the whole set as a block,
+  // possibly to another tab (drag over a tab header to switch, then drop).
+  private readonly HashSet<Core.ButtonDef>    m_selBtns     = new();
+  private readonly HashSet<Core.SectionDef>   m_selHeads    = new();
+  private readonly Dictionary<object, Border> m_selOverlays = new();
+  private readonly List<Canvas> m_tabCanvases = new(); // one per tab, aligned with AppState.Tabs
+  private Canvas?       m_selCanvas;  // canvas the selection + its overlays live on (source tab)
+  private DataTabModel? m_selModel;   // the tab the selection belongs to (source tab)
+  private int     m_hoverTab = -1;                 // tab header being dwelled over (to switch to)
+  private readonly DispatcherTimer m_tabDwell = new() { Interval = TimeSpan.FromMilliseconds( 450 ) };
+
+  private int SelectionCount => m_selBtns.Count + m_selHeads.Count;
 
   private IntPtr m_hwnd;
   private readonly DispatcherTimer m_activeWinTimer = new() { Interval = TimeSpan.FromMilliseconds( 200 ) };
@@ -121,6 +149,27 @@ internal sealed class HotkeyWindow : Window
     m_activeWinTimer.Tick += ( _, _ ) => TrackActiveWindow();
     m_activeWinTimer.Start();
 
+    // A drag (single button or a selection) captures the (persistent) tab control up front, so
+    // switching tabs mid-drag can't kill the capture. All the drag logic is driven from here.
+    // Because a data button's press captures the tab control (not the button), the plain click that
+    // sends its text is also delivered here (a press-release with no drag) — see OnDragUp / the
+    // no-drag branch below.
+    m_tabs.PreviewMouseMove += ( _, e ) => { if( m_dragArmed ) OnDragMove( e ); };
+    m_tabs.PreviewMouseLeftButtonUp += ( _, e ) =>
+    {
+      if( m_dragActive )     { OnDragUp( e );    e.Handled = true; } // real drag → drop
+      else if( m_dragArmed ) { ClickNoDrag();    e.Handled = true; } // plain press-release → send (single)
+    };
+    m_tabs.LostMouseCapture += ( _, _ ) => CancelDrag();
+    m_tabDwell.Tick += ( _, _ ) =>
+    {
+      m_tabDwell.Stop();
+      if( m_dragActive && m_hoverTab >= 0 && m_hoverTab != m_tabs.SelectedIndex && m_hoverTab < m_tabs.Items.Count )
+      {
+        m_tabs.SelectedIndex = m_hoverTab; // hovered a different tab long enough → switch to it
+      }
+    };
+
     PreviewKeyDown += ( _, e ) => { if( e.Key == Key.Escape ) SetCollapsed( true ); };
 
     // The context menu (assigned by App) is restricted to the bare window strip,
@@ -151,6 +200,14 @@ internal sealed class HotkeyWindow : Window
     Grid.SetRow( m_tabs, 1 );
     grid.Children.Add( strip );
     grid.Children.Add( m_tabs );
+
+    // A transparent, click-through overlay spanning the whole window. The drag ghost + drop cue
+    // are painted here (not on a tab's canvas) so they stay visible when a drag crosses tabs.
+    m_dragLayer = new Canvas { IsHitTestVisible = false };
+    Grid.SetRow( m_dragLayer, 0 );
+    Grid.SetRowSpan( m_dragLayer, 2 );
+    Panel.SetZIndex( m_dragLayer, 10000 );
+    grid.Children.Add( m_dragLayer );
 
     Content = new Border
     {
@@ -189,6 +246,8 @@ internal sealed class HotkeyWindow : Window
     m_suppressTabPersist = true;
     m_tabs.Items.Clear();
     m_scrollers.Clear();
+    m_tabCanvases.Clear();
+    ClearSelection(); // the rebuild makes fresh model instances, so drop any stale selection
 
     foreach( TabModel model in AppState.Tabs )
     {
@@ -202,6 +261,7 @@ internal sealed class HotkeyWindow : Window
         HorizontalAlignment = HorizontalAlignment.Left,
         VerticalAlignment   = VerticalAlignment.Top,
       };
+      m_tabCanvases.Add( canvas ); // aligned with AppState.Tabs / m_tabs.Items order
       // Headings render *under* the buttons: add them first so a button that overlaps a
       // heading still receives the mouse (stays draggable) and paints on top of it.
       foreach( TabModel.SectionHeader hdr in model.Headers )
@@ -210,6 +270,12 @@ internal sealed class HotkeyWindow : Window
         Canvas.SetLeft( label, hdr.X );
         Canvas.SetTop( label, hdr.Y );
         canvas.Children.Add( label );
+
+        // Headings are selectable (Ctrl+click) and move with the block when dragged.
+        if( model is DataTabModel headModel && hdr.Source is { } sdef )
+        {
+          WireHeadingSelect( label, sdef, new Rect( hdr.X, hdr.Y, hdr.Width, hdr.Height ), canvas, headModel );
+        }
       }
 
       foreach( SymbolElement sym in model.Symbols )
@@ -243,6 +309,12 @@ internal sealed class HotkeyWindow : Window
         // the open area adds a button/heading; buttons keep their own Edit/Delete menu.
         AttachEmptyCellHover( sv, canvas, dataModel );
         AttachAddHereMenu( sv, canvas, dataModel );
+
+        // A plain click on the empty area clears the selection (Ctrl+click keeps building it).
+        canvas.MouseLeftButtonDown += ( _, _ ) =>
+        {
+          if( ( Keyboard.Modifiers & ModifierKeys.Control ) == 0 && SelectionCount > 0 ) ClearSelection();
+        };
       }
 
       var item = new TabItem
@@ -296,7 +368,8 @@ internal sealed class HotkeyWindow : Window
 
     string buttonText = UiText.NormalizeDisplayText( sym.ShowChar ? sym.Char : sym.Desc );
     if( sym.Hotkey.Length > 0 ) buttonText = "• " + buttonText;
-    if( sym.Align == "left" )   buttonText = " "  + buttonText;
+    if( sym.Align == "left" )   buttonText = " "  + buttonText; // small inset off the edge
+    if( sym.Align == "right" )  buttonText = buttonText + " ";
 
     // A locked secret (couldn't be decrypted) wears a padlock and says why.
     bool locked = sym.Source is { IsSecret: true, Locked: true };
@@ -329,11 +402,14 @@ internal sealed class HotkeyWindow : Window
 
     if( !isEmoji )
     {
+      TextAlignment ta = sym.Align switch { "left"  => TextAlignment.Left,
+                                            "right" => TextAlignment.Right,
+                                            _       => TextAlignment.Center };
       btn.Content = new TextBlock
       {
         Text              = buttonText,
-        TextAlignment     = sym.Align == "left" ? TextAlignment.Left : TextAlignment.Center,
-        TextTrimming      = sym.Align == "left" ? TextTrimming.CharacterEllipsis : TextTrimming.None,
+        TextAlignment     = ta,
+        TextTrimming      = ta == TextAlignment.Center ? TextTrimming.None : TextTrimming.CharacterEllipsis,
         VerticalAlignment = VerticalAlignment.Center,
       };
     }
@@ -348,12 +424,17 @@ internal sealed class HotkeyWindow : Window
       btn.ToolTip = new TextBlock { Text = tip };
     }
 
-    WireSymbolButton( btn, sym.ClickAction );
-
-    // Data-tab buttons get a right-click menu to edit / delete them, plus the same add/insert
-    // actions as the open area. Built-in code tabs (Source == null) aren't JSON-editable.
-    if( sym.Source is {} def )
+    // A built-in code-tab button (Source == null) sends via its native Click. A data-tab button's
+    // press instead captures the tab control (so it can drag / cross tabs), which suppresses that
+    // Click — so its send is reproduced in ClickNoDrag when the press ends without a drag.
+    if( sym.Source is not {} def )
     {
+      WireSymbolButton( btn, sym.ClickAction );
+    }
+    else
+    {
+      // Data-tab buttons get a right-click menu to edit / delete them, plus the same add/insert
+      // actions as the open area.
       btn.ContextMenu = BuildButtonMenu( def, model as DataTabModel, canvas, btn );
     }
 
@@ -361,7 +442,7 @@ internal sealed class HotkeyWindow : Window
     return btn;
   }
 
-  private static ContextMenu BuildButtonMenu( ButtonDef def, DataTabModel? model, Canvas canvas, FrameworkElement btn )
+  private ContextMenu BuildButtonMenu( ButtonDef def, DataTabModel? model, Canvas canvas, FrameworkElement btn )
   {
     var menu = new ContextMenu();
     var edit = new MenuItem { Header = "Edit button…" };
@@ -379,6 +460,7 @@ internal sealed class HotkeyWindow : Window
       btn.PreviewMouseRightButtonDown += ( _, e ) => clickPoint = e.GetPosition( canvas );
       menu.Items.Add( new Separator() );
       AddInsertItems( menu, model, () => clickPoint );
+      AddSelectionItems( menu, model );
     }
     return menu;
   }
@@ -401,104 +483,71 @@ internal sealed class HotkeyWindow : Window
     menu.Items.Add( insHead );
   }
 
-  // ── Drag a button to a new slot (swaps with the cell dropped on) ───
-  // The whole drag is driven from the dragged element's own preview events: it keeps the
-  // mouse capture it grabbed on press, so move/up fire reliably even off the element (the
-  // earlier approach handed capture to the canvas mid-press, which often didn't take — so
-  // the ghost/highlight were placed once and never moved).
+  // Selection actions (Delete / Clear) added to every data-tab menu; they only show when a
+  // selection exists, and the count is refreshed each time the menu opens.
+  private void AddSelectionItems( ContextMenu menu, DataTabModel model )
+  {
+    var sep   = new Separator();
+    var del   = new MenuItem();
+    var clear = new MenuItem { Header = "Clear selection" };
+    del.Click += ( _, _ ) =>
+    {
+      // The selection belongs to its own tab (m_selModel), which may differ from this menu's.
+      if( m_selModel is { } sm && TabStore.DeleteSelection( sm.Entry, m_selBtns.ToList(), m_selHeads.ToList() ) )
+      {
+        AppState.RequestReload?.Invoke();
+      }
+    };
+    clear.Click += ( _, _ ) => ClearSelection();
+    menu.Items.Add( sep );
+    menu.Items.Add( del );
+    menu.Items.Add( clear );
+
+    menu.Opened += ( _, _ ) =>
+    {
+      int n = SelectionCount;
+      Visibility v = n > 0 ? Visibility.Visible : Visibility.Collapsed;
+      sep.Visibility = del.Visibility = clear.Visibility = v;
+      del.Header = $"Delete selected ({n})";
+    };
+  }
+
+  // ── Drag a button to a new slot (or another tab) ──────────────────
+  // A data-tab button's press arms a drag. An *unselected* button drags on its own (Single); a
+  // *selected* one drags the whole selection (Block). Either way the actual dragging is driven
+  // from the tab control's captured events (see the ctor) so it survives a tab switch — and the
+  // ghost + drop cue live on the window overlay, so they stay visible on whichever tab shows.
   private void WireDrag( FrameworkElement el, SymbolElement sym, Canvas canvas, DataTabModel model )
   {
     el.PreviewMouseLeftButtonDown += ( _, e ) =>
     {
-      m_btnDragSym    = sym;
-      m_btnDragCanvas = canvas;
-      m_btnDragModel  = model;
-      m_btnDragStart  = e.GetPosition( canvas );
-      m_btnDragging   = false;
-    };
+      if( sym.Source is not Core.ButtonDef def ) return;
+      var rect = new Rect( sym.X, sym.Y, sym.W, sym.H );
 
-    el.PreviewMouseMove += ( _, e ) =>
-    {
-      if( m_btnDragSym != sym || e.LeftButton != MouseButtonState.Pressed )
+      if( ( Keyboard.Modifiers & ModifierKeys.Control ) != 0 )
       {
+        ToggleSelect( def, rect, canvas, model );
+        e.Handled = true; // Ctrl+click selects; don't send / start a drag
         return;
       }
-      Point p = e.GetPosition( canvas );
-      if( !m_btnDragging )
-      {
-        if( Math.Abs( p.X - m_btnDragStart.X ) < SystemParameters.MinimumHorizontalDragDistance &&
-            Math.Abs( p.Y - m_btnDragStart.Y ) < SystemParameters.MinimumVerticalDragDistance )
-        {
-          return; // still a click, not a drag — let the send proceed
-        }
-        BeginButtonDrag( p );
-        m_btnDragEl = el;
-        el.CaptureMouse();   // ensure capture (esp. for blank Borders, which don't self-capture)
-      }
-      UpdateButtonDrag( p );
+
+      // Either way, capture the (persistent) tab control up front — before the button can capture
+      // itself — so a mid-drag tab switch can't drop the capture. Handling the press suppresses the
+      // button's own click; the send is reproduced in ClickNoDrag when the press ends without a drag.
+      Point    p    = e.GetPosition( canvas );
+      DragMode mode = m_selBtns.Contains( def ) ? DragMode.Block : DragMode.Single;
+      ArmDrag( mode, model, canvas, p, rect, GhostLabel( sym ), def.Row, def.Col );
+      m_dragSym    = sym;
+      m_dragButton = mode == DragMode.Single ? def : null; // only a single drag uses ResolveDrop
+      if( sym.Ctrl is UIElement pressed ) pressed.Opacity = 0.7; // press feedback (native pressed state is suppressed)
+      Mouse.Capture( m_tabs );
       e.Handled = true;
     };
-
-    el.PreviewMouseLeftButtonUp += ( _, e ) =>
-    {
-      if( m_btnDragging && m_btnDragSym == sym )
-      {
-        DropButtonDrag( e.GetPosition( canvas ) );
-        e.Handled = true; // swallow the click so the drop doesn't also send
-      }
-    };
-
-    el.LostMouseCapture += ( _, _ ) => CancelButtonDrag();
   }
 
-  private void BeginButtonDrag( Point at )
-  {
-    if( m_btnDragSym    is not {} sym ||
-        m_btnDragCanvas is not {} canvas )
-    {
-      return;
-    }
-
-    m_activeWinTimer.Stop(); // don't let background ticks disturb the drag
-    m_btnDragging = true;
-    m_btnDragGrab = at - new Point( sym.X, sym.Y );
-
-    if( sym.Ctrl is UIElement dragged )
-    {
-      dragged.Opacity = 0.35; // dim the original while its ghost is in flight
-    }
-
-    m_btnDragGhost = MakeGhost( sym );
-    Panel.SetZIndex( m_btnDragGhost, 1000 );
-    canvas.Children.Add( m_btnDragGhost );
-
-    // Drop on an empty cell → a filled, outlined cell highlight.
-    m_btnDropHi = new Border
-    {
-      BorderBrush      = Palette.Brush( "SwitchOn" ),
-      BorderThickness  = new Thickness( 2 ),
-      CornerRadius     = new CornerRadius( Layout.ButtonCornerRadius ),
-      Background       = Translucent( Palette.Colour( "SwitchOn" ), 0.22 ),
-      IsHitTestVisible = false,
-      Visibility       = Visibility.Collapsed,
-    };
-    Panel.SetZIndex( m_btnDropHi, 1001 ); // above the ghost so the drop cue is never hidden
-    canvas.Children.Add( m_btnDropHi );
-
-    // Drop between two buttons → a thin insertion caret on the before/after edge.
-    m_btnDropCaret = new Border
-    {
-      Width            = 3,
-      Background       = Palette.Brush( "SwitchOn" ),
-      CornerRadius     = new CornerRadius( 1.5 ),
-      IsHitTestVisible = false,
-      Visibility       = Visibility.Collapsed,
-    };
-    Panel.SetZIndex(     m_btnDropCaret, 1001 );
-    canvas.Children.Add( m_btnDropCaret );
-
-    UpdateButtonDrag( at );
-  }
+  private static bool PastDragThreshold( Point p, Point start )
+    => Math.Abs( p.X - start.X ) >= SystemParameters.MinimumHorizontalDragDistance ||
+       Math.Abs( p.Y - start.Y ) >= SystemParameters.MinimumVerticalDragDistance;
 
   private static SolidColorBrush Translucent( Color c, double opacity )
   {
@@ -507,119 +556,437 @@ internal sealed class HotkeyWindow : Window
     return b;
   }
 
-  private void UpdateButtonDrag( Point at )
+  private static string GhostLabel( SymbolElement sym )
+    => UiText.NormalizeDisplayText( sym.ShowChar ? sym.Char : sym.Desc );
+
+  // Record the pending drag. Capture (and the threshold) are handled by the caller / OnDragMove.
+  private void ArmDrag( DragMode mode, DataTabModel model, Canvas canvas, Point press,
+                        Rect grab, string label, int anchorRow, int anchorCol )
   {
-    if( m_btnDragGhost is {} ghost )
+    m_dragMode      = mode;
+    m_dragSrcModel  = model;
+    m_dragSrcCanvas = canvas;
+    m_dragStartSrc  = press;
+    m_dragGrabRect  = grab;
+    m_dragGrab      = press - grab.TopLeft;
+    m_dragLabel     = label;
+    m_dragAnchorRow = anchorRow;
+    m_dragAnchorCol = anchorCol;
+    m_dragArmed     = true;
+    m_dragActive    = false;
+    m_dragButton    = null;
+    m_dragSym       = null;
+    m_selModel      = model;   // the block drop / delete act on this tab
+    m_selCanvas     = canvas;
+  }
+
+  // Driven by the captured tab control. Detect the threshold, then track the ghost(s) / drop cue
+  // and dwell over tab headers to switch tabs.
+  private void OnDragMove( MouseEventArgs e )
+  {
+    if( !m_dragActive )
     {
-      Canvas.SetLeft( ghost, at.X - m_btnDragGrab.X );
-      Canvas.SetTop(  ghost, at.Y - m_btnDragGrab.Y );
+      if( m_dragSrcCanvas is not {} src ) return;
+      if( !PastDragThreshold( e.GetPosition( src ), m_dragStartSrc ) ) return;
+      BeginDrag();
+    }
+    UpdateDrag( e );
+    e.Handled = true;
+  }
+
+  private void BeginDrag()
+  {
+    Mouse.Capture( m_tabs ); // already captured on press; re-assert defensively
+
+    m_dragActive = true;
+    m_activeWinTimer.Stop(); // don't let background ticks disturb the drag
+
+    if( m_dragMode == DragMode.Single && m_dragSym?.Ctrl is UIElement dragged )
+    {
+      dragged.Opacity = 0.35; // dim the original while its ghost is in flight
     }
 
-    if( m_btnDragModel is not {} model ||
-        m_btnDropHi    is not {} hi    ||
-        m_btnDropCaret is not {} caret )
+    BuildDragVisuals();
+  }
+
+  private void BuildDragVisuals()
+  {
+    if( m_dragSrcCanvas is {} src )
     {
-      return;
+      m_dragStartLayer = src.TransformToVisual( m_dragLayer ).Transform( m_dragStartSrc );
     }
 
-    DropSpot spot = model.ResolveDrop( at, m_btnDragSym?.Source );
-    if( spot.Kind is DropKind.InsertBefore or DropKind.InsertAfter )
+    if( m_dragMode == DragMode.Single )
     {
-      // A thin caret on the insertion edge (which of rule a/b will fire is visible).
-      caret.Height = spot.CellH;
-      Canvas.SetLeft( caret, spot.CaretX );
-      Canvas.SetTop(  caret, spot.CellY  );
-      caret.Visibility = Visibility.Visible;
-      hi.Visibility    = Visibility.Collapsed;
+      // One label ghost following the cursor.
+      m_dragGhost = new Border
+      {
+        Width            = Math.Max( m_dragGrabRect.Width, Layout.SectionHeaderHeight ),
+        Height           = m_dragGrabRect.Height,
+        CornerRadius     = new CornerRadius( Layout.ButtonCornerRadius ),
+        Background       = Palette.Brush( "ControlHover" ),
+        BorderBrush      = Palette.Brush( "TextSecondary" ),
+        BorderThickness  = new Thickness( 1 ),
+        Opacity          = 0.85,
+        IsHitTestVisible = false,
+        Child = new TextBlock
+        {
+          Text                = m_dragLabel,
+          Foreground          = Palette.Brush( "TextPrimary" ),
+          HorizontalAlignment = HorizontalAlignment.Center,
+          VerticalAlignment   = VerticalAlignment.Center,
+          TextTrimming        = TextTrimming.CharacterEllipsis,
+        },
+      };
+      Panel.SetZIndex( m_dragGhost, 2 );
+      m_dragLayer.Children.Add( m_dragGhost );
     }
     else
     {
-      // Empty cell (or a brand-new row) — a filled cell highlight ("place here").
-      hi.Width  = spot.CellW;
-      hi.Height = spot.CellH;
-      Canvas.SetLeft( hi, spot.CellX );
-      Canvas.SetTop(  hi, spot.CellY );
-      hi.Visibility    = Visibility.Visible;
-      caret.Visibility = Visibility.Collapsed;
-    }
-  }
-
-  private void DropButtonDrag( Point drop )
-  {
-    if( !m_btnDragging )
-    {
-      return;
-    }
-    SymbolElement? source = m_btnDragSym;
-    DataTabModel?  model  = m_btnDragModel;
-    CancelButtonDrag(); // release capture, remove ghost/highlight, restore opacity
-
-    if( source?.Source is not {} moving || model is null )
-    {
-      return;
-    }
-
-    DropSpot spot = model.ResolveDrop( drop, moving );
-    // Empty cell (incl. a fresh row below the content) → place there; on a button → insert
-    // before/after it, shifting that row.
-    if( TabStore.MoveButtonToCell( moving, spot.Row, spot.Col ) )
-    {
-      AppState.RequestReload?.Invoke(); // rebuilds the tab at the new layout
-    }
-  }
-
-  private void CancelButtonDrag()
-  {
-    if( !m_btnDragging )
-    {
-      return;
-    }
-    m_btnDragging = false;
-    m_activeWinTimer.Start();
-
-    if( m_btnDragEl is {} el && ReferenceEquals( Mouse.Captured, el ) )
-    {
-      el.ReleaseMouseCapture();
-    }
-    m_btnDragEl = null;
-
-    if( m_btnDragSym?.Ctrl is UIElement dragged )
-    {
-      dragged.Opacity = 1.0;
-    }
-    if( m_btnDragCanvas is { } canvas )
-    {
-      if( m_btnDragGhost  is {} g ) canvas.Children.Remove( g );
-      if( m_btnDropHi     is {} h ) canvas.Children.Remove( h );
-      if( m_btnDropCaret  is {} c ) canvas.Children.Remove( c );
-    }
-    m_btnDragGhost = null;
-    m_btnDropHi    = null;
-    m_btnDropCaret = null;
-  }
-
-  private static Border MakeGhost( SymbolElement sym )
-  {
-    string label = UiText.NormalizeDisplayText( sym.ShowChar ? sym.Char : sym.Desc );
-    return new Border
-    {
-      Width            = sym.W,
-      Height           = sym.H,
-      CornerRadius     = new CornerRadius( Layout.ButtonCornerRadius ),
-      Background       = Palette.Brush( "ControlHover" ),
-      BorderBrush      = Palette.Brush( "TextSecondary" ), // neutral, so blue = the drop cue only
-      BorderThickness  = new Thickness( 1 ),
-      Opacity          = 0.8,
-      IsHitTestVisible = false,
-      Child = new TextBlock
+      // A block: a sliding ghost for *every* selected item, so the whole group is visible as it
+      // moves (and it stays visible when the drag crosses tabs). Hide the static source overlays
+      // while they're in flight so the group doesn't appear doubled on its own tab.
+      m_blockGhosts.Clear();
+      if( m_dragSrcCanvas is {} bsrc )
       {
-        Text                = label,
-        Foreground          = Palette.Brush( "TextPrimary" ),
-        HorizontalAlignment = HorizontalAlignment.Center,
-        VerticalAlignment   = VerticalAlignment.Center,
-        TextTrimming        = TextTrimming.CharacterEllipsis,
-      },
+        GeneralTransform toLayer = bsrc.TransformToVisual( m_dragLayer );
+        foreach( Border ov in m_selOverlays.Values )
+        {
+          ov.Visibility = Visibility.Hidden;
+          Point p0  = toLayer.Transform( new Point( Canvas.GetLeft( ov ), Canvas.GetTop( ov ) ) );
+          var   box = MakeSelOverlay( new Rect( 0, 0, ov.Width, ov.Height ) );
+          box.RenderTransform = null; // positioned directly on the overlay, not via a transform
+          Canvas.SetLeft( box, p0.X );
+          Canvas.SetTop(  box, p0.Y );
+          Panel.SetZIndex( box, 2 );
+          m_dragLayer.Children.Add( box );
+          m_blockGhosts.Add( ( box, p0 ) );
+        }
+      }
+    }
+
+    // Drop onto an empty cell → a filled "place here" highlight.
+    m_dragHi = new Border
+    {
+      BorderBrush      = Palette.Brush( "SwitchOn" ),
+      BorderThickness  = new Thickness( 2 ),
+      CornerRadius     = new CornerRadius( Layout.ButtonCornerRadius ),
+      Background       = Translucent( Palette.Colour( "SwitchOn" ), 0.22 ),
+      IsHitTestVisible = false,
+      Visibility       = Visibility.Collapsed,
     };
+    Panel.SetZIndex( m_dragHi, 3 ); // above the ghosts so the drop cue is never hidden
+    m_dragLayer.Children.Add( m_dragHi );
+
+    // Drop between two buttons (single, same-tab) → a thin insertion caret.
+    m_dragCaret = new Border
+    {
+      Width            = 3,
+      Background       = Palette.Brush( "SwitchOn" ),
+      CornerRadius     = new CornerRadius( 1.5 ),
+      IsHitTestVisible = false,
+      Visibility       = Visibility.Collapsed,
+    };
+    Panel.SetZIndex( m_dragCaret, 3 );
+    m_dragLayer.Children.Add( m_dragCaret );
+  }
+
+  private void UpdateDrag( MouseEventArgs e )
+  {
+    // The ghost(s) follow the cursor on the always-visible overlay.
+    Point onLayer = e.GetPosition( m_dragLayer );
+    if( m_dragMode == DragMode.Single )
+    {
+      if( m_dragGhost is {} g )
+      {
+        Canvas.SetLeft( g, onLayer.X - m_dragGrab.X );
+        Canvas.SetTop(  g, onLayer.Y - m_dragGrab.Y );
+      }
+    }
+    else
+    {
+      Vector d = onLayer - m_dragStartLayer;
+      foreach( (Border box, Point p0) in m_blockGhosts )
+      {
+        Canvas.SetLeft( box, p0.X + d.X );
+        Canvas.SetTop(  box, p0.Y + d.Y );
+      }
+    }
+
+    // The drop cue is drawn against whichever tab is currently showing (which may differ from
+    // the source after a header dwell switched tabs).
+    int           idx        = m_tabs.SelectedIndex;
+    DataTabModel? dest       = idx >= 0 && idx < AppState.Tabs.Count    ? AppState.Tabs[idx] as DataTabModel : null;
+    Canvas?       destCanvas = idx >= 0 && idx < m_tabCanvases.Count    ? m_tabCanvases[idx]                 : null;
+    if( dest is not null && destCanvas is not null )
+    {
+      ShowDropCue( dest, destCanvas, e.GetPosition( destCanvas ) );
+    }
+    else
+    {
+      HideDropCue(); // over a built-in (non-data) tab — nothing to drop onto
+    }
+
+    // Dwell over a *different* tab's header to switch to it.
+    int t = TabUnderCursor( e.GetPosition( m_tabs ) );
+    if( t >= 0 && t != m_tabs.SelectedIndex )
+    {
+      if( t != m_hoverTab ) { m_hoverTab = t; m_tabDwell.Stop(); m_tabDwell.Start(); }
+    }
+    else
+    {
+      m_hoverTab = -1;
+      m_tabDwell.Stop();
+    }
+  }
+
+  private void HideDropCue()
+  {
+    if( m_dragHi    is {} h ) h.Visibility = Visibility.Collapsed;
+    if( m_dragCaret is {} c ) c.Visibility = Visibility.Collapsed;
+  }
+
+  // Paint the drop cue for the current tab, transforming its cell geometry into overlay space.
+  private void ShowDropCue( DataTabModel dest, Canvas destCanvas, Point onDest )
+  {
+    GeneralTransform toLayer;
+    try { toLayer = destCanvas.TransformToVisual( m_dragLayer ); }
+    catch { HideDropCue(); return; } // canvas not yet realised right after a tab switch
+
+    // A single button dropped on its *own* tab keeps the insert semantics (caret / place). Any
+    // other case (block, or crossing to another tab) simply places at the pointed-at cell.
+    if( m_dragMode == DragMode.Single && ReferenceEquals( dest, m_dragSrcModel ) && m_dragButton is {} moving )
+    {
+      DropSpot spot = dest.ResolveDrop( onDest, moving );
+      if( spot.Kind is DropKind.InsertBefore or DropKind.InsertAfter )
+      {
+        if( m_dragCaret is {} caret )
+        {
+          Point tl = toLayer.Transform( new Point( spot.CaretX, spot.CellY ) );
+          caret.Height = spot.CellH;
+          Canvas.SetLeft( caret, tl.X );
+          Canvas.SetTop(  caret, tl.Y );
+          caret.Visibility = Visibility.Visible;
+        }
+        if( m_dragHi is {} hi ) hi.Visibility = Visibility.Collapsed;
+        return;
+      }
+      ShowPlaceHi( toLayer, spot.CellX, spot.CellY, spot.CellW, spot.CellH );
+      return;
+    }
+
+    int    row   = dest.RowAt( onDest.Y );
+    int    col   = dest.ColAt( onDest.X );
+    double cellX = dest.SymOrgX + col * dest.ColWidth;
+    double cellY = dest.RowTop( row );
+    ShowPlaceHi( toLayer, cellX, cellY, dest.SymBtnSizeX, dest.SymBtnSizeY );
+  }
+
+  private void ShowPlaceHi( GeneralTransform toLayer, double x, double y, double w, double h )
+  {
+    if( m_dragHi is not {} hi ) return;
+    Point tl = toLayer.Transform( new Point( x, y ) );
+    hi.Width  = w;
+    hi.Height = h;
+    Canvas.SetLeft( hi, tl.X );
+    Canvas.SetTop(  hi, tl.Y );
+    hi.Visibility = Visibility.Visible;
+    if( m_dragCaret is {} c ) c.Visibility = Visibility.Collapsed;
+  }
+
+  // Drop: single-button same-tab → insert (shift the row); anything else → place at the pointed-at
+  // cell, anchored so the grabbed item lands there and the rest keep their relative layout. Both
+  // the same-tab block move and every cross-tab move are collision-checked (no inserting).
+  private void OnDragUp( MouseEventArgs e )
+  {
+    DragMode        mode    = m_dragMode;
+    DataTabModel?   src     = m_dragSrcModel;
+    Core.ButtonDef? single  = m_dragButton;
+    int             anchorR = m_dragAnchorRow, anchorC = m_dragAnchorCol;
+    int             idx     = m_tabs.SelectedIndex;
+    DataTabModel?   dest    = idx >= 0 && idx < AppState.Tabs.Count ? AppState.Tabs[idx] as DataTabModel : null;
+    Canvas?         canvas  = idx >= 0 && idx < m_tabCanvases.Count ? m_tabCanvases[idx]                 : null;
+    Point           onDest  = canvas is not null ? e.GetPosition( canvas ) : default;
+    var             btns    = m_selBtns.ToList();
+    var             heads   = m_selHeads.ToList();
+
+    CancelDrag(); // release capture, remove the overlay visuals, restore opacity
+
+    if( src is null || dest is null || canvas is null )
+    {
+      return; // dropped over a built-in (non-data) tab, or lost state
+    }
+
+    bool ok;
+    if( mode == DragMode.Single )
+    {
+      if( single is null ) return;
+      if( ReferenceEquals( dest, src ) )
+      {
+        DropSpot spot = dest.ResolveDrop( onDest, single );
+        ok = TabStore.MoveButtonToCell( single, spot.Row, spot.Col );
+      }
+      else
+      {
+        int dRow = dest.RowAt( onDest.Y ) - anchorR;
+        int dCol = dest.ColAt( onDest.X ) - anchorC;
+        ok = TabStore.MoveSelectionToTab( src.Entry, dest.Entry,
+                                          new[] { single }, System.Array.Empty<Core.SectionDef>(), dRow, dCol );
+      }
+    }
+    else
+    {
+      int dRow = dest.RowAt( onDest.Y ) - anchorR;
+      int dCol = dest.ColAt( onDest.X ) - anchorC;
+      ok = ReferenceEquals( dest, src )
+        ? TabStore.MoveSelection( src.Entry, btns, heads, dRow, dCol )
+        : TabStore.MoveSelectionToTab( src.Entry, dest.Entry, btns, heads, dRow, dCol );
+    }
+
+    if( ok )
+    {
+      AppState.RequestReload?.Invoke(); // rebuild at the new layout (clears the selection)
+    }
+    // otherwise a collision / no-op: nothing moved, the selection is kept.
+  }
+
+  private void CancelDrag()
+  {
+    if( !m_dragArmed )
+    {
+      return; // not armed — nothing to unwind (avoids re-entrancy on a stray capture loss)
+    }
+    bool wasActive = m_dragActive;
+    m_dragArmed  = false;
+    m_dragActive = false;
+    m_hoverTab   = -1;
+    m_tabDwell.Stop();
+    if( wasActive ) m_activeWinTimer.Start();
+
+    if( ReferenceEquals( Mouse.Captured, m_tabs ) ) m_tabs.ReleaseMouseCapture();
+
+    if( m_dragSym?.Ctrl is UIElement dragged ) dragged.Opacity = 1.0;
+
+    if( m_dragGhost is {} g ) m_dragLayer.Children.Remove( g );
+    if( m_dragHi    is {} h ) m_dragLayer.Children.Remove( h );
+    if( m_dragCaret is {} c ) m_dragLayer.Children.Remove( c );
+    foreach( (Border box, Point _) in m_blockGhosts ) m_dragLayer.Children.Remove( box );
+    m_blockGhosts.Clear();
+    foreach( Border ov in m_selOverlays.Values ) ov.Visibility = Visibility.Visible; // un-hide the source overlays
+    m_dragGhost = null;
+    m_dragHi    = null;
+    m_dragCaret = null;
+  }
+
+  // A press on a data button that ended without a drag: reproduce the click send the button's own
+  // Click would have raised (suppressed because the press captured the tab control). A selected
+  // button / heading doesn't send. Mirrors the double-click → Enter behaviour of WireSymbolButton.
+  private void ClickNoDrag()
+  {
+    DragMode       mode = m_dragMode;
+    SymbolElement? sym  = m_dragSym;
+    CancelDrag();
+
+    if( mode != DragMode.Single || sym is null ) return; // a selected item: no send
+
+    long now  = Environment.TickCount64;
+    bool pair = ReferenceEquals( m_lastClickSym, sym ) && now - m_lastClickTime <= DoubleClickMs;
+    m_lastClickTime = now;
+    m_lastClickSym  = pair ? null : sym;
+    if( pair )
+    {
+      _ = TextSender.SendInputKeys( "{Enter}" ); // rapid second click → Enter
+      return;
+    }
+    try { sym.ClickAction(); } catch { /* never let a send failure kill the UI */ }
+  }
+
+  // ── Multi-selection (Ctrl+click) + block move (incl. to another tab) ─
+  // Toggle an item (button/heading) in the selection, showing/removing an accent overlay. A
+  // selection lives on one tab; Ctrl+clicking on a different tab starts a fresh one.
+  private void ToggleSelect( object item, Rect rect, Canvas canvas, DataTabModel model )
+  {
+    if( SelectionCount > 0 && !ReferenceEquals( canvas, m_selCanvas ) ) ClearSelection();
+    m_selCanvas = canvas;
+    m_selModel  = model;
+    bool add = item switch
+    {
+      Core.ButtonDef b  => !m_selBtns.Remove( b )  && m_selBtns.Add( b ),
+      Core.SectionDef s => !m_selHeads.Remove( s ) && m_selHeads.Add( s ),
+      _                 => false,
+    };
+    if( add )
+    {
+      Border ov = MakeSelOverlay( rect );
+      Panel.SetZIndex( ov, 900 ); // above buttons, below the drag ghost
+      canvas.Children.Add( ov );
+      m_selOverlays[item] = ov;
+    }
+    else if( m_selOverlays.Remove( item, out Border? ov ) )
+    {
+      canvas.Children.Remove( ov );
+    }
+  }
+
+  private void ClearSelection()
+  {
+    if( m_selCanvas is { } canvas )
+    {
+      foreach( Border ov in m_selOverlays.Values ) canvas.Children.Remove( ov );
+    }
+    m_selOverlays.Clear();
+    m_selBtns.Clear();
+    m_selHeads.Clear();
+    m_selModel  = null;
+    m_selCanvas = null;
+  }
+
+  private static Border MakeSelOverlay( Rect r )
+  {
+    var ov = new Border
+    {
+      Width            = r.Width,
+      Height           = r.Height,
+      BorderBrush      = Palette.Brush( "SwitchOn" ),
+      BorderThickness  = new Thickness( 2 ),
+      Background       = Translucent( Palette.Colour( "SwitchOn" ), 0.18 ),
+      CornerRadius     = new CornerRadius( Layout.ButtonCornerRadius ),
+      IsHitTestVisible = false,
+      RenderTransform  = new TranslateTransform(),
+    };
+    Canvas.SetLeft( ov, r.X );
+    Canvas.SetTop(  ov, r.Y );
+    return ov;
+  }
+
+  // A selectable heading (Ctrl+click to toggle; drag it, when selected, to move the block).
+  private void WireHeadingSelect( FrameworkElement el, Core.SectionDef def, Rect rect, Canvas canvas, DataTabModel model )
+  {
+    el.PreviewMouseLeftButtonDown += ( _, e ) =>
+    {
+      if( ( Keyboard.Modifiers & ModifierKeys.Control ) != 0 )
+      {
+        ToggleSelect( def, rect, canvas, model );
+        e.Handled = true;
+        return;
+      }
+      if( m_selHeads.Contains( def ) )
+      {
+        // Drag the block. Capture the (persistent) tab control now, before anything else grabs it,
+        // so switching tabs mid-drag can't drop it.
+        ArmDrag( DragMode.Block, model, canvas, e.GetPosition( canvas ), rect, def.Name, def.Row, def.Col );
+        Mouse.Capture( m_tabs );
+        e.Handled = true;
+      }
+    };
+  }
+
+  // The tab whose header/area is under the pointer (in tab-control coordinates), or −1.
+  private int TabUnderCursor( Point onTabs )
+  {
+    DependencyObject? hit = VisualTreeHelper.HitTest( m_tabs, onTabs )?.VisualHit;
+    while( hit is not null and not TabItem ) hit = VisualTreeHelper.GetParent( hit );
+    return hit is TabItem ti ? m_tabs.Items.IndexOf( ti ) : -1;
   }
 
   // Faint outline that follows the pointer over the tab's empty cells, so every cell reads
@@ -642,7 +1009,7 @@ internal sealed class HotkeyWindow : Window
 
     sv.MouseMove += ( _, e ) =>
     {
-      if( m_btnDragging ) { hover.Visibility = Visibility.Collapsed; return; } // the drag has its own cues
+      if( m_dragActive ) { hover.Visibility = Visibility.Collapsed; return; } // the drag has its own cues
       Point p    = e.GetPosition( canvas );
       int   row  = model.RowAt( p.Y );
       int   col  = model.ColAt( p.X );
@@ -667,19 +1034,20 @@ internal sealed class HotkeyWindow : Window
 
   // The open-area menu for a data tab: remembers where the right-click landed (in canvas
   // coordinates, so scrolling is accounted for) and adds a button there.
-  private static void AttachAddHereMenu( ScrollViewer sv, Canvas canvas, DataTabModel model )
+  private void AttachAddHereMenu( ScrollViewer sv, Canvas canvas, DataTabModel model )
   {
     Point clickPoint = default;
     sv.PreviewMouseRightButtonDown += ( _, e ) => clickPoint = e.GetPosition( canvas );
 
     var menu = new ContextMenu();
     AddInsertItems( menu, model, () => clickPoint );
+    AddSelectionItems( menu, model );
     sv.ContextMenu = menu;
   }
 
   // A section/heading label: bold text sitting on a separator line. An empty name renders as
   // just the line (a plain divider). On a data tab it gets a right-click Edit/Delete menu.
-  private static FrameworkElement BuildSectionHeader( TabModel.SectionHeader hdr, TabModel model )
+  private FrameworkElement BuildSectionHeader( TabModel.SectionHeader hdr, TabModel model )
   {
     var text = new TextBlock
     {
@@ -689,8 +1057,10 @@ internal sealed class HotkeyWindow : Window
       FontWeight          = FontWeights.SemiBold,
       Foreground          = Palette.Brush( "AccentText" ),
       VerticalAlignment   = VerticalAlignment.Bottom,
-      HorizontalAlignment = HorizontalAlignment.Left,
-      Margin              = new Thickness( Layout.EdgeGap, 0, 0, Layout.EdgeGap ),
+      HorizontalAlignment = hdr.Align switch { "center" => HorizontalAlignment.Center,
+                                               "right"  => HorizontalAlignment.Right,
+                                               _        => HorizontalAlignment.Left },
+      Margin              = new Thickness( Layout.EdgeGap, 0, Layout.EdgeGap, Layout.EdgeGap ),
       TextTrimming        = TextTrimming.CharacterEllipsis,
     };
     var border = new Border
@@ -712,6 +1082,7 @@ internal sealed class HotkeyWindow : Window
       del.Click += ( _, _ ) => HeadingCommands.Delete( def );
       menu.Items.Add( edit );
       menu.Items.Add( del );
+      AddSelectionItems( menu, dataModel );
       border.ContextMenu = menu;
     }
     return border;
