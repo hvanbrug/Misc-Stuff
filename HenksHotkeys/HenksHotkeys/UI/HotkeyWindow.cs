@@ -95,6 +95,12 @@ internal sealed class HotkeyWindow : Window
   private int     m_hoverTab = -1;                 // tab header being dwelled over (to switch to)
   private readonly DispatcherTimer m_tabDwell = new() { Interval = TimeSpan.FromMilliseconds( 450 ) };
 
+  // Drag a tab header to reorder the tabs (#15). Separate from the button drag above.
+  private int     m_tabDragFrom = -1;   // index of the header being dragged, or −1
+  private Point   m_tabDragStart;       // press point, in tab-control coordinates
+  private bool    m_tabDragging;
+  private Border? m_tabDropCaret;       // insertion caret on the overlay, between headers
+
   private int SelectionCount => m_selBtns.Count + m_selHeads.Count;
 
   private IntPtr m_hwnd;
@@ -323,11 +329,164 @@ internal sealed class HotkeyWindow : Window
         Content = sv,
         Style = (Style)Application.Current.FindResource( "AppTabItem" )!,
       };
+      WireTabHeader( item, model );
       m_tabs.Items.Add( item );
     }
 
     m_tabs.SelectedIndex = (targetTab >= 0) && (targetTab < m_tabs.Items.Count) ? targetTab : 0;
     m_suppressTabPersist = false;
+  }
+
+  // The tab strip is editable (#11) and reorderable (#15): every header carries a right-click menu
+  // (add / edit / move / delete) and can be dragged to a new position. Both act on the backing
+  // TabEntry via TabStore, then reload. The tab's index is read live from m_tabs.Items, so it stays
+  // correct as the strip changes.
+  private void WireTabHeader( TabItem item, TabModel model )
+  {
+    item.ContextMenu = BuildTabMenu( item, model );
+
+    item.PreviewMouseLeftButtonDown += ( _, e ) =>
+    {
+      // A TabItem hosts its whole tab body, so this fires for presses in the content too. Only a
+      // press on the header itself should arm a reorder — ignore presses inside the content.
+      if( IsWithin( e.OriginalSource, item.Content as DependencyObject ) ) return;
+      m_tabDragFrom  = m_tabs.Items.IndexOf( item );
+      m_tabDragStart = e.GetPosition( m_tabs );
+      m_tabDragging  = false;
+      // Not handled: let the tab control select this tab on press as usual.
+    };
+
+    item.PreviewMouseMove += ( _, e ) =>
+    {
+      if( m_tabDragFrom < 0 || e.LeftButton != MouseButtonState.Pressed ) return;
+      Point p = e.GetPosition( m_tabs );
+      if( !m_tabDragging )
+      {
+        if( !PastDragThreshold( p, m_tabDragStart ) ) return;
+        m_tabDragging = true;
+        item.CaptureMouse();
+        BuildTabDropCaret();
+      }
+      UpdateTabDropCaret( p );
+      e.Handled = true;
+    };
+
+    item.PreviewMouseLeftButtonUp += ( _, e ) =>
+    {
+      if( !m_tabDragging )
+      {
+        m_tabDragFrom = -1;   // a plain click — selection already handled on press
+        return;
+      }
+      int before = TabInsertIndexAt( e.GetPosition( m_tabs ) );
+      EndTabDrag();
+      if( before >= 0 && model.Backing is { } entry ) TabCommands.Move( entry, before );
+      e.Handled = true;
+    };
+
+    item.LostMouseCapture += ( _, _ ) => { if( m_tabDragging ) EndTabDrag(); };
+  }
+
+  private ContextMenu BuildTabMenu( TabItem item, TabModel model )
+  {
+    var menu = new ContextMenu();
+
+    var add = new MenuItem { Header = "Add tab…" };
+    add.Click += ( _, _ ) => TabCommands.Add( m_tabs.Items.IndexOf( item ) + 1 ); // after this one
+    menu.Items.Add( add );
+
+    if( model.Backing is { Builtin: null or "" } )
+    {
+      var edit = new MenuItem { Header = "Edit tab…" };
+      edit.Click += ( _, _ ) => { if( model.Backing is { } t ) TabCommands.Edit( t ); };
+      menu.Items.Add( edit );
+    }
+
+    menu.Items.Add( new Separator() );
+    var left  = new MenuItem { Header = "Move left"  };
+    var right = new MenuItem { Header = "Move right" };
+    left.Click  += ( _, _ ) => { int i = m_tabs.Items.IndexOf( item ); if( model.Backing is { } t && i > 0 ) TabCommands.Move( t, i - 1 ); };
+    right.Click += ( _, _ ) => { int i = m_tabs.Items.IndexOf( item ); if( model.Backing is { } t && i < m_tabs.Items.Count - 1 ) TabCommands.Move( t, i + 2 ); };
+    menu.Items.Add( left );
+    menu.Items.Add( right );
+
+    menu.Items.Add( new Separator() );
+    var del = new MenuItem { Header = "Delete tab" };
+    del.Click += ( _, _ ) => { if( model.Backing is { } t ) TabCommands.Delete( t ); };
+    menu.Items.Add( del );
+
+    menu.Opened += ( _, _ ) =>
+    {
+      int i = m_tabs.Items.IndexOf( item );
+      left.IsEnabled  = i > 0;
+      right.IsEnabled = i >= 0 && i < m_tabs.Items.Count - 1;
+    };
+    return menu;
+  }
+
+  private void BuildTabDropCaret()
+  {
+    m_tabDropCaret = new Border
+    {
+      Width            = 3,
+      Background       = Palette.Brush( "SwitchOn" ),
+      CornerRadius     = new CornerRadius( 1.5 ),
+      IsHitTestVisible = false,
+    };
+    Panel.SetZIndex( m_tabDropCaret, 3 );
+    m_dragLayer.Children.Add( m_tabDropCaret );
+  }
+
+  // Place the reorder caret at the insertion boundary nearest the pointer and return the index the
+  // dragged tab would land before (−1 = not over a header).
+  private int TabInsertIndexAt( Point onTabs )
+  {
+    int t = TabUnderCursor( onTabs );
+    if( t < 0 || t >= m_tabs.Items.Count || m_tabs.Items[t] is not TabItem ti )
+    {
+      return -1;
+    }
+    GeneralTransform toLayer;
+    try   { toLayer = ti.TransformToVisual( m_dragLayer ); }
+    catch { return -1; }
+
+    bool  after = ti.TransformToVisual( m_tabs ).Transform( new Point( 0, 0 ) ).X + ti.ActualWidth / 2 < onTabs.X;
+    Point edge  = toLayer.Transform( new Point( after ? ti.ActualWidth : 0, 0 ) );
+    if( m_tabDropCaret is { } caret )
+    {
+      caret.Height = ti.ActualHeight;
+      Canvas.SetLeft( caret, edge.X - 1 );
+      Canvas.SetTop(  caret, edge.Y );
+    }
+    return after ? t + 1 : t;
+  }
+
+  private void UpdateTabDropCaret( Point onTabs ) => TabInsertIndexAt( onTabs );
+
+  // True when <paramref name="src"/> (a mouse event's OriginalSource) sits inside <paramref
+  // name="container"/> in the visual tree — used to tell a header press from a body press.
+  private static bool IsWithin( object? src, DependencyObject? container )
+  {
+    if( container is null ) return false;
+    DependencyObject? d = src as DependencyObject;
+    while( d is not null )
+    {
+      if( ReferenceEquals( d, container ) ) return true;
+      // GetParent throws on a non-Visual (e.g. a text Run); fall back to the logical tree there.
+      d = d is Visual or System.Windows.Media.Media3D.Visual3D
+            ? VisualTreeHelper.GetParent( d )
+            : LogicalTreeHelper.GetParent( d );
+    }
+    return false;
+  }
+
+  private void EndTabDrag()
+  {
+    m_tabDragging = false;
+    m_tabDragFrom = -1;
+    if( Mouse.Captured is TabItem ti ) ti.ReleaseMouseCapture();
+    if( m_tabDropCaret is { } c ) m_dragLayer.Children.Remove( c );
+    m_tabDropCaret = null;
   }
 
   /// <summary>Rebuild the tab UI after the tab models were reloaded from disk.</summary>
@@ -1066,7 +1225,9 @@ internal sealed class HotkeyWindow : Window
     var border = new Border
     {
       Width           = hdr.Width,
-      Height          = hdr.Height,
+      // Shrink a couple of pixels so the separator line lifts clear of the buttons in the row
+      // below (the header band otherwise butts right up against the next row's cells).
+      Height          = Math.Max( 1, hdr.Height - HeadingUnderlineLift ),
       Background      = Brushes.Transparent, // hit-testable so the right-click menu opens
       BorderBrush     = Palette.Brush( "AccentBarBorder" ),
       BorderThickness = new Thickness( 0, 0, 0, 1 ), // separator line
@@ -1087,6 +1248,8 @@ internal sealed class HotkeyWindow : Window
     }
     return border;
   }
+
+  private const double HeadingUnderlineLift = 2; // px the heading separator sits above the next row
 
   private static string Append( string tip, string line )
   {

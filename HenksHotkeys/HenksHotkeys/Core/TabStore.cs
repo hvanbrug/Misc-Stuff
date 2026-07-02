@@ -111,6 +111,72 @@ internal static class TabStore
     SaveShadow( s_file );
   }
 
+  // ── Tab-level operations (add / delete / reorder) ───────────────
+  // Rename and per-tab attribute edits are done by mutating the TabEntry in place (as the button
+  // editor does with ButtonDef) and calling SaveCurrent(); the re-stamp bumps the tab's clock
+  // because TabSig covers those fields. These three change the tab *set* or *order*.
+
+  /// <summary>Append a new (data) tab to the config and persist. The re-stamp gives it an id and
+  /// clock. Returns the created entry (already in the live file).</summary>
+  public static TabEntry? AddTab( TabEntry newTab, int insertBeforeIndex = int.MaxValue )
+  {
+    if( s_file is null )
+    {
+      return null;
+    }
+    int at = Math.Clamp( insertBeforeIndex, 0, s_file.Tabs.Count );
+    s_file.Tabs.Insert( at, newTab );
+    SaveCurrent();
+    return newTab;
+  }
+
+  /// <summary>Remove a tab (and, implicitly, its buttons) from the config and persist. The
+  /// re-stamp leaves tombstones so the deletion propagates on merge. Returns false if not found
+  /// or if it is the last remaining tab (never leave the app with none).</summary>
+  public static bool DeleteTab( TabEntry tab )
+  {
+    if( s_file is null || s_file.Tabs.Count <= 1 || !s_file.Tabs.Remove( tab ) )
+    {
+      return false;
+    }
+    SaveCurrent();
+    return true;
+  }
+
+  /// <summary>Move <paramref name="tab"/> so it ends up before <paramref name="insertBeforeIndex"/>
+  /// (an index into the current, pre-move list), then persist. Order is stored as the list order;
+  /// the merge keeps the local order, so a reorder survives sharing. Returns false on no-op.</summary>
+  public static bool MoveTab( TabEntry tab, int insertBeforeIndex )
+  {
+    if( s_file is null || !ReorderTabs( s_file.Tabs, tab, insertBeforeIndex ) )
+    {
+      return false;
+    }
+    SaveCurrent();
+    return true;
+  }
+
+  /// <summary>Pure list-move: reposition <paramref name="tab"/> so it lands before
+  /// <paramref name="insertBeforeIndex"/> (an index into the current list). Returns false if the
+  /// tab isn't present or the move is a no-op. Factored out so the index math is unit-testable.</summary>
+  internal static bool ReorderTabs( List<TabEntry> tabs, TabEntry tab, int insertBeforeIndex )
+  {
+    int from = tabs.IndexOf( tab );
+    if( from < 0 )
+    {
+      return false;
+    }
+    int to = insertBeforeIndex > from ? insertBeforeIndex - 1 : insertBeforeIndex; // account for removal
+    to = Math.Clamp( to, 0, tabs.Count - 1 );
+    if( to == from )
+    {
+      return false;
+    }
+    tabs.RemoveAt( from );
+    tabs.Insert( to, tab );
+    return true;
+  }
+
   /// <summary>Place a new button at an explicit grid cell of a tab, then persist. If the
   /// cell is already occupied, the occupant and the contiguous run after it shift one
   /// column to the right (wrapping to the next row at the column edge).</summary>
@@ -733,16 +799,16 @@ internal static class TabStore
 
   private static TabModel? Build( TabEntry entry )
   {
-    if( !string.IsNullOrEmpty( entry.Builtin ) )
-    {
-      return entry.Builtin switch
-             {
-               "Emojis" => new EmojisTab(),
-               "Tools"  => new ToolsTab(),
-               _        => null, // unknown built-in name → skip
-             };
-    }
-    return new DataTabModel( entry );
+    TabModel? model = !string.IsNullOrEmpty( entry.Builtin )
+      ? entry.Builtin switch
+        {
+          "Emojis" => new EmojisTab(),
+          "Tools"  => new ToolsTab(),
+          _        => null, // unknown built-in name → skip
+        }
+      : new DataTabModel( entry );
+    if( model is not null ) model.Backing = entry; // back-reference for tab-level commands
+    return model;
   }
 
   // Read the user's file, creating it from the embedded default the first time.

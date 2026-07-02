@@ -9,16 +9,7 @@ Partly modernised: data tabs lay out from `rows` + `columns` + `gapBefore`/`inde
 6. Quarantine the Win32 interop.
 **Open.** `NativeMethods` centralises the P/Invokes and the elevated window-fit is wrapped (`ElevatedFit`), but the window still calls Win32 directly; there's no interface boundary yet. Wrapping the OS-integration bits (hotkeys, input send, foreground tracking, snap) behind a small interface would isolate the unavoidable Win32.
 
-11. Full-on UI configuration — no more error-prone manual JSON editing.
-**In progress (end goal).** Manual editing is much safer now — embedded `_readme` cheat-sheet, **Reload**, **Export/Import** with per-button merge + **Repair duplicate tabs**, encrypted secrets, and blank/gap spacers.
-*Stage 1 done — per-button right-click menu:* **Edit button…** opens a dialog for every `ButtonDef` property (text/value, desc, hotkey, width, gap, left-align, show-text, tip-text, blank, sensitive), and **Delete button** (with confirm). Both mutate the live model, persist via `TabStore.SaveCurrent()`/`DeleteButton()` (which keep the crypto header + tombstones intact and re-stamp for merge), then rebuild the UI. Built on a back-link from `SymbolElement` → `ButtonDef`; code tabs (Emojis/Tools) get no menu.
-*Add done — open-area right-click:* **Add button here…** (on the tab's empty area, menu hung off the ScrollViewer so the whole tab is reachable) opens the same dialog and inserts the new button next to where you clicked — after/before the nearest button by click position (`TabStore.InsertButton`), or as a first row in an empty tab (`TabStore.AddButton`).
-*Blanks are first-class now:* blank spacer cells are placed/rendered as invisible, hit-testable cells that show a faint border on hover and carry the same Edit/Delete menu — so you turn a blank into a real button in place (uncheck "Blank" in the dialog) instead of inserting next to it. The dialog clears + greys-out the content fields while "Blank" is ticked, and `InsertButton` now *consumes* an adjacent blank rather than pushing the row wider (fixes the spurious wrap-row a positional insert used to create).
-*Next stages:* tab-level menu (rename / add / delete / reorder), then live single-button regeneration and #2 (panels) for true WYSIWYG.
-
 13. Add a favourites section at the top of the Emojis tab that is configurable by the user.
-
-15. It would be pretty cool if the user could drag a tab to a new position in the tab list, and have that new order saved to the json. This would be a nice feature for the user to be able to customize their experience.
 
 # Completed
 
@@ -47,12 +38,22 @@ The tray NotifyIcon (Shell_NotifyIcon), Clipboard (System.Windows.Clipboard), an
 The strip's hand-tuned margins are gone: both the left cluster (○ ▲ ☺) and the right cluster (🔄 ⌫. ⇚, ↩ ▲) sit at `Layout.EdgeGap` from the window edges via the border padding, the strip auto-sizes to its controls (no fixed `Height = 26`), and the indicator spacing uses `EdgeGap`. The collapsed window is now derived — `CollapsedSize()` measures the left cluster and adds the border + edge-gap chrome (≈ 79×30) instead of the old hardcoded 84×28.
 *Note:* the right cluster's per-glyph `RaiseTop` baseline nudges and the fixed inter-icon gap remain — they're font-metric cosmetics, not edge positioning.
 
+11. Full-on UI configuration — no more error-prone manual JSON editing.
+**DONE** — Manual editing is much safer now — embedded `_readme` cheat-sheet, **Reload**, **Export/Import** with per-button merge + **Repair duplicate tabs**, encrypted secrets, and blank/gap spacers.
+*Stage 1 done — per-button right-click menu:* **Edit button…** opens a dialog for every `ButtonDef` property (text/value, desc, hotkey, width, gap, left-align, show-text, tip-text, blank, sensitive), and **Delete button** (with confirm). Both mutate the live model, persist via `TabStore.SaveCurrent()`/`DeleteButton()` (which keep the crypto header + tombstones intact and re-stamp for merge), then rebuild the UI. Built on a back-link from `SymbolElement` → `ButtonDef`; code tabs (Emojis/Tools) get no menu.
+*Add done — open-area right-click:* **Add button here…** (on the tab's empty area, menu hung off the ScrollViewer so the whole tab is reachable) opens the same dialog and inserts the new button next to where you clicked — after/before the nearest button by click position (`TabStore.InsertButton`), or as a first row in an empty tab (`TabStore.AddButton`).
+*Blanks are first-class now:* blank spacer cells are placed/rendered as invisible, hit-testable cells that show a faint border on hover and carry the same Edit/Delete menu — so you turn a blank into a real button in place (uncheck "Blank" in the dialog) instead of inserting next to it. The dialog clears + greys-out the content fields while "Blank" is ticked, and `InsertButton` now *consumes* an adjacent blank rather than pushing the row wider (fixes the spurious wrap-row a positional insert used to create).
+*Tab-level menu done:* right-click any tab header for **Add tab…**, **Edit tab…** (data tabs only), **Move left / Move right**, and **Delete tab** (with confirm; refuses the last remaining tab). **Edit/Add** open `TabEditDialog` — every data-tab attribute: name, columns, **button font size (pt)**, font family, button width/height, and the proportional / square / emoji-images / strip-emojis toggles (so the button `fontSize` is no longer JSON-only). New `TabStore.AddTab` / `DeleteTab` / `MoveTab` mutate the live `s_file.Tabs` and persist; the re-stamp handles it — a rename bumps the tab's clock (name is in `TabSig`), an add gets an id, a delete leaves a tombstone. Every `TabModel` now back-links its `TabEntry` (`Backing`) so a command finds its tab regardless of position. 5 tests added.
+*Next stages:* live single-button regeneration and #2 (panels) for true WYSIWYG.
+
 12. **DONE** — Make the buttons in a tab control originate at top left instead of center.
 The button `Canvas` is now `HorizontalAlignment.Left` + `VerticalAlignment.Top`, so a tab narrower than the (locked) window width sits at the top-left edge-gap instead of being centred. (Done alongside #8/#9.)
 
 14. **DONE** — Label sections in a tab.
 Implemented as a *header row* (not a new container): a row with a `section` key is a header that labels the rows beneath it until the next header — `{"section": "My group"}` for a labelled divider, `{"section": ""}` for a plain line, optional `headerHeight` (px, default `Layout.SectionHeaderHeight` = 24). Backward compatible (existing flat `rows` files are unchanged; a tab with no header rows is one implicit unnamed section) and the merge needed no new nesting — header rows carry through `TabSig`/`NormalizeRows`/merge like blank rows, with their buttons cleared on load. Renders as a bold label on a separator line spanning the columns (`DataTabModel` emits `TabModel.SectionHeader`; `HotkeyWindow.BuildSectionHeader` draws it). Cheat-sheet updated.
 *Bonus fix:* the merge row-rebuild used to drop the `blank` flag — it now preserves `blank`/`section`/`headerHeight` via `CloneRow`.
+
+15. **DONE** — Drag a tab header to a new position; the new order is saved to tabs.json. A header press past the drag threshold captures that `TabItem` and shows a blue insertion caret (on the window overlay) at the nearest boundary between headers; dropping calls `TabStore.MoveTab`, which reorders `s_file.Tabs` and persists. Order is stored as the list order, and the merge keeps the local order, so a reorder survives sharing. The reorder is gated to header presses (a press inside the tab body is ignored) and coexists with the button-drag (which sets `Handled` on the tab control first). Menu **Move left / Move right** do the same without dragging. Reorder index math + merge-keeps-order covered by tests.
 
 16. **DONE** — It would be very nice to be able to create and move buttons more than one row past the last row.
 

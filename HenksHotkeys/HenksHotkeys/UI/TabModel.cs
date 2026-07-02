@@ -11,6 +11,11 @@ namespace HenksHotkeys.UI;
 internal abstract class TabModel
 {
   public string Name        { get; }
+
+  /// <summary>The on-disk entry this tab was built from (data <i>and</i> built-in tabs), so a
+  /// tab-level command can find and mutate it regardless of the tab's position in the list.</summary>
+  public TabEntry? Backing { get; set; }
+
   public float  FontSize    { get; protected set; } = 14f;
   public string FontName    { get; protected set; } = "Segoe UI";
   public int    SymOrgX     => Layout.TabEdgeGap;  // buttons inset from the tab boundary
