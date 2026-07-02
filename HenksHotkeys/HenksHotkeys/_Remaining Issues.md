@@ -52,10 +52,22 @@ Implemented as a *header row* (not a new container): a row with a `section` key 
 
 15. It would be pretty cool if the user could drag a tab to a new position in the tab list, and have that new order saved to the json. This would be a nice feature for the user to be able to customize their experience.
 
+17. **DONE** — Hotkey editor now uses **Ctrl / Alt / Win / Shift toggle buttons** + a narrow key box instead of raw `^+!#` typing. The four toggles are equal-sized and the same height as the key box, stay pressed (accent) when selected (a styled `ToggleButton` template added to `DialogChrome`), and the box holds just the unmodified key (e.g. `F9`). `HotkeyParser.Split`/`Compose` convert between the toggles+key and the stored AHK string (composed in Ctrl/Alt/Win/Shift order); the key is validated on OK (single letter/digit or F1–F24, and a modifier without a key is rejected). 5 parser tests added (split, compose, round-trip).
+
+18. Need to be able to move buttons to different tabs.
+
+21. Need to be able to insert a blank row, and a heading between two rows. The current "Insert Heading" should be renamed "Add Heading".
+
+22. Heading text should be placed left, or center, or right aligned. The default should be left aligned. Use some sort of mutually exclusive buttons for the setting selection
+
+23. Button text should be placed left, or center, or right aligned. The default should be center aligned. Use some sort of mutually exclusive buttons for the setting selection
+
+24. Add up/down to the all cell number, cell count, etc. settings edit boxes for easier changes.
 
 ### Oddities
-- In the `WireSymbolButton` function, why aren't we just catching the `MouseDoubleClick` event instead of the mess we are doing now?
-- In the `PtToDip` function, what do the magic numbers mean: 4.0, 3.0?
-- In the `ComputeFullSize` function, what do the following magic numbers mean: 330, 320, 64?
-- I'm not sure the SettingsStore is initialized yet in the HotkeyWindow constructor. When config says collapsed, the window starts up uncollapsed, and then immediately collapses.
-- 
+- **Answered** — `WireSymbolButton` vs `MouseDoubleClick`: a `Button` raises `Click` on *both* clicks of a double-click, so `MouseDoubleClick` would sit on top of two Clicks and send the text twice (text, Enter, text). A wait-and-see timer would instead delay the single-click send, which must be instant. So we send on the first Click and, if a second lands within `DoubleClickMs`, turn *that* one into the Enter. (Comment added.)
+- **Answered** — `PtToDip` 4.0/3.0: a point is 1/72 inch, a WPF DIP is 1/96 inch, so points→DIPs scales by 96/72 = 4/3. Now written as named `DipsPerInch`/`PointsPerInch` constants.
+- **Answered** — `ComputeFullSize` 330/320/64: the default (unsaved) height clamps the tallest tab's content into a [320, 330] DIP band, then adds 64 DIP of non-scrolling chrome (toolbar strip + tab-header row + top/bottom borders). Now named `DefaultViewportMin`/`DefaultViewportMax`/`VerticalChrome`.
+- **DONE** — startup collapse flash: settings *are* loaded in the constructor (it already reads FavX/FavY), so the saved collapsed state is now applied there — before the first `Show()` — instead of flashing open at full size and snapping shut in `ShowUi`. The height-capture in `SetCollapsed` is guarded (`ActualHeight > 0`) so collapsing before the window is measured no longer zeroes the remembered expanded height. Verified: starts collapsed (101×35) and expands to a proper height.
+- **DONE** — empty-cell hover skipped trailing columns: the hover was tracked on the `Canvas`, which is only as wide as the *content*, so cells in columns past the last button (e.g. the last column of a sparse tab) were outside it. The move is now tracked on the `ScrollViewer` (which fills the whole tab width), and the outline lives on the un-clipped canvas, so every column up to `columns` highlights. Verified: col 7 highlights on a tab whose content stops at col 1.
+- **DONE** — a button overlapping a heading was un-draggable (and got trapped there): section headings are hit-testable (for their right-click menu) and were added *after* the buttons, so they painted on top and swallowed the button's mouse events. Headings now render *under* the buttons (added first), so an overlapping button stays on top — clickable and draggable back out. Verified: a button sharing a heading's cell drags away cleanly.

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using HenksHotkeys.Core;
 
@@ -40,11 +41,31 @@ internal static class ButtonEditDialog
     TextBox text = Multiline( B, root, "Text / value", b.IsSecret ? ( SecretSession.Reveal( b.Secret ) ?? "" ) : b.Text );
     TextBox desc = Multiline( B, root, "Description (tooltip / face)", b.Desc ?? "" );
 
+    // ── Hotkey: modifier toggles + just the key (no error-prone ^+!# typing) ──
+    HotkeyParser.Split( b.Hotkey, out bool hCtrl, out bool hAlt, out bool hWin, out bool hShift, out string hKey );
+    ToggleButton ctrl  = Mod( "Ctrl",  hCtrl );
+    ToggleButton alt   = Mod( "Alt",   hAlt );
+    ToggleButton win2  = Mod( "Win",   hWin );
+    ToggleButton shift = Mod( "Shift", hShift );
+    TextBox      key   = StyledBox( B, hKey );
+    key.Width         = 46;
+    key.Height        = 28;
+    key.TextAlignment = TextAlignment.Center;
+    key.Margin        = new Thickness( 10, 0, 0, 0 );
+    key.ToolTip       = "A single letter/digit, or F1–F24";
+
+    root.Children.Add( Label( B, "Hotkey — pick modifiers, then the key" ) );
+    var hkRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness( 0, 0, 0, 12 ) };
+    hkRow.Children.Add( ctrl );
+    hkRow.Children.Add( alt );
+    hkRow.Children.Add( win2 );
+    hkRow.Children.Add( shift );
+    hkRow.Children.Add( key );
+    root.Children.Add( hkRow );
+
     // ── Short fields share one row — they never hold much ──
-    TextBox hotkey = SmallBox( B, b.Hotkey ?? "", 150 );
     TextBox width  = SmallBox( B, b.Width.ToString( CultureInfo.InvariantCulture ), 56 );
     var shortRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness( 0, 0, 0, 12 ) };
-    shortRow.Children.Add( Labeled( B, "Hotkey (e.g. #!1)", hotkey, 0 ) );
     shortRow.Children.Add( Labeled( B, "Width (columns)", width, 14 ) );
     root.Children.Add( shortRow );
 
@@ -80,11 +101,22 @@ internal static class ButtonEditDialog
       {
         error.Text = "Width must be a whole number ≥ 1."; return;
       }
+      bool   anyMod = ctrl.IsChecked == true || alt.IsChecked == true || win2.IsChecked == true || shift.IsChecked == true;
+      string hk     = HotkeyParser.Compose( ctrl.IsChecked == true, alt.IsChecked == true,
+                                            win2.IsChecked == true, shift.IsChecked == true, key.Text );
+      if( anyMod && key.Text.Trim().Length == 0 )
+      {
+        error.Text = "Enter a key for the hotkey, or clear the modifiers."; return;
+      }
+      if( hk.Length > 0 && HotkeyParser.Parse( hk ) is null )
+      {
+        error.Text = "Hotkey key must be a single letter/digit or F1–F24."; return;
+      }
 
       b.Width  = w;
       b.Align  = leftAlign.IsChecked == true ? "left" : "center";
-      b.Desc   = string.IsNullOrEmpty( desc.Text )   ? null : desc.Text;
-      b.Hotkey = string.IsNullOrEmpty( hotkey.Text ) ? null : hotkey.Text.Trim();
+      b.Desc   = string.IsNullOrEmpty( desc.Text ) ? null : desc.Text;
+      b.Hotkey = hk.Length == 0 ? null : hk;
       b.ShowText = showText.IsChecked == true;
       b.TipText  = tipText.IsChecked  == true;
 
@@ -195,4 +227,15 @@ internal static class ButtonEditDialog
     host.Children.Add( cb );
     return cb;
   }
+
+  // A modifier toggle button (Ctrl/Alt/Win/Shift): equal size, matching the key box height,
+  // stays pressed (accent) when selected — styled by DialogChrome's ToggleButton template.
+  private static ToggleButton Mod( string label, bool on ) => new()
+  {
+    Content   = label,
+    IsChecked = on,
+    Width     = 46,
+    Height    = 28,
+    Margin    = new Thickness( 0, 0, 6, 0 ),
+  };
 }

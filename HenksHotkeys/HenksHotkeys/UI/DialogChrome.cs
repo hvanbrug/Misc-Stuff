@@ -66,6 +66,34 @@ internal static class DialogChrome
     </Setter>
   </Style>
 
+  <Style TargetType='ToggleButton'>
+    <Setter Property='FontSize'    Value='12'/>
+    <Setter Property='Cursor'      Value='Hand'/>
+    <Setter Property='Foreground'  Value='{DynamicResource TextBody}'/>
+    <Setter Property='Background'  Value='{DynamicResource ControlBg}'/>
+    <Setter Property='BorderBrush' Value='{DynamicResource ControlBorder}'/>
+    <Setter Property='Template'>
+      <Setter.Value>
+        <ControlTemplate TargetType='ToggleButton'>
+          <Border x:Name='bd' CornerRadius='5' BorderThickness='1'
+                  Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}'
+                  SnapsToDevicePixels='True'>
+            <ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='bd' Property='Background' Value='{DynamicResource ControlHover}'/></Trigger>
+            <Trigger Property='IsChecked' Value='True'>
+              <Setter TargetName='bd' Property='Background'  Value='{DynamicResource SwitchOn}'/>
+              <Setter TargetName='bd' Property='BorderBrush' Value='{DynamicResource SwitchOn}'/>
+              <Setter Property='Foreground' Value='White'/>
+            </Trigger>
+            <Trigger Property='IsEnabled' Value='False'><Setter TargetName='bd' Property='Opacity' Value='0.45'/></Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <Style TargetType='CheckBox'>
     <Setter Property='Foreground' Value='{DynamicResource TextBody}'/>
     <Setter Property='Cursor'     Value='Hand'/>

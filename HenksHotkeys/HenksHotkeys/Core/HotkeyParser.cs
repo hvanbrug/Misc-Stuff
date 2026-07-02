@@ -56,6 +56,48 @@ internal static class HotkeyParser
     return new Parsed( mods, vk );
   }
 
+  /// <summary>Split an AHK hotkey into its modifier flags and the trailing key, so the
+  /// editor can show modifiers as toggle buttons and the key in its own box.</summary>
+  public static void Split( string? hotkey, out bool ctrl, out bool alt, out bool win, out bool shift, out string key )
+  {
+    ctrl = alt = win = shift = false;
+    key  = "";
+    if( string.IsNullOrEmpty( hotkey ) )
+    {
+      return;
+    }
+    int i = 0;
+    for( ; i < hotkey.Length; i++ )
+    {
+      switch( hotkey[i] )
+      {
+        case '^': ctrl  = true; continue;
+        case '!': alt   = true; continue;
+        case '#': win   = true; continue;
+        case '+': shift = true; continue;
+      }
+      break;
+    }
+    key = hotkey[i..].Trim();
+  }
+
+  /// <summary>Build an AHK hotkey from modifier flags + a key (in the fixed order
+  /// Ctrl/Alt/Win/Shift). Empty key → empty string (no hotkey).</summary>
+  public static string Compose( bool ctrl, bool alt, bool win, bool shift, string? key )
+  {
+    key = key?.Trim() ?? "";
+    if( key.Length == 0 )
+    {
+      return "";
+    }
+    var sb = new System.Text.StringBuilder();
+    if( ctrl )  sb.Append( '^' );
+    if( alt )   sb.Append( '!' );
+    if( win )   sb.Append( '#' );
+    if( shift ) sb.Append( '+' );
+    return sb.Append( key ).ToString();
+  }
+
   public static string Label( string hotkey )
   {
     string s = hotkey.ToUpperInvariant();
