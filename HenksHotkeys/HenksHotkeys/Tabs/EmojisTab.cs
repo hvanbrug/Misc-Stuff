@@ -17,92 +17,82 @@ internal sealed class EmojisTab : TabModel
     UseEmojiImages = true;
     SetRowsOf( 12 );
     RegisterButtons();
+    BackfillFavouriteNames(); // favourites carry only codepoints; borrow names from the catalog
     RecalcSizes();
   }
 
-  private void CategoryGap()
-  {
-    NextLine( true );
-    ShiftLineByHalf();
-  }
+  private bool m_placedCategory; // whether anything has been placed yet (drives the pre-heading gap)
 
   private void RegisterButtons()
   {
-    RegisterFavourites();
-    CategoryGap();
+    m_placedCategory = RegisterFavourites(); // own "Favourites" heading + buttons, or nothing
 
-    RegisterSmileys();
-    CategoryGap();
-
-    RegisterHeartsAndEmotion();
-    CategoryGap();
-
-    RegisterGestures();
-    CategoryGap();
-
-    RegisterPeople();
-    CategoryGap();
-
-    RegisterAnimals();
-    CategoryGap();
-
-    RegisterPlantsAndNature();
-    CategoryGap();
-
-    RegisterFoodAndDrink();
-    CategoryGap();
-
-    RegisterTravelAndPlaces();
-    CategoryGap();
-
-    RegisterActivities();
-    CategoryGap();
-
-    RegisterObjects();
-    CategoryGap();
-
-    RegisterSymbols();
+    Category( "Smileys & Emotion", RegisterSmileys );
+    Category( "Hearts & Love",     RegisterHeartsAndEmotion );
+    Category( "Gestures",          RegisterGestures );
+    Category( "People & Body",     RegisterPeople );
+    Category( "Animals",           RegisterAnimals );
+    Category( "Plants & Sky",      RegisterPlantsAndNature );
+    Category( "Food & Drink",      RegisterFoodAndDrink );
+    Category( "Travel & Places",   RegisterTravelAndPlaces );
+    Category( "Activities",        RegisterActivities );
+    Category( "Objects",           RegisterObjects );
+    Category( "Symbols",           RegisterSymbols );
   }
 
-  // ─── Favourites ─────────────────────────────────
-  private void RegisterFavourites()
+  // A labelled emoji category: a little separation from the one above (none for the very first),
+  // a heading, then the category's buttons flowing below it.
+  private void Category( string name, Action register )
   {
-    RegisterSymbolX( 1, "💯", "Hundred Points\n:100:" );
-    RegisterSymbolX( 1, "❤️", "Red Heart\n:red_heart:" );
-    RegisterSymbolX( 1, "💞", "Revolving Hearts\n:revolving_hearts:" );
-    RegisterSymbolX( 1, "❤️‍🔥", "Heart on Fire\n:heart_on_fire:" );
-    RegisterSymbolX( 1, "🤩", "Star-Struck\n:star_struck:" );
-    RegisterSymbolX( 1, "😍", "Smiling Face with Heart-Eyes\n:heart_eyes:" );
-    RegisterSymbolX( 1, "🥰", "Smiling Face with Hearts\n:smiling_face_with_hearts:" );
-    RegisterSymbolX( 1, "😘", "Face Blowing a Kiss\n:kissing_heart:" );
-    RegisterSymbolX( 1, "🤣", "Rolling on the Floor Laughing\n:rofl:" );
-    RegisterSymbolX( 1, "😂", "Face with Tears of Joy\n:joy:" );
-    RegisterSymbolX( 1, "😆", "Grinning Squinting Face\n:laughing:" );
-    RegisterSymbolX( 1, "😁", "Beaming Face with Smiling Eyes\n:grin:" );
+    NextLine( true );                        // finish the previous category's partial row
+    if( m_placedCategory ) ShiftLineByHalf(); // gap above the heading (not for the first one)
+    RegisterSectionHeader( name );
+    register();
+    m_placedCategory = true;
+  }
 
-    RegisterSymbolX( 1, "😀", "Grinning Face\n:grinning:" );
-    RegisterSymbolX( 1, "😉", "Winking Face\n:wink:" );
-    RegisterSymbolX( 1, "🤔", "Thinking Face\n:thinking:" );
-    RegisterSymbolX( 1, "🤨", "Face with Raised Eyebrow\n:raised_eyebrow:" );
-    RegisterSymbolX( 1, "😏", "Smirking Face\n:smirk:" );
-    RegisterSymbolX( 1, "😒", "Unamused Face\n:unamused:" );
-    RegisterSymbolX( 1, "🙄", "Face with Rolling Eyes\n:roll_eyes:" );
-    RegisterSymbolX( 1, "😊", "Smiling Face with Smiling Eyes\n:blush:" );
-    RegisterSymbolX( 1, "😋", "Face Savoring Food\n:yum:" );
-    RegisterSymbolX( 1, "🤗", "Hugging Face\n:hugging_face:" );
-    RegisterSymbolX( 1, "🤢", "Nauseated Face\n:nauseated_face:" );
-    RegisterSymbolX( 1, "🤮", "Face Vomiting\n:vomiting_face:" );
+  /// <summary>Emoji in this tab's Favourites section, in display order (top of the tab).</summary>
+  public IReadOnlyList<SymbolElement> Favourites => Symbols.Where( s => s.IsFavourite ).ToList();
 
-    RegisterSymbolX( 1, "🥳", "Partying Face\n:partying_face:" );
-    RegisterSymbolX( 1, "😎", "Smiling Face with Sunglasses\n:sunglasses:" );
-    RegisterSymbolX( 1, "🤫", "Shushing Face\n:shushing_face:" );
-    RegisterSymbolX( 1, "😢", "Crying Face\n:cry:" );
-    RegisterSymbolX( 1, "🥵", "Hot Face\n:hot_face:" );
-    RegisterSymbolX( 1, "🤯", "Exploding Head\n:exploding_head:" );
-    RegisterSymbolX( 1, "😭", "Loudly Crying Face\n:sob:" );
-    RegisterSymbolX( 1, "😱", "Face Screaming in Fear\n:scream:" );
-    RegisterSymbolX( 1, "😤", "Face with Steam From Nose\n:triumph:" );
-    RegisterSymbolX( 1, "💋", "Kiss Mark\n:kiss:" );
+  /// <summary>Columns the favourites (and the whole tab) flow across.</summary>
+  public int FavouriteColumns => MaxSlots;
+
+  // ─── Favourites (user-configurable, #13) ─────────────────────────
+  // Rendered from FavouritesStore under a "Favourites" heading. Because the tab is a plain
+  // left-to-right flow, re-registering the list in a new order reflows every row automatically —
+  // exactly the "insert-and-cascade" the drag reorder wants. Returns true if any were placed.
+  private bool RegisterFavourites()
+  {
+    IReadOnlyList<Core.Favourite> favs = Core.FavouritesStore.Load();
+    if( favs.Count == 0 )
+    {
+      return false;
+    }
+
+    RegisterSectionHeader( "Favourites" ); // heading spanning the row, buttons drop below it
+
+    foreach( Core.Favourite f in favs )
+    {
+      RegisterSymbolX( 1, f.Emoji ); // the emoji is decoded from its codepoints (authoritative)
+      Symbols[^1].IsFavourite = true; // tag the button just placed
+    }
+    return true;
+  }
+
+  // Favourites are stored as bare codepoints (no description), so recover each one's friendly
+  // tooltip name from the matching catalog emoji — which is registered later in the same build.
+  // Called once after all categories are placed.
+  private void BackfillFavouriteNames()
+  {
+    var names = new Dictionary<string, string>();
+    foreach( SymbolElement s in Symbols )
+    {
+      if( !s.IsFavourite && !names.ContainsKey( s.Char ) ) names[s.Char] = s.Desc;
+    }
+    foreach( SymbolElement s in Symbols )
+    {
+      if( s.IsFavourite && names.TryGetValue( s.Char, out string? d ) ) s.Desc = d;
+    }
   }
 
   // ─── Smileys & Emotion — Faces ─────────────────────────────────

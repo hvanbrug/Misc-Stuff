@@ -29,4 +29,9 @@ internal sealed class SymbolElement
   /// built-in code tabs (Emojis / Tools), which aren't JSON-editable. Gives the
   /// right-click menu a handle on the underlying model to edit / delete.</summary>
   public Core.ButtonDef? Source;
+
+  /// <summary>True for an emoji sitting in the Emojis tab's user "Favourites" section (#13):
+  /// it gets the Unfavourite menu and can be dragged to reorder. Main-catalog emoji are false
+  /// (they get the Mark-as-favourite menu instead).</summary>
+  public bool IsFavourite;
 }

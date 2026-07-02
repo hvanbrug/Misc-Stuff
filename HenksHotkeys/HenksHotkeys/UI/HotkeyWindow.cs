@@ -9,6 +9,7 @@ using System.Windows.Threading;
 using HenksHotkeys.Core;
 using HenksHotkeys.Emoji;
 using HenksHotkeys.Native;
+using HenksHotkeys.Tabs;
 
 namespace HenksHotkeys.UI;
 
@@ -100,6 +101,14 @@ internal sealed class HotkeyWindow : Window
   private Point   m_tabDragStart;       // press point, in tab-control coordinates
   private bool    m_tabDragging;
   private Border? m_tabDropCaret;       // insertion caret on the overlay, between headers
+
+  // Drag an Emojis-tab favourite to reorder it within the Favourites section (#13). It stays on the
+  // one tab, so it captures the button itself (no tab-switching) and its caret lives on the canvas.
+  private SymbolElement? m_favDragSym;
+  private Point          m_favDragStart;
+  private bool           m_favDragging;
+  private Canvas?        m_favDragCanvas;
+  private Border?        m_favCaret;
 
   private int SelectionCount => m_selBtns.Count + m_selHeads.Count;
 
@@ -296,6 +305,10 @@ internal sealed class HotkeyWindow : Window
         {
           WireDrag( btn, sym, canvas, dragModel );
         }
+        else if( model is EmojisTab emo )
+        {
+          WireEmojiButton( btn, sym, canvas, emo ); // favourites: mark / unmark + reorder drag
+        }
       }
 
       var sv = new ScrollViewer
@@ -487,6 +500,125 @@ internal sealed class HotkeyWindow : Window
     if( Mouse.Captured is TabItem ti ) ti.ReleaseMouseCapture();
     if( m_tabDropCaret is { } c ) m_dragLayer.Children.Remove( c );
     m_tabDropCaret = null;
+  }
+
+  // ── Emojis-tab favourites (#13): mark / unmark, and reorder by drag ─
+  // The emoji catalog itself is fixed; only the user's Favourites section is editable. A plain
+  // click still sends the emoji (native Click), a right-click marks/unmarks it, and — for a
+  // favourite — a drag reorders it. The favourites are a left-to-right flow, so a reorder reflows
+  // every row after the drop (the end emoji of a row becomes the start of the next).
+  private void WireEmojiButton( FrameworkElement el, SymbolElement sym, Canvas canvas, EmojisTab model )
+  {
+    var menu = new ContextMenu();
+    if( sym.IsFavourite )
+    {
+      var un = new MenuItem { Header = "Unfavourite" };
+      un.Click += ( _, _ ) => FavouriteCommands.Remove( sym.Char );
+      menu.Items.Add( un );
+    }
+    else
+    {
+      var fav = new MenuItem { Header = "Mark as favourite" };
+      fav.Click += ( _, _ ) => FavouriteCommands.Add( sym.Char );
+      menu.Items.Add( fav );
+    }
+    el.ContextMenu = menu;
+
+    if( !sym.IsFavourite )
+    {
+      return; // only favourites can be dragged
+    }
+
+    el.PreviewMouseLeftButtonDown += ( _, e ) =>
+    {
+      m_favDragSym    = sym;
+      m_favDragStart  = e.GetPosition( canvas );
+      m_favDragging   = false;
+      m_favDragCanvas = canvas;
+    };
+
+    el.PreviewMouseMove += ( _, e ) =>
+    {
+      if( m_favDragSym != sym || e.LeftButton != MouseButtonState.Pressed ) return;
+      Point p = e.GetPosition( canvas );
+      if( !m_favDragging )
+      {
+        if( !PastDragThreshold( p, m_favDragStart ) ) return; // still a click — let the send proceed
+        m_favDragging = true;
+        el.CaptureMouse();
+        m_activeWinTimer.Stop();
+        el.Opacity = 0.35; // dim the one in flight
+        BuildFavCaret( canvas );
+      }
+      UpdateFavCaret( model, p );
+      e.Handled = true;
+    };
+
+    el.PreviewMouseLeftButtonUp += ( _, e ) =>
+    {
+      if( !m_favDragging || m_favDragSym != sym ) return;
+      int idx = FavouriteInsertIndex( model, e.GetPosition( canvas ) );
+      EndFavDrag( el );
+      FavouriteCommands.Reorder( sym.Char, idx ); // reflows the section, then reloads
+      e.Handled = true; // swallow the click so the drop doesn't also send
+    };
+
+    el.LostMouseCapture += ( _, _ ) => { if( m_favDragging ) EndFavDrag( el ); };
+  }
+
+  private void BuildFavCaret( Canvas canvas )
+  {
+    m_favCaret = new Border
+    {
+      Width            = 3,
+      Background       = Palette.Brush( "SwitchOn" ),
+      CornerRadius     = new CornerRadius( 1.5 ),
+      IsHitTestVisible = false,
+    };
+    Panel.SetZIndex( m_favCaret, 1000 );
+    canvas.Children.Add( m_favCaret );
+  }
+
+  // The favourites index the drop would insert before (0..count), from the pointer's row/column in
+  // the flow. Clamped to the favourites area so a favourite can't be dragged out of the section.
+  private static int FavouriteInsertIndex( EmojisTab model, Point p )
+  {
+    IReadOnlyList<SymbolElement> favs = model.Favourites;
+    if( favs.Count == 0 ) return 0;
+
+    int cols    = Math.Max( 1, model.FavouriteColumns );
+    int firstY  = favs[0].Y;
+    int col     = Math.Clamp( (int)Math.Floor( ( p.X - model.SymOrgX ) / (double)model.ColWidth ), 0, cols - 1 );
+    int lastRow = ( favs.Count - 1 ) / cols;
+    int row     = Math.Clamp( (int)Math.Floor( ( p.Y - firstY ) / (double)model.RowHeight ), 0, lastRow );
+    return Math.Clamp( row * cols + col, 0, favs.Count );
+  }
+
+  private void UpdateFavCaret( EmojisTab model, Point p )
+  {
+    if( m_favCaret is not { } caret ) return;
+    IReadOnlyList<SymbolElement> favs = model.Favourites;
+    if( favs.Count == 0 ) return;
+
+    int    idx = FavouriteInsertIndex( model, p );
+    double x, y;
+    if( idx < favs.Count ) { x = favs[idx].X;                  y = favs[idx].Y; } // before that favourite
+    else                   { x = favs[^1].X + favs[^1].W;      y = favs[^1].Y; } // append → right of the last
+    caret.Height = model.SymBtnSizeY;
+    Canvas.SetLeft( caret, x - 1.5 );
+    Canvas.SetTop(  caret, y );
+    caret.Visibility = Visibility.Visible;
+  }
+
+  private void EndFavDrag( FrameworkElement el )
+  {
+    m_favDragging = false;
+    m_favDragSym  = null;
+    m_activeWinTimer.Start();
+    el.Opacity = 1.0;
+    if( ReferenceEquals( Mouse.Captured, el ) ) el.ReleaseMouseCapture();
+    if( m_favCaret is { } c && m_favDragCanvas is { } cv ) cv.Children.Remove( c );
+    m_favCaret = null;
   }
 
   /// <summary>Rebuild the tab UI after the tab models were reloaded from disk.</summary>
@@ -1211,8 +1343,10 @@ internal sealed class HotkeyWindow : Window
     var text = new TextBlock
     {
       Text                = UiText.NormalizeDisplayText( hdr.Name ),
+      // A heading is a label, not a button — a fixed, readable size, independent of the tab's
+      // button font (which is huge on the Emojis tab). The family stays the tab's for consistency.
       FontFamily          = new FontFamily( model.FontName ),
-      FontSize            = PtToDip( model.FontSize ),
+      FontSize            = PtToDip( (float)HeadingFontPt ),
       FontWeight          = FontWeights.SemiBold,
       Foreground          = Palette.Brush( "AccentText" ),
       VerticalAlignment   = VerticalAlignment.Bottom,
@@ -1249,7 +1383,8 @@ internal sealed class HotkeyWindow : Window
     return border;
   }
 
-  private const double HeadingUnderlineLift = 2; // px the heading separator sits above the next row
+  private const double HeadingUnderlineLift = 2;  // px the heading separator sits above the next row
+  private const double HeadingFontPt        = 12.0; // fixed heading text size (points), any tab
 
   private static string Append( string tip, string line )
   {

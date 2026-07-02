@@ -199,6 +199,7 @@ public partial class App
     HotkeyRegistry.Clear();
     AppState.HotkeyHelp.Clear();
     AppState.Tabs.Clear();
+    FavouritesStore.Invalidate(); // re-read favourites.json too (Emojis tab rebuilds from it)
     BuildTabModels();
 
     m_window.ReloadTabs();

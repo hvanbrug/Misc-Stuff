@@ -132,6 +132,27 @@ internal abstract class TabModel
 
   protected void RegisterSpace( int slots = 1 ) => AdvanceSlot( slots );
 
+  /// <summary>Place a full-width section heading at the current cursor row (a bold label on a
+  /// separator line), then push the buttons that follow below it. For the cursor-flow tabs
+  /// (Emojis / Tools); data tabs build their headers from <see cref="Core.SectionDef"/> instead.</summary>
+  protected void RegisterSectionHeader( string name )
+  {
+    NextLine( true ); // a heading begins a fresh row
+    int height = Layout.SectionHeaderHeight;
+    int width  = m_lineIsRow
+      ? SymBtnSizeX * m_maxSlots + Layout.ButtonGap * Math.Max( 0, m_maxSlots - 1 )
+      : SymBtnSizeX;
+    Headers.Add( new SectionHeader
+    {
+      Name   = name,
+      X      = CalcSymbolX( m_nextLine, 1 ),
+      Y      = CalcSymbolY( m_nextLine, 1 ),
+      Width  = width,
+      Height = height,
+    } );
+    ShiftLineByFraction( height, RowHeight ); // buttons after this start below the heading
+  }
+
   private void AdvanceSlot( int slots = 1 )
   {
     if( (m_maxSlots <= 0) || (slots <= 0) )
