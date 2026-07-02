@@ -9,6 +9,10 @@ Partly modernised: data tabs lay out from `rows` + `columns` + `gapBefore`/`inde
 6. Quarantine the Win32 interop.
 **Open.** `NativeMethods` centralises the P/Invokes and the elevated window-fit is wrapped (`ElevatedFit`), but the window still calls Win32 directly; there's no interface boundary yet. Wrapping the OS-integration bits (hotkeys, input send, foreground tracking, snap) behind a small interface would isolate the unavoidable Win32.
 
+26. Make all section headers collapsible, meaning that all the buttons of that section are hidden and everything below it moves up. Not exactly sure how to handle partial headers yet. do on emoji tab only for now. There should be a little triangle to the left of the label. When it points to the right, the section is collapsed. When it points down, it's open and all buttons in that section are visible. That triangle button should be a click-to-toggle.
+
+27. Flesh out the emoji categories by adding the missing common ones. We have all 4009 emoji images in the app. What sort of impact would there be if we made buttons for all of them?
+
 # Completed
 
 1. **DONE** — Content as data, not code.
