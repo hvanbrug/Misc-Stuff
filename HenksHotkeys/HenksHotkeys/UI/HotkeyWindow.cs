@@ -214,7 +214,7 @@ internal sealed class HotkeyWindow : Window
 
       foreach( SymbolElement sym in model.Symbols )
       {
-        FrameworkElement btn = BuildButton( sym, model );
+        FrameworkElement btn = BuildButton( sym, model, canvas );
         Canvas.SetLeft( btn, sym.X );
         Canvas.SetTop( btn, sym.Y );
         canvas.Children.Add( btn );
@@ -282,7 +282,7 @@ internal sealed class HotkeyWindow : Window
     }
   }
 
-  private FrameworkElement BuildButton( SymbolElement sym, TabModel model )
+  private FrameworkElement BuildButton( SymbolElement sym, TabModel model, Canvas canvas )
   {
     var btn = new Button
     {
@@ -350,18 +350,18 @@ internal sealed class HotkeyWindow : Window
 
     WireSymbolButton( btn, sym.ClickAction );
 
-    // Data-tab buttons get a right-click menu to edit / delete them. Built-in code
-    // tabs (Source == null) aren't JSON-editable, so they get none.
+    // Data-tab buttons get a right-click menu to edit / delete them, plus the same add/insert
+    // actions as the open area. Built-in code tabs (Source == null) aren't JSON-editable.
     if( sym.Source is {} def )
     {
-      btn.ContextMenu = BuildButtonMenu( def );
+      btn.ContextMenu = BuildButtonMenu( def, model as DataTabModel, canvas, btn );
     }
 
     sym.Ctrl = btn;
     return btn;
   }
 
-  private static ContextMenu BuildButtonMenu( ButtonDef def )
+  private static ContextMenu BuildButtonMenu( ButtonDef def, DataTabModel? model, Canvas canvas, FrameworkElement btn )
   {
     var menu = new ContextMenu();
     var edit = new MenuItem { Header = "Edit button…" };
@@ -370,7 +370,35 @@ internal sealed class HotkeyWindow : Window
     del.Click  += ( _, _ ) => ButtonCommands.Delete( def );
     menu.Items.Add( edit );
     menu.Items.Add( del );
+
+    // The same add/insert actions the open-area menu offers, anchored at the cell you
+    // right-clicked — so you can insert without hunting for empty space.
+    if( model is not null )
+    {
+      Point clickPoint = default;
+      btn.PreviewMouseRightButtonDown += ( _, e ) => clickPoint = e.GetPosition( canvas );
+      menu.Items.Add( new Separator() );
+      AddInsertItems( menu, model, () => clickPoint );
+    }
     return menu;
+  }
+
+  // The shared "add / insert" menu items (used by both the open-area menu and each button's
+  // menu). <paramref name="at"/> supplies the right-click position in canvas coordinates.
+  private static void AddInsertItems( ContextMenu menu, DataTabModel model, Func<Point> at )
+  {
+    var addB = new MenuItem { Header = "Add button here…" };
+    addB.Click += ( _, _ ) => ButtonCommands.AddHere( model, at() );
+    var addH = new MenuItem { Header = "Add heading here…" };
+    addH.Click += ( _, _ ) => HeadingCommands.AddHere( model, at() );
+    var insBlank = new MenuItem { Header = "Insert blank row" };
+    insBlank.Click += ( _, _ ) => HeadingCommands.InsertBlankRow( model, at() );
+    var insHead  = new MenuItem { Header = "Insert heading row…" };
+    insHead.Click += ( _, _ ) => HeadingCommands.InsertHeadingRow( model, at() );
+    menu.Items.Add( addB );
+    menu.Items.Add( addH );
+    menu.Items.Add( insBlank );
+    menu.Items.Add( insHead );
   }
 
   // ── Drag a button to a new slot (swaps with the cell dropped on) ───
@@ -645,12 +673,7 @@ internal sealed class HotkeyWindow : Window
     sv.PreviewMouseRightButtonDown += ( _, e ) => clickPoint = e.GetPosition( canvas );
 
     var menu = new ContextMenu();
-    var add  = new MenuItem { Header = "Add button here…" };
-    add.Click += ( _, _ ) => ButtonCommands.AddHere( model, clickPoint );
-    var addH = new MenuItem { Header = "Insert heading here…" };
-    addH.Click += ( _, _ ) => HeadingCommands.AddHere( model, clickPoint );
-    menu.Items.Add( add );
-    menu.Items.Add( addH );
+    AddInsertItems( menu, model, () => clickPoint );
     sv.ContextMenu = menu;
   }
 

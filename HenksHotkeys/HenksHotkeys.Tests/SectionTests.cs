@@ -110,6 +110,85 @@ public class SectionTests
   }
 
   [Fact]
+  public void InsertBlankRow_ShiftsRowsAtAndBelowDown()
+  {
+    var tab = new TabEntry
+    {
+      Name = "T", Columns = 8,
+      Buttons  = new() { B( "A", 0, 0 ), B( "B", 1, 0 ), B( "C", 2, 0 ) },
+      Sections = new() { Sec( "H", 1 ) },
+    };
+
+    TabStore.InsertBlankRow( tab, 1 ); // open a blank row at index 1
+
+    Assert.Equal( 0, tab.Buttons![0].Row );  // A unchanged (above the insert)
+    Assert.Equal( 2, tab.Buttons![1].Row );  // B: 1 → 2
+    Assert.Equal( 3, tab.Buttons![2].Row );  // C: 2 → 3
+    Assert.Equal( 2, tab.Sections![0].Row ); // section at 1 → 2
+  }
+
+  [Fact]
+  public void InsertHeadingRow_ShiftsDown_AndAddsHeadingAtTheRow()
+  {
+    var tab = new TabEntry { Name = "T", Columns = 8, Buttons = new() { B( "A", 1, 0 ) } };
+    var heading = new SectionDef { Name = "Group", Col = 0, Span = 8 };
+
+    TabStore.InsertHeadingRow( tab, 1, heading );
+
+    Assert.Equal( 2, tab.Buttons![0].Row );      // A: 1 → 2 (its column is under the full-width heading)
+    Assert.Single( tab.Sections! );
+    Assert.Equal( 1, tab.Sections![0].Row );      // heading occupies the freed row
+    Assert.Equal( "Group", tab.Sections![0].Name );
+  }
+
+  [Fact]
+  public void InsertHeadingRow_ShiftsOnlyTheColumnsUnderTheHeading()
+  {
+    var tab = new TabEntry
+    {
+      Name = "T", Columns = 8,
+      Buttons = new() { B( "under", 1, 2 ), B( "aside", 1, 6 ) },
+    };
+    var heading = new SectionDef { Name = "H", Col = 2, Span = 3 }; // covers columns 2–4
+
+    TabStore.InsertHeadingRow( tab, 1, heading );
+
+    Assert.Equal( 2, tab.Buttons!.First( b => b.Text == "under" ).Row ); // in the span → pushed down
+    Assert.Equal( 1, tab.Buttons!.First( b => b.Text == "aside" ).Row ); // outside the span → unchanged
+    Assert.Equal( 1, tab.Sections!.Single().Row );
+  }
+
+  [Fact]
+  public void InsertHeadingRow_StaircasesToAWiderHeadingBelow()
+  {
+    // Insert a 2–4 heading at row 0, above a 1–5 heading at row 2. Cols 2–4 shift from row 0;
+    // at the 1–5 heading the range widens to 1–5 and cols 1 & 5 shift from row 2 downward.
+    var tab = new TabEntry
+    {
+      Name = "T", Columns = 8,
+      Buttons = new()
+      {
+        B( "a1", 0, 1 ),  // col 1, above the wide heading → stays (outside 2–4)
+        B( "b2", 1, 2 ),  // col 2 → in 2–4 → shifts
+        B( "c1", 3, 1 ),  // col 1, below the wide heading → in widened 1–5 → shifts
+        B( "c6", 3, 6 ),  // col 6 → outside 1–5 → stays
+      },
+      Sections = new() { new SectionDef { Name = "wide", Row = 2, Col = 1, Span = 5 } },
+    };
+    var heading = new SectionDef { Name = "H", Col = 2, Span = 3 };
+
+    TabStore.InsertHeadingRow( tab, 0, heading );
+
+    ButtonDef Get( string t ) => tab.Buttons!.First( b => b.Text == t );
+    Assert.Equal( 0, Get( "a1" ).Row );  // col 1 above the wide heading: unaffected
+    Assert.Equal( 2, Get( "b2" ).Row );  // col 2: 1 → 2
+    Assert.Equal( 3, tab.Sections!.First( s => s.Name == "wide" ).Row ); // wide heading 2 → 3
+    Assert.Equal( 4, Get( "c1" ).Row );  // col 1 below the wide heading: 3 → 4
+    Assert.Equal( 3, Get( "c6" ).Row );  // col 6 outside the widened range: unchanged
+    Assert.Equal( 0, tab.Sections!.First( s => s.Name == "H" ).Row ); // inserted heading at row 0
+  }
+
+  [Fact]
   public void TabSig_ChangesWhenHeadingColumnOrSpanChanges()
   {
     var a = new TabEntry { Name = "T", Columns = 8, Sections = new() { Head( "H", 0, 1, 2 ) } };

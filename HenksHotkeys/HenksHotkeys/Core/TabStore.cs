@@ -171,16 +171,16 @@ internal static class TabStore
     return false;
   }
 
-  // Push the cell at (row, col) and the contiguous run of cells to its right one column
-  // along, wrapping past the last column onto the next row, so a fresh cell opens at
-  // (row, col). Every button in a cell (incl. all of a sub-cell group) moves together.
+  // Open a cell at (row, col) by pushing the contiguous run of cells to its right one column
+  // along — staying on this row (only the clicked row is affected). If the run reaches the
+  // last column the row simply extends past the tab's column count rather than wrapping the
+  // overflow onto the next row. Every button in a cell (incl. a sub-cell group) moves together.
   private static void ShiftRight( TabEntry tab, int row, int col )
   {
     if( tab.Buttons is null )
     {
       return;
     }
-    int cols = tab.Columns > 0 ? tab.Columns : int.MaxValue;
 
     // First free column at or after `col` (a column is occupied if any button sits in it).
     int end = col;
@@ -190,20 +190,11 @@ internal static class TabStore
       return; // the target cell is already free
     }
 
-    // If the run reaches the last column, its tail wraps onto the next row — open a slot
-    // there first (recurses down rows, always toward a gap, so it terminates).
-    if( end >= cols )
+    // Shift the run [col, end) one column right, all on this row — they were contiguous, so
+    // each lands on the next column (the last one now sits at `end`, which was free).
+    foreach( ButtonDef b in tab.Buttons.Where( b => b.Row == row && b.Col >= col && b.Col < end ) )
     {
-      ShiftRight( tab, row + 1, 0 );
-    }
-
-    // Move every button in columns [col, end) one column right, right-to-left so each lands
-    // on a just-vacated cell; buttons sharing a column (sub-cell siblings) move as one.
-    foreach( ButtonDef b in tab.Buttons.Where( b => b.Row == row && b.Col >= col && b.Col < end )
-                                        .OrderByDescending( b => b.Col ).ToList() )
-    {
-      if( b.Col + 1 >= cols ) { b.Col = 0; b.Row++; }
-      else                      b.Col++;
+      b.Col++;
     }
   }
 
@@ -250,6 +241,96 @@ internal static class TabStore
     tab.Sections ??= new List<SectionDef>();
     tab.Sections.Add( heading );
     SaveCurrent();
+  }
+
+  /// <summary>Insert an empty row at <paramref name="row"/> (everything at or below shifts
+  /// down one row), then persist — a blank spacer row between two rows.</summary>
+  public static void InsertBlankRow( TabEntry tab, int row )
+  {
+    ShiftRowsDown( tab, row );
+    SaveCurrent();
+  }
+
+  /// <summary>Insert <paramref name="heading"/> at <paramref name="row"/>, opening space for it
+  /// by pushing down *only the cells under it* — the columns the heading spans, at or below its
+  /// row (content in other columns stays put) — then persist.</summary>
+  public static void InsertHeadingRow( TabEntry tab, int row, SectionDef heading )
+  {
+    ShiftCellsDown( tab, row, heading.Col, heading.Span );
+    heading.Row  = row;
+    tab.Sections ??= new List<SectionDef>();
+    tab.Sections.Add( heading );
+    SaveCurrent();
+  }
+
+  // Push every button and section at or below <paramref name="row"/> down one row, opening a
+  // fresh row there.
+  private static void ShiftRowsDown( TabEntry tab, int row )
+  {
+    if( tab.Buttons is not null )  foreach( ButtonDef b in tab.Buttons )  if( b.Row >= row ) b.Row++;
+    if( tab.Sections is not null ) foreach( SectionDef s in tab.Sections ) if( s.Row >= row ) s.Row++;
+  }
+
+  // Open space for an inserted heading by pushing down only the cells under its columns —
+  // but a multi-column entity (a wider heading or a wide button) can't be split, so from the
+  // row where such an entity overlaps the current span, the affected column range widens to
+  // include it (and stays widened below, chaining). So the shift is a staircase: narrow above
+  // a wider heading, widening at that heading's row and downward.
+  private static void ShiftCellsDown( TabEntry tab, int row, int col, int span )
+  {
+    int cols = tab.Columns;
+    int lo   = col;
+    int hi   = col + Math.Max( 1, span ) - 1;
+
+    int BtnHi( ButtonDef b )  => b.Col + Math.Max( 1, b.Width ) - 1;
+    int SecHi( SectionDef s ) => s.Span > 0 ? s.Col + s.Span - 1 : Math.Max( 0, cols - 1 );
+
+    int maxRow = row;
+    if( tab.Buttons is not null )  foreach( ButtonDef b in tab.Buttons )  maxRow = Math.Max( maxRow, b.Row );
+    if( tab.Sections is not null ) foreach( SectionDef s in tab.Sections ) maxRow = Math.Max( maxRow, s.Row );
+
+    // Pass 1: scan downward, widening [lo, hi] whenever an entity on the row overlaps it, and
+    // record the range in force at each row. The range only ever grows, so it carries down.
+    var rangeAt = new (int Lo, int Hi)[maxRow - row + 1];
+    for( int r = row; r <= maxRow; r++ )
+    {
+      for( bool changed = true; changed; )
+      {
+        changed = false;
+        if( tab.Buttons is not null )
+          foreach( ButtonDef b in tab.Buttons )
+            if( b.Row == r && b.Col <= hi && BtnHi( b ) >= lo )
+            {
+              if( b.Col   < lo ) { lo = b.Col;   changed = true; }
+              if( BtnHi(b) > hi ) { hi = BtnHi(b); changed = true; }
+            }
+        if( tab.Sections is not null )
+          foreach( SectionDef s in tab.Sections )
+            if( s.Row == r && s.Col <= hi && SecHi( s ) >= lo )
+            {
+              if( s.Col   < lo ) { lo = s.Col;   changed = true; }
+              if( SecHi(s) > hi ) { hi = SecHi(s); changed = true; }
+            }
+      }
+      rangeAt[r - row] = (lo, hi);
+    }
+
+    // Pass 2: shift each entity at/below `row` whose columns fall in the range in force at its
+    // (original) row. Using the recorded ranges means the moves don't perturb the computation.
+    if( tab.Buttons is not null )
+      foreach( ButtonDef b in tab.Buttons )
+        if( b.Row >= row )
+        {
+          (int rlo, int rhi) = rangeAt[b.Row - row];
+          if( b.Col <= rhi && BtnHi( b ) >= rlo ) b.Row++;
+        }
+    if( tab.Sections is not null )
+      foreach( SectionDef s in tab.Sections )
+        if( s.Row >= row )
+        {
+          (int rlo, int rhi) = rangeAt[s.Row - row];
+          if( s.Col <= rhi && SecHi( s ) >= rlo ) s.Row++;
+        }
   }
 
   /// <summary>Remove a heading (section divider) from the live config, then persist. Returns
