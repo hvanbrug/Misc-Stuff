@@ -5,7 +5,7 @@ namespace HenksHotkeys.UI;
 
 /// <summary>How a drag/add resolves against the grid, for both the drop action and the
 /// on-screen indicator.</summary>
-internal enum DropKind { PlaceEmpty, InsertBefore, InsertAfter, NewRow }
+internal enum DropKind { PlaceEmpty, InsertBefore, InsertAfter }
 
 /// <summary>The resolved grid target for a pointer position: the cell to act on
 /// (<see cref="Row"/>/<see cref="Col"/>), what it means, and the pixel geometry the
@@ -113,7 +113,11 @@ internal sealed class DataTabModel : TabModel
     var sectionAt = new Dictionary<int, SectionDef>();
     foreach( SectionDef s in sections ) sectionAt[s.Row] = s; // later wins on a clash
 
-    int HeaderPx( SectionDef s ) => s.Height > 0 ? (int)Math.Round( s.Height ) : Layout.SectionHeaderHeight;
+    // Explicit height wins; otherwise a partial-width heading (span > 0) is a button-row
+    // tall, while a classic full-width divider (span 0) uses the section-header height.
+    int HeaderPx( SectionDef s ) => s.Height > 0 ? (int)Math.Round( s.Height )
+                                  : s.Span   > 0 ? RowHeight
+                                  :                Layout.SectionHeaderHeight;
 
     // Top Y of each row = sum of the heights of the rows above it (section rows take
     // their own height; every other row — content or empty — takes one RowHeight). The
@@ -129,19 +133,24 @@ internal sealed class DataTabModel : TabModel
     }
     rowY[maxRow + 1] = y;
 
-    // Width a section header spans: the full grid of columns.
-    int headerWidth = m_cols > 0 ? SymBtnSizeX * m_cols + Layout.ButtonGap * ( m_cols - 1 )
-                                 : SymBtnSizeX;
+    // Width of a full-width (span 0) header: the whole grid of columns.
+    int fullWidth = m_cols > 0 ? SymBtnSizeX * m_cols + Layout.ButtonGap * ( m_cols - 1 )
+                               : SymBtnSizeX;
 
     foreach( SectionDef s in sections )
     {
+      // A spanning heading starts at its column and covers `span` cells; span 0 = full width.
+      int span  = s.Span > 0 ? s.Span : 0;
+      int width = span > 0 ? SymBtnSizeX * span + Layout.ButtonGap * ( span - 1 ) : fullWidth;
+
       Headers.Add( new SectionHeader
       {
         Name   = s.Name,
-        X      = SymOrgX,
+        X      = SymOrgX + Math.Max( 0, s.Col ) * ColWidth,
         Y      = rowY[s.Row],
-        Width  = headerWidth,
+        Width  = width,
         Height = HeaderPx( s ),
+        Source = s,
       } );
     }
 
@@ -160,6 +169,19 @@ internal sealed class DataTabModel : TabModel
                                        ch, b.Desc, b.Hotkey, action,
                                        b.Align, showText, tipText );
       sym.Source = b; // back-link to the model so the right-click menu can edit it
+
+      // Sub-cell buttons split their cell horizontally: the button becomes 1/n of the cell
+      // width and sits at its slot index (full cell height is kept).
+      if( b.SubCells > 1 )
+      {
+        int n     = b.SubCells;
+        int i     = Math.Clamp( b.SubCell, 0, n - 1 );
+        int span  = Math.Max( 1, b.Width );
+        int cellW = SymBtnSizeX * span + Layout.ButtonGap * ( span - 1 );
+        int subW  = Math.Max( 1, ( cellW - Layout.ButtonGap * ( n - 1 ) ) / n );
+        sym.X = x + i * ( subW + Layout.ButtonGap );
+        sym.W = subW;
+      }
     }
   }
 
@@ -167,19 +189,21 @@ internal sealed class DataTabModel : TabModel
   /// <summary>The highest occupied/sectioned row index (−1 when the tab is empty).</summary>
   public int MaxRow => m_maxRow;
 
-  /// <summary>The grid row whose vertical band contains <paramref name="y"/>, or
-  /// <see cref="MaxRow"/>+1 when the pointer is below every row (i.e. a new row).</summary>
+  /// <summary>The grid row whose vertical band contains <paramref name="y"/>. Below the
+  /// last laid-out row it keeps counting in RowHeight steps, so dropping two (or more) rows
+  /// down lands two (or more) rows past the content — leaving the rows between empty.</summary>
   public int RowAt( double y )
   {
     if( m_maxRow < 0 )
     {
-      return 0;
+      return Math.Max( 0, (int)( ( y - SymOrgY ) / RowHeight ) ); // empty tab: pure grid
     }
     for( int r = 0; r <= m_maxRow; r++ )
     {
       if( y < m_rowTops[r + 1] ) return r;
     }
-    return m_maxRow + 1;
+    int bottom = m_rowTops[m_maxRow + 1];
+    return m_maxRow + 1 + Math.Max( 0, (int)( ( y - bottom ) / RowHeight ) );
   }
 
   /// <summary>The grid column the pointer is physically over (the cell <paramref name="x"/>
@@ -190,8 +214,8 @@ internal sealed class DataTabModel : TabModel
   /// <summary>Top Y of a row, extrapolated past the last laid-out row with RowHeight.</summary>
   public int RowTop( int row )
   {
-    if( m_maxRow < 0 )                  return SymOrgY;
-    if( row <= m_maxRow )               return m_rowTops[row];
+    if( m_maxRow < 0 )    return SymOrgY + Math.Max( 0, row ) * RowHeight;
+    if( row <= m_maxRow ) return m_rowTops[row];
     return m_rowTops[m_maxRow + 1] + ( row - ( m_maxRow + 1 ) ) * RowHeight;
   }
 
@@ -217,9 +241,11 @@ internal sealed class DataTabModel : TabModel
   }
 
   /// <summary>Resolve a pointer position to a grid action + the geometry to indicate it.
-  /// Dropping on an empty cell places there; on a button inserts before/after it (by which
-  /// half); below every row makes a new row. <paramref name="dragging"/> (if any) is ignored
-  /// when probing, so a button never collides with itself.</summary>
+  /// Dropping on an empty cell (including one on a fresh row below the content) places there;
+  /// dropping on a button inserts before/after it (by which half). A sub-cell button always
+  /// targets the whole cell it's over, so it can join another cell's free sub-slot rather than
+  /// insert-shifting the row. <paramref name="dragging"/> (if any) is ignored when probing, so
+  /// a button never collides with itself.</summary>
   public DropSpot ResolveDrop( Point p, Core.ButtonDef? dragging )
   {
     int row = RowAt( p.Y );
@@ -228,15 +254,8 @@ internal sealed class DataTabModel : TabModel
     int h   = SymBtnSizeY;
     int w   = SymBtnSizeX;
 
-    if( row > m_maxRow )
-    {
-      int ny = RowTop( row );
-      return new DropSpot( row, col, DropKind.NewRow, null,
-                           SymOrgX + col * ColWidth, ny, w, h, 0 );
-    }
-
     int top = RowTop( row );
-    SymbolElement? hit = SymbolAt( row, col, dragging );
+    SymbolElement? hit = dragging is { SubCells: > 1 } ? null : SymbolAt( row, col, dragging );
     if( hit?.Source is not Core.ButtonDef tb )
     {
       return new DropSpot( row, col, DropKind.PlaceEmpty, null,

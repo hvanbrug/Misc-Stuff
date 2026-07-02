@@ -64,9 +64,13 @@ internal static class ButtonEditDialog
     root.Children.Add( hkRow );
 
     // ── Short fields share one row — they never hold much ──
-    TextBox width  = SmallBox( B, b.Width.ToString( CultureInfo.InvariantCulture ), 56 );
+    TextBox width    = SmallBox( B, b.Width.ToString( CultureInfo.InvariantCulture ), 52 );
+    TextBox subCells = SmallBox( B, b.SubCells.ToString( CultureInfo.InvariantCulture ), 52 );
+    TextBox subCell  = SmallBox( B, ( b.SubCell + 1 ).ToString( CultureInfo.InvariantCulture ), 52 ); // shown 1-based
     var shortRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness( 0, 0, 0, 12 ) };
-    shortRow.Children.Add( Labeled( B, "Width (columns)", width, 14 ) );
+    shortRow.Children.Add( Labeled( B, "Width (cols)", width, 0 ) );
+    shortRow.Children.Add( Labeled( B, "Sub-cells", subCells, 14 ) );
+    shortRow.Children.Add( Labeled( B, "Sub-cell #", subCell, 14 ) );
     root.Children.Add( shortRow );
 
     // ── Checkboxes, grouped logically: display first, then security ──
@@ -101,6 +105,15 @@ internal static class ButtonEditDialog
       {
         error.Text = "Width must be a whole number ≥ 1."; return;
       }
+      if( !int.TryParse( subCells.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int sn ) || sn < 1 )
+      {
+        error.Text = "Sub-cells must be a whole number ≥ 1."; return;
+      }
+      if( !int.TryParse( subCell.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int si ) || si < 1 || si > sn )
+      {
+        error.Text = $"Sub-cell # must be between 1 and {sn}."; return;
+      }
+
       bool   anyMod = ctrl.IsChecked == true || alt.IsChecked == true || win2.IsChecked == true || shift.IsChecked == true;
       string hk     = HotkeyParser.Compose( ctrl.IsChecked == true, alt.IsChecked == true,
                                             win2.IsChecked == true, shift.IsChecked == true, key.Text );
@@ -113,7 +126,9 @@ internal static class ButtonEditDialog
         error.Text = "Hotkey key must be a single letter/digit or F1–F24."; return;
       }
 
-      b.Width  = w;
+      b.Width    = w;
+      b.SubCells = sn;
+      b.SubCell  = sn > 1 ? si - 1 : 0; // shown 1-based, stored 0-based
       b.Align  = leftAlign.IsChecked == true ? "left" : "center";
       b.Desc   = string.IsNullOrEmpty( desc.Text ) ? null : desc.Text;
       b.Hotkey = hk.Length == 0 ? null : hk;

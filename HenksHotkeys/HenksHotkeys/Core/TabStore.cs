@@ -119,7 +119,7 @@ internal static class TabStore
     tab.Buttons ??= new List<ButtonDef>();
     newButton.Row = row;
     newButton.Col = Math.Max( 0, col );
-    if( Occupied( tab, row, newButton.Col ) )
+    if( Occupied( tab, row, newButton.Col, newButton ) )
     {
       ShiftRight( tab, row, newButton.Col );
     }
@@ -139,7 +139,7 @@ internal static class TabStore
     }
     col = Math.Max( 0, col );
     moving.Row = -1;                       // lift it out so it doesn't block itself
-    if( Occupied( tab, row, col ) )
+    if( Occupied( tab, row, col, moving ) )
     {
       ShiftRight( tab, row, col );
     }
@@ -149,28 +149,31 @@ internal static class TabStore
     return true;
   }
 
-  /// <summary>Move a button to a brand-new empty row below everything on its tab, then
-  /// persist. Returns false if the button isn't found.</summary>
-  public static bool MoveButtonToNewRow( ButtonDef moving, int col )
+  // True when placing <paramref name="mover"/> at cell (row, col) would overlap an existing
+  // button there. Sub-cell siblings coexist: a whole-cell button (either side) fills the cell,
+  // mismatched sub-divisions overlap, and matching divisions clash only in the same slot.
+  private static bool Occupied( TabEntry tab, int row, int col, ButtonDef mover )
   {
-    if( !Locate( moving, out TabEntry tab ) )
+    if( tab.Buttons is null )
     {
       return false;
     }
-    moving.Row = -1;
-    int row = NextEmptyRow( tab );
-    moving.Row = row;
-    moving.Col = Math.Max( 0, col );
-    SaveCurrent();
-    return true;
+    foreach( ButtonDef b in tab.Buttons )
+    {
+      if( b.Row != row || b.Col != col || ReferenceEquals( b, mover ) )
+      {
+        continue;
+      }
+      if( b.SubCells <= 1 || mover.SubCells <= 1 ) return true; // a whole-cell button fills it
+      if( b.SubCells != mover.SubCells )           return true; // mismatched divisions overlap
+      if( b.SubCell  == mover.SubCell )            return true; // same division → same slot only
+    }
+    return false;
   }
 
-  // True when a real button already occupies cell (row, col) of the tab.
-  private static bool Occupied( TabEntry tab, int row, int col )
-    => tab.Buttons is not null && tab.Buttons.Any( b => b.Row == row && b.Col == col );
-
-  // Push the button at (row, col) and the contiguous run to its right one column along,
-  // wrapping past the last column onto the next row, so a fresh cell opens at (row, col).
+  // Push the cell at (row, col) and the contiguous run of cells to its right one column
+  // along, wrapping past the last column onto the next row, so a fresh cell opens at
+  // (row, col). Every button in a cell (incl. all of a sub-cell group) moves together.
   private static void ShiftRight( TabEntry tab, int row, int col )
   {
     if( tab.Buttons is null )
@@ -179,42 +182,29 @@ internal static class TabStore
     }
     int cols = tab.Columns > 0 ? tab.Columns : int.MaxValue;
 
-    // Collect the contiguous run of occupied cells from (row, col) rightward (stop at the
-    // first gap). Gather first, then move each exactly once — re-scanning after a move would
-    // keep finding the just-moved button and loop forever.
-    var run = new List<ButtonDef>();
-    for( int c = col; tab.Buttons.FirstOrDefault( b => b.Row == row && b.Col == c ) is { } b; c++ )
+    // First free column at or after `col` (a column is occupied if any button sits in it).
+    int end = col;
+    while( tab.Buttons.Any( b => b.Row == row && b.Col == end ) ) end++;
+    if( end == col )
     {
-      run.Add( b );
-    }
-    if( run.Count == 0 )
-    {
-      return;
+      return; // the target cell is already free
     }
 
-    // If the run reaches the last column, its tail must wrap onto the next row — open a
-    // slot there first (recurses down rows, always toward a gap, so it terminates).
-    if( col + run.Count >= cols )
+    // If the run reaches the last column, its tail wraps onto the next row — open a slot
+    // there first (recurses down rows, always toward a gap, so it terminates).
+    if( end >= cols )
     {
       ShiftRight( tab, row + 1, 0 );
     }
 
-    // Right-to-left so each button lands on a cell just vacated (or the freed gap).
-    for( int i = run.Count - 1; i >= 0; i-- )
+    // Move every button in columns [col, end) one column right, right-to-left so each lands
+    // on a just-vacated cell; buttons sharing a column (sub-cell siblings) move as one.
+    foreach( ButtonDef b in tab.Buttons.Where( b => b.Row == row && b.Col >= col && b.Col < end )
+                                        .OrderByDescending( b => b.Col ).ToList() )
     {
-      ButtonDef b = run[i];
       if( b.Col + 1 >= cols ) { b.Col = 0; b.Row++; }
       else                      b.Col++;
     }
-  }
-
-  // The first row index below all current content (and sections) — a fresh empty row.
-  private static int NextEmptyRow( TabEntry tab )
-  {
-    int max = -1;
-    if( tab.Buttons is not null )  foreach( ButtonDef b in tab.Buttons )  max = Math.Max( max, b.Row );
-    if( tab.Sections is not null ) foreach( SectionDef s in tab.Sections ) max = Math.Max( max, s.Row );
-    return max + 1;
   }
 
   private static bool Locate( ButtonDef button, out TabEntry tab )
@@ -246,6 +236,33 @@ internal static class TabStore
     foreach( TabEntry t in s_file.Tabs )
     {
       if( t.Buttons is not null && t.Buttons.Remove( button ) )
+      {
+        SaveCurrent();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// <summary>Add a heading (section divider) to a tab, then persist.</summary>
+  public static void AddHeading( TabEntry tab, SectionDef heading )
+  {
+    tab.Sections ??= new List<SectionDef>();
+    tab.Sections.Add( heading );
+    SaveCurrent();
+  }
+
+  /// <summary>Remove a heading (section divider) from the live config, then persist. Returns
+  /// false if it wasn't found.</summary>
+  public static bool DeleteHeading( SectionDef heading )
+  {
+    if( s_file is null )
+    {
+      return false;
+    }
+    foreach( TabEntry t in s_file.Tabs )
+    {
+      if( t.Sections is not null && t.Sections.Remove( heading ) )
       {
         SaveCurrent();
         return true;

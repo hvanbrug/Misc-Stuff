@@ -29,7 +29,9 @@ internal static class ButtonCommands
       return;
     }
 
-    DropSpot spot = model.ResolveDrop( at, null );
+    // Pass the new button so a sub-cell one targets the clicked cell (to join a free slot)
+    // rather than insert-shifting the row.
+    DropSpot spot = model.ResolveDrop( at, newButton );
     TabStore.AddButtonAt( model.Entry, spot.Row, spot.Col, newButton );
     AppState.RequestReload?.Invoke();
   }

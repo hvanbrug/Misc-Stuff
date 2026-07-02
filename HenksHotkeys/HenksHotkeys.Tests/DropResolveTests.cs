@@ -33,13 +33,23 @@ public class DropResolveTests
   }
 
   [Fact]
-  public void BelowEverything_IsANewRow()
+  public void JustBelowContent_PlacesOnAFreshRow()
   {
     DataTabModel t = Grid();
     DropSpot d = t.ResolveDrop( new Point( t.SymOrgX + 10, t.SymOrgY + t.RowHeight + 6 ), null );
 
-    Assert.Equal( DropKind.NewRow, d.Kind );
-    Assert.Equal( 1, d.Row );
+    Assert.Equal( DropKind.PlaceEmpty, d.Kind );
+    Assert.Equal( 1, d.Row );   // one row past the content
+  }
+
+  [Fact]
+  public void FarBelowContent_LeavesEmptyRowsBetween()
+  {
+    DataTabModel t = Grid();   // content only on row 0
+    DropSpot d = t.ResolveDrop( new Point( t.SymOrgX + 10, t.SymOrgY + 3 * t.RowHeight + 6 ), null );
+
+    Assert.Equal( DropKind.PlaceEmpty, d.Kind );
+    Assert.Equal( 3, d.Row );   // dropped three rows down → rows 1 and 2 left empty
   }
 
   [Fact]

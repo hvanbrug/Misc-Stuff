@@ -27,6 +27,12 @@ internal sealed class HotkeyWindow : Window
   private const int WM_EXITSIZEMOVE = 0x0232;
   private const int DoubleClickMs   = 400;
 
+  // Default expanded height (used only when there is no saved height): the tallest tab's
+  // content is clamped into [min, max] DIPs, then the non-scrolling chrome is added.
+  private const double DefaultViewportMin = 320; // don't make the default window shorter than this
+  private const double DefaultViewportMax = 330; // ...nor taller — taller tabs scroll instead
+  private const double VerticalChrome     = 64;  // toolbar strip + tab-header row + top/bottom borders
+
   private readonly TabControl              m_tabs = new();
   private readonly List<SmoothScroller>    m_scrollers = new();
   private readonly List<FrameworkElement>  m_helperButtons = new();
@@ -103,6 +109,14 @@ internal sealed class HotkeyWindow : Window
 
     m_favX = AppState.Settings.FavX;
     m_favY = AppState.Settings.FavY;
+
+    // Settings are already loaded here (FavX/FavY above come from the same store), so apply
+    // the saved collapsed state now — before the first Show() — instead of letting the
+    // window flash open at full size and snap shut in ShowUi.
+    if( AppState.Settings.IsCollapsed )
+    {
+      SetCollapsed( true, persist: false );
+    }
 
     m_activeWinTimer.Tick += ( _, _ ) => TrackActiveWindow();
     m_activeWinTimer.Start();
@@ -188,6 +202,16 @@ internal sealed class HotkeyWindow : Window
         HorizontalAlignment = HorizontalAlignment.Left,
         VerticalAlignment   = VerticalAlignment.Top,
       };
+      // Headings render *under* the buttons: add them first so a button that overlaps a
+      // heading still receives the mouse (stays draggable) and paints on top of it.
+      foreach( TabModel.SectionHeader hdr in model.Headers )
+      {
+        FrameworkElement label = BuildSectionHeader( hdr, model );
+        Canvas.SetLeft( label, hdr.X );
+        Canvas.SetTop( label, hdr.Y );
+        canvas.Children.Add( label );
+      }
+
       foreach( SymbolElement sym in model.Symbols )
       {
         FrameworkElement btn = BuildButton( sym, model );
@@ -202,20 +226,6 @@ internal sealed class HotkeyWindow : Window
         }
       }
 
-      // Every empty cell behaves like a drop target: hovering one shows its outline.
-      if( model is DataTabModel hoverModel )
-      {
-        AttachEmptyCellHover( canvas, hoverModel );
-      }
-
-      foreach( TabModel.SectionHeader hdr in model.Headers )
-      {
-        FrameworkElement label = BuildSectionHeader( hdr, model );
-        Canvas.SetLeft( label, hdr.X );
-        Canvas.SetTop( label, hdr.Y );
-        canvas.Children.Add( label );
-      }
-
       var sv = new ScrollViewer
       {
         VerticalScrollBarVisibility   = ScrollBarVisibility.Auto,
@@ -226,10 +236,12 @@ internal sealed class HotkeyWindow : Window
       };
       m_scrollers.Add( new SmoothScroller( sv ) );
 
-      // Right-click the open area of a data tab → "Add button here" (placed near the
-      // click). Buttons keep their own Edit/Delete menu, which takes precedence.
       if( model is DataTabModel dataModel )
       {
+        // Every empty cell is a drop target: hovering one shows its outline (over the whole
+        // tab width — including columns past the content — via the ScrollViewer). Right-click
+        // the open area adds a button/heading; buttons keep their own Edit/Delete menu.
+        AttachEmptyCellHover( sv, canvas, dataModel );
         AttachAddHereMenu( sv, canvas, dataModel );
       }
 
@@ -520,11 +532,9 @@ internal sealed class HotkeyWindow : Window
     }
 
     DropSpot spot = model.ResolveDrop( drop, moving );
-    bool ok = spot.Kind == DropKind.NewRow
-                ? TabStore.MoveButtonToNewRow( moving, spot.Col )
-                : TabStore.MoveButtonToCell(   moving, spot.Row, spot.Col ); // empty → place; on a button → insert (shift)
-
-    if( ok )
+    // Empty cell (incl. a fresh row below the content) → place there; on a button → insert
+    // before/after it, shifting that row.
+    if( TabStore.MoveButtonToCell( moving, spot.Row, spot.Col ) )
     {
       AppState.RequestReload?.Invoke(); // rebuilds the tab at the new layout
     }
@@ -586,7 +596,10 @@ internal sealed class HotkeyWindow : Window
 
   // Faint outline that follows the pointer over the tab's empty cells, so every cell reads
   // as a place you can drop / add a button (the old materialised "blank" cells, computed).
-  private void AttachEmptyCellHover( Canvas canvas, DataTabModel model )
+  // The move is tracked on the ScrollViewer (which fills the whole tab, past the content
+  // width) so cells in unused trailing columns highlight too; the outline lives on the canvas
+  // and is not clipped to the content, so it shows there.
+  private void AttachEmptyCellHover( ScrollViewer sv, Canvas canvas, DataTabModel model )
   {
     var hover = new Border
     {
@@ -599,7 +612,7 @@ internal sealed class HotkeyWindow : Window
     Panel.SetZIndex( hover, 1 ); // above the canvas, below the buttons
     canvas.Children.Add( hover );
 
-    canvas.MouseMove += ( _, e ) =>
+    sv.MouseMove += ( _, e ) =>
     {
       if( m_btnDragging ) { hover.Visibility = Visibility.Collapsed; return; } // the drag has its own cues
       Point p    = e.GetPosition( canvas );
@@ -621,7 +634,7 @@ internal sealed class HotkeyWindow : Window
         hover.Visibility = Visibility.Collapsed;
       }
     };
-    canvas.MouseLeave += ( _, _ ) => hover.Visibility = Visibility.Collapsed;
+    sv.MouseLeave += ( _, _ ) => hover.Visibility = Visibility.Collapsed;
   }
 
   // The open-area menu for a data tab: remembers where the right-click landed (in canvas
@@ -634,12 +647,15 @@ internal sealed class HotkeyWindow : Window
     var menu = new ContextMenu();
     var add  = new MenuItem { Header = "Add button here…" };
     add.Click += ( _, _ ) => ButtonCommands.AddHere( model, clickPoint );
+    var addH = new MenuItem { Header = "Insert heading here…" };
+    addH.Click += ( _, _ ) => HeadingCommands.AddHere( model, clickPoint );
     menu.Items.Add( add );
+    menu.Items.Add( addH );
     sv.ContextMenu = menu;
   }
 
-  // A section label: bold text sitting on a separator line spanning the columns.
-  // An empty name renders as just the line (a plain divider between groups).
+  // A section/heading label: bold text sitting on a separator line. An empty name renders as
+  // just the line (a plain divider). On a data tab it gets a right-click Edit/Delete menu.
   private static FrameworkElement BuildSectionHeader( TabModel.SectionHeader hdr, TabModel model )
   {
     var text = new TextBlock
@@ -654,14 +670,28 @@ internal sealed class HotkeyWindow : Window
       Margin              = new Thickness( Layout.EdgeGap, 0, 0, Layout.EdgeGap ),
       TextTrimming        = TextTrimming.CharacterEllipsis,
     };
-    return new Border
+    var border = new Border
     {
       Width           = hdr.Width,
       Height          = hdr.Height,
+      Background      = Brushes.Transparent, // hit-testable so the right-click menu opens
       BorderBrush     = Palette.Brush( "AccentBarBorder" ),
       BorderThickness = new Thickness( 0, 0, 0, 1 ), // separator line
       Child           = text,
     };
+
+    if( model is DataTabModel dataModel && hdr.Source is { } def )
+    {
+      var menu = new ContextMenu();
+      var edit = new MenuItem { Header = "Edit heading…" };
+      edit.Click += ( _, _ ) => HeadingCommands.Edit( dataModel, def );
+      var del  = new MenuItem { Header = "Delete heading" };
+      del.Click += ( _, _ ) => HeadingCommands.Delete( def );
+      menu.Items.Add( edit );
+      menu.Items.Add( del );
+      border.ContextMenu = menu;
+    }
+    return border;
   }
 
   private static string Append( string tip, string line )
@@ -669,13 +699,25 @@ internal sealed class HotkeyWindow : Window
     return tip.Length == 0 ? line : tip + "\n" + line;
   }
 
+  // A typographic point is 1/72 inch; a WPF device-independent pixel is 1/96 inch. So a
+  // font's point size becomes DIPs by scaling 96/72 (= 4/3). WPF's FontSize is in DIPs.
+  private const double DipsPerInch   = 96.0;
+  private const double PointsPerInch = 72.0;
+
   private static double PtToDip( float pointSize )
   {
-    return pointSize * 4.0 / 3.0;
+    return pointSize * ( DipsPerInch / PointsPerInch );
   }
 
-  // First click runs the action (sends the text); a rapid second click sends an
-  // Enter instead of re-sending, reproducing the BN_DBLCLK behaviour in UI.ahk.
+  // First click runs the action (sends the text); a rapid second click sends an Enter
+  // instead of re-sending, reproducing the BN_DBLCLK behaviour in UI.ahk.
+  //
+  // Why not just handle MouseDoubleClick? Because a Button fires Click on *both* clicks of
+  // a double-click, so MouseDoubleClick would sit on top of two Clicks — sending the text
+  // twice and the Enter in the wrong order (text, Enter, text). Disambiguating the other
+  // way (a timer that waits to see if a second click arrives) would delay the single-click
+  // send, which we want to be instant. So instead we let the first Click send immediately
+  // and, if a second Click lands within DoubleClickMs, turn *that* one into the Enter.
   private static void WireSymbolButton( Button btn, Action click )
   {
     long last = 0;
@@ -821,8 +863,12 @@ internal sealed class HotkeyWindow : Window
       maxContentH = Math.Max( maxContentH, m.ContentHeight );
     }
 
-    double viewport = Math.Min( 330, Math.Max( 320, maxContentH ) );
-    double defaultH = viewport + 64;
+    // With no saved height, pick a default: fit the tallest tab's content, but clamp it to
+    // a comfortable band (short tabs don't make a tiny window; tall tabs scroll instead of
+    // filling the screen), then add the fixed vertical chrome around the scroll area
+    // (toolbar strip + tab-header row + top/bottom borders).
+    double viewport = Math.Min( DefaultViewportMax, Math.Max( DefaultViewportMin, maxContentH ) );
+    double defaultH = viewport + VerticalChrome;
 
     double screenH = SystemParameters.PrimaryScreenHeight;
     int    savedH  = AppState.Settings.WndHeight;
@@ -846,11 +892,8 @@ internal sealed class HotkeyWindow : Window
     RestoreSavedPosition();
     BringToFront();
 
-    if( AppState.Settings.IsCollapsed )
-    {
-      SetCollapsed( true, persist: false );
-    }
-
+    // The saved collapsed state was already applied in the constructor (before the first
+    // Show), so there's nothing to toggle here.
     InstallWheelHook();
   }
 
@@ -917,7 +960,10 @@ internal sealed class HotkeyWindow : Window
     {
       if( collapse )
       {
-        if( !m_collapsed )
+        // Remember the current expanded height so a later expand restores it — but only
+        // once the window has actually been measured. At startup (collapsing before the
+        // first Show) ActualHeight is 0, and we must keep the computed default instead.
+        if( !m_collapsed && ActualHeight > 0 )
         {
           m_fullHeight = ActualHeight;
         }

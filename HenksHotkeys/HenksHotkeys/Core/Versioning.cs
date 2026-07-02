@@ -25,10 +25,10 @@ internal static class VersionStamp
     => string.Join( Sep, b.Text, b.Secret, b.Desc, b.Hotkey, b.Width, b.Align,
                     b.ShowText, b.TipText );
 
-  /// <summary>Full signature: content plus grid position, so a move (row/col change)
-  /// bumps the button's clock and wins on merge.</summary>
+  /// <summary>Full signature: content plus grid position (including sub-cell), so a move
+  /// or a re-slotting bumps the button's clock and wins on merge.</summary>
   public static string ButtonSig( ButtonDef b )
-    => ContentSig( b ) + Sep + b.Row + "/" + b.Col;
+    => ContentSig( b ) + Sep + b.Row + "/" + b.Col + "/" + b.SubCell + "/" + b.SubCells;
 
   /// <summary>Split any row wider than the tab's column count into multiple rows,
   /// so a merge/repair that piled buttons into one row can't make the tab (and
@@ -90,7 +90,7 @@ internal static class VersionStamp
                                 t.Proportional, t.Square );
     string sections = t.Sections is null
       ? ""
-      : string.Join( ",", t.Sections.Select( s => s.Row + "/" + s.Name + "/" + s.Height ) );
+      : string.Join( ",", t.Sections.Select( s => s.Row + "/" + s.Name + "/" + s.Height + "/" + s.Col + "/" + s.Span ) );
     return attrs + Sep + sections;
   }
 
@@ -251,22 +251,23 @@ internal static class VersionMerge
     return t;
   }
 
-  /// <summary>Two machines may independently drop different buttons on the same
-  /// (row, col). Keep them all: order deterministically and push each colliding button
-  /// to the next free cell (row-major), so a merge never silently overwrites one.</summary>
+  /// <summary>Two machines may independently drop different buttons on the same sub-slot
+  /// (row, col, subcell). Keep them all: order deterministically and push each true clash to
+  /// the next free cell, so a merge never silently overwrites one. Sub-cell siblings (same
+  /// cell, different slot) don't clash, so they're preserved.</summary>
   private static List<ButtonDef> ResolveCollisions( List<ButtonDef> buttons, int columns )
   {
     int cols = columns > 0 ? columns : int.MaxValue;
-    var taken = new HashSet<long>();
-    long Key( int r, int c ) => (long)r * ( cols == int.MaxValue ? 100000 : cols ) + c;
+    var taken = new HashSet<(int Row, int Col, int Sub)>();
+    int SubSlot( ButtonDef b ) => b.SubCells > 1 ? Math.Clamp( b.SubCell, 0, b.SubCells - 1 ) : 0;
 
     // Deterministic order: newest edit first, then by current position / id, so both
     // machines converge on the same placement.
     foreach( ButtonDef b in buttons.OrderByDescending( b => b.Mod )
-                                   .ThenBy( b => b.Row ).ThenBy( b => b.Col )
+                                   .ThenBy( b => b.Row ).ThenBy( b => b.Col ).ThenBy( b => SubSlot( b ) )
                                    .ThenBy( b => b.Id ) )
     {
-      while( !taken.Add( Key( b.Row, b.Col ) ) )
+      while( !taken.Add( ( b.Row, b.Col, SubSlot( b ) ) ) )
       {
         b.Col++;
         if( b.Col >= cols ) { b.Col = 0; b.Row++; }
@@ -401,7 +402,7 @@ internal static class VersionMerge
     ButtonWidth = s.ButtonWidth, ButtonHeight = s.ButtonHeight,
     EmojiImages = s.EmojiImages, StripEmojis = s.StripEmojis,
     Proportional = s.Proportional, Square = s.Square,
-    Sections = s.Sections?.Select( x => new SectionDef { Row = x.Row, Name = x.Name, Height = x.Height } ).ToList(),
+    Sections = s.Sections?.Select( x => new SectionDef { Row = x.Row, Name = x.Name, Height = x.Height, Col = x.Col, Span = x.Span } ).ToList(),
     Id = s.Id, Mod = s.Mod,
   };
 

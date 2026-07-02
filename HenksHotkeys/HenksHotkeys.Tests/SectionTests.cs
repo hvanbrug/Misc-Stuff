@@ -13,6 +13,8 @@ public class SectionTests
   private static ButtonDef B( string t, int row, int col ) => new() { Text = t, Row = row, Col = col };
   private static SectionDef Sec( string name, int row, double height = 0 )
     => new() { Name = name, Row = row, Height = height };
+  private static SectionDef Head( string name, int row, int col, int span )
+    => new() { Name = name, Row = row, Col = col, Span = span };
 
   private static DataTabModel Build( int cols, List<ButtonDef> buttons, List<SectionDef> sections )
     => new( new TabEntry { Name = "T", Columns = cols, Buttons = buttons, Sections = sections } );
@@ -93,5 +95,28 @@ public class SectionTests
     SectionDef header = m.Tabs[0].Sections![0];
     Assert.Equal( "Group", header.Name );
     Assert.Equal( 28, header.Height );
+  }
+
+  [Fact]
+  public void SpanningHeading_IsButtonRowHeight_AndStartsAtItsColumn()
+  {
+    int cw = 35 + Layout.ButtonGap;
+    DataTabModel t = Build( 8, new(), new() { Head( "H", 0, 2, 3 ) } );
+
+    TabModel.SectionHeader h = t.Headers[0];
+    Assert.Equal( EG + 2 * cw, h.X );                            // starts at column 2
+    Assert.Equal( 35 * 3 + Layout.ButtonGap * 2, h.Width );      // spans 3 cells
+    Assert.Equal( 35 + Layout.ButtonGap, h.Height );             // same height as a button row
+  }
+
+  [Fact]
+  public void TabSig_ChangesWhenHeadingColumnOrSpanChanges()
+  {
+    var a = new TabEntry { Name = "T", Columns = 8, Sections = new() { Head( "H", 0, 1, 2 ) } };
+    var b = new TabEntry { Name = "T", Columns = 8, Sections = new() { Head( "H", 0, 1, 3 ) } }; // span
+    var c = new TabEntry { Name = "T", Columns = 8, Sections = new() { Head( "H", 0, 2, 2 ) } }; // col
+
+    Assert.NotEqual( VersionStamp.TabSig( a ), VersionStamp.TabSig( b ) );
+    Assert.NotEqual( VersionStamp.TabSig( a ), VersionStamp.TabSig( c ) );
   }
 }

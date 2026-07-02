@@ -231,8 +231,8 @@ internal abstract class TabModel
     return element;
   }
 
-  /// <summary>A laid-out section header: a label (blank = a plain separator line)
-  /// spanning the columns at a given Y, taking <see cref="Height"/> vertical space.</summary>
+  /// <summary>A laid-out section header: a label (blank = a plain separator line) at a given
+  /// X/Y, taking <see cref="Height"/> vertical space and <see cref="Width"/> across.</summary>
   public sealed class SectionHeader
   {
     public string Name   { get; init; } = "";
@@ -240,6 +240,10 @@ internal abstract class TabModel
     public int    Y      { get; init; }
     public int    Width  { get; init; }
     public int    Height { get; init; }
+
+    /// <summary>The heading/section this was built from (data tabs only), so the right-click
+    /// menu can edit / delete it. Null for headers with no editable source.</summary>
+    public Core.SectionDef? Source { get; init; }
   }
 
   // ── Send-time transform (Comments tab strips emojis when enabled) ─

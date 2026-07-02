@@ -171,6 +171,16 @@ internal sealed class SectionDef
 
   [JsonProperty( "height" ), DefaultValue( 0.0 )]
   public double Height { get; set; }
+
+  /// <summary>Start column (0-based). 0 = the left edge. Lets a heading begin anywhere.</summary>
+  [JsonProperty( "col" ), DefaultValue( 0 )]
+  public int Col { get; set; }
+
+  /// <summary>How many columns the heading spans. 0 = the full grid width (a classic
+  /// full-width section divider). Any value &gt; 0 makes it a partial-width heading that is
+  /// the same height as a button row.</summary>
+  [JsonProperty( "span" ), DefaultValue( 0 )]
+  public int Span { get; set; }
 }
 
 internal sealed class ButtonDef
@@ -184,6 +194,17 @@ internal sealed class ButtonDef
   /// written (even when 0) so a button's position is explicit in the file.</summary>
   [JsonProperty( "col", DefaultValueHandling = DefaultValueHandling.Include )]
   public int Col { get; set; }
+
+  /// <summary>How many buttons share this cell, split evenly across its width (1 = the
+  /// button owns the whole cell). Every button in the same cell should carry the same
+  /// value. Omitted from the file when 1.</summary>
+  [JsonProperty( "subcells" ), DefaultValue( 1 )]
+  public int SubCells { get; set; } = 1;
+
+  /// <summary>This button's slot within its shared cell, 0..<see cref="SubCells"/>-1, left
+  /// to right. Ignored (and omitted) when <see cref="SubCells"/> is 1.</summary>
+  [JsonProperty( "subcell" ), DefaultValue( 0 )]
+  public int SubCell { get; set; }
 
   /// <summary>The character / text the button sends (and shows, unless ShowDesc).</summary>
   [JsonProperty( "text" ), DefaultValue( "" )]
