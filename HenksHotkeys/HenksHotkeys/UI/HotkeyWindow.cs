@@ -302,12 +302,14 @@ internal sealed class HotkeyWindow : Window
     };
     // Headings render *under* the buttons: add them first so a button that overlaps a
     // heading still receives the mouse (stays draggable) and paints on top of it.
+    var headerEls = new List<FrameworkElement>();
     foreach( TabModel.SectionHeader hdr in model.Headers )
     {
       FrameworkElement label = BuildSectionHeader( hdr, model );
       Canvas.SetLeft( label, hdr.X );
       Canvas.SetTop( label, hdr.Y );
       canvas.Children.Add( label );
+      headerEls.Add( label );
 
       // Headings are selectable (Ctrl+click) and move with the block when dragged.
       if( model is DataTabModel headModel && hdr.Source is { } sdef )
@@ -315,6 +317,7 @@ internal sealed class HotkeyWindow : Window
         WireHeadingSelect( label, sdef, new Rect( hdr.X, hdr.Y, hdr.Width, hdr.Height ), canvas, headModel );
       }
     }
+    if( model is EmojisTab ) m_emojiHeaderEls = headerEls; // tracked so a reconcile can refresh them
 
     foreach( SymbolElement sym in model.Symbols )
     {
@@ -401,6 +404,85 @@ internal sealed class HotkeyWindow : Window
       }
     }
     RefreshTonePicker();
+  }
+
+  private List<FrameworkElement> m_emojiHeaderEls = new(); // the Emojis tab's section-header elements
+
+  /// <summary>Apply an Emojis-tab change (favourite add/remove/reorder, section collapse/expand) by
+  /// **reconciling** the existing buttons against a freshly-computed layout, instead of rebuilding
+  /// the whole tab. Rebuilding re-measures all ~1,200 templated buttons (~2 s); here the existing
+  /// buttons are kept on the same canvas and merely repositioned (arrange is cheap — only *measure*
+  /// is slow), and only the handful that appeared/disappeared are created/removed. So these actions
+  /// go from ~3 s to a fraction of that.</summary>
+  public void ReconcileEmojiTab()
+  {
+    int idx = AppState.Tabs.FindIndex( t => t is EmojisTab );
+    if( idx < 0 || AppState.Tabs[idx] is not EmojisTab model || idx >= m_tabCanvases.Count )
+    {
+      return;
+    }
+    Canvas canvas = m_tabCanvases[idx];
+    var    target = new EmojisTab { Backing = model.Backing }; // the desired layout (fresh state)
+    int    px     = (int)Math.Round( model.SymBtnSizeX * Layout.SymbolScale );
+
+    // Index the existing buttons by identity so we can reuse them.
+    var pool = new Dictionary<(bool Fav, string Base), SymbolElement>();
+    foreach( SymbolElement s in model.Symbols ) pool.TryAdd( ( s.IsFavourite, s.BaseChar ), s );
+
+    var kept = new List<SymbolElement>( target.Symbols.Count );
+    var used = new HashSet<(bool, string)>();
+    foreach( SymbolElement t in target.Symbols )
+    {
+      var key = ( t.IsFavourite, t.BaseChar );
+      if( used.Add( key ) && pool.TryGetValue( key, out SymbolElement? old ) && old.Ctrl is FrameworkElement el )
+      {
+        // Reuse: move the existing button; refresh its image only if the emoji actually changed.
+        old.X = t.X; old.Y = t.Y; old.Line = t.Line; old.Slot = t.Slot;
+        Canvas.SetLeft( el, t.X );
+        Canvas.SetTop(  el, t.Y );
+        if( old.Char != t.Char )
+        {
+          old.Char = t.Char;
+          if( el is Button b && b.Content is Image im && EmojiImageProvider.Get( t.Char, px ).Image is { } src ) im.Source = src;
+        }
+        kept.Add( old );
+      }
+      else
+      {
+        // New emoji (e.g. a just-added favourite, or an expanded section): build a fresh button.
+        FrameworkElement btn = BuildButton( t, model, canvas );
+        Canvas.SetLeft( btn, t.X );
+        Canvas.SetTop(  btn, t.Y );
+        canvas.Children.Add( btn );
+        WireEmojiButton( btn, t, canvas, model );
+        kept.Add( t );
+      }
+    }
+
+    // Remove buttons whose emoji is gone (unfavourited, or a collapsed section).
+    foreach( SymbolElement s in model.Symbols )
+    {
+      if( !used.Contains( ( s.IsFavourite, s.BaseChar ) ) && s.Ctrl is UIElement el ) canvas.Children.Remove( el );
+    }
+    model.Symbols.Clear();
+    model.Symbols.AddRange( kept );
+
+    // Headers are few — just replace them (handles the triangle flip and Favourites appearing/going).
+    foreach( FrameworkElement h in m_emojiHeaderEls ) canvas.Children.Remove( h );
+    m_emojiHeaderEls = new List<FrameworkElement>( target.Headers.Count );
+    foreach( TabModel.SectionHeader hdr in target.Headers )
+    {
+      FrameworkElement label = BuildSectionHeader( hdr, model );
+      Canvas.SetLeft( label, hdr.X );
+      Canvas.SetTop(  label, hdr.Y );
+      canvas.Children.Add( label );
+      m_emojiHeaderEls.Add( label );
+    }
+    model.Headers.Clear();
+    model.Headers.AddRange( target.Headers );
+
+    canvas.Height = target.ContentHeight; // keep the scroll extent correct
+    canvas.Width  = target.ContentWidth;
   }
 
   // The tab strip is editable (#11) and reorderable (#15): every header carries a right-click menu
@@ -1430,7 +1512,7 @@ internal sealed class HotkeyWindow : Window
       border.MouseLeftButtonUp += ( _, e ) =>
       {
         EmojiSectionStore.Toggle( hdr.Name );
-        AppState.RequestReload?.Invoke(); // rebuild — collapsed sections skip their buttons
+        ReconcileEmojiTab(); // in-place: reposition existing buttons, add/remove the section's
         e.Handled = true;
       };
     }

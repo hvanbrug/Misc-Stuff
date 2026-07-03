@@ -13,7 +13,7 @@ internal static class FavouriteCommands
   {
     if( FavouritesStore.Add( emoji ) )
     {
-      AppState.RequestReload?.Invoke();
+      AppState.Window?.ReconcileEmojiTab(); // in-place update, not a full rebuild
     }
   }
 
@@ -21,7 +21,7 @@ internal static class FavouriteCommands
   {
     if( FavouritesStore.Remove( ch ) )
     {
-      AppState.RequestReload?.Invoke();
+      AppState.Window?.ReconcileEmojiTab();
     }
   }
 
@@ -29,7 +29,7 @@ internal static class FavouriteCommands
   {
     if( FavouritesStore.Reorder( ch, insertBeforeIndex ) )
     {
-      AppState.RequestReload?.Invoke();
+      AppState.Window?.ReconcileEmojiTab();
     }
   }
 }
