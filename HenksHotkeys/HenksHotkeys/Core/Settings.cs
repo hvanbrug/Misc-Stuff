@@ -18,4 +18,8 @@ internal sealed class Settings
   public int? FavY   { get; set; }
 
   public int LastTab { get; set; } = 1;
+
+  /// <summary>Active emoji skin tone as a Twemoji modifier codepoint ("" = default/yellow,
+  /// else "1f3fb".."1f3ff"). Applied to toneable emoji on the Emojis tab (#27).</summary>
+  public string SkinTone { get; set; } = "";
 }

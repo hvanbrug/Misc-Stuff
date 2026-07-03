@@ -42,6 +42,7 @@ public partial class App
     AppState.InitSettings();
     AppState.UseClipSend     = AppState.Settings.IsClipSendMode;
     AppState.StripSendEmojis = AppState.Settings.IsStripCommentEmojis;
+    AppState.SkinTone        = AppState.Settings.SkinTone;
 
     // Publish the light/dark palette into the app resources before any window or
     // style is built, so the App.xaml styles resolve their DynamicResource brushes.
@@ -199,7 +200,8 @@ public partial class App
     HotkeyRegistry.Clear();
     AppState.HotkeyHelp.Clear();
     AppState.Tabs.Clear();
-    FavouritesStore.Invalidate(); // re-read favourites.json too (Emojis tab rebuilds from it)
+    FavouritesStore.Invalidate();   // re-read favourites.json too (Emojis tab rebuilds from it)
+    EmojiSectionStore.Invalidate(); // and the collapsed-sections state
     BuildTabModels();
 
     m_window.ReloadTabs();

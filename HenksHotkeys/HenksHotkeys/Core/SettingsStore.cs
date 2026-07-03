@@ -74,4 +74,7 @@ internal sealed class SettingsStore
 
   public int  LastTab             => m_data.LastTab;
   public void SetLastTab( int v ) { m_data.LastTab = v; Save(); }
+
+  public string SkinTone            => m_data.SkinTone ?? "";
+  public void SetSkinTone( string v ) { m_data.SkinTone = v ?? ""; Save(); }
 }

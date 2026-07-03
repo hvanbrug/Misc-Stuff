@@ -135,7 +135,7 @@ internal abstract class TabModel
   /// <summary>Place a full-width section heading at the current cursor row (a bold label on a
   /// separator line), then push the buttons that follow below it. For the cursor-flow tabs
   /// (Emojis / Tools); data tabs build their headers from <see cref="Core.SectionDef"/> instead.</summary>
-  protected void RegisterSectionHeader( string name )
+  protected void RegisterSectionHeader( string name, bool collapsible = false, bool collapsed = false )
   {
     NextLine( true ); // a heading begins a fresh row
     int height = Layout.SectionHeaderHeight;
@@ -144,11 +144,13 @@ internal abstract class TabModel
       : SymBtnSizeX;
     Headers.Add( new SectionHeader
     {
-      Name   = name,
-      X      = CalcSymbolX( m_nextLine, 1 ),
-      Y      = CalcSymbolY( m_nextLine, 1 ),
-      Width  = width,
-      Height = height,
+      Name        = name,
+      X           = CalcSymbolX( m_nextLine, 1 ),
+      Y           = CalcSymbolY( m_nextLine, 1 ),
+      Width       = width,
+      Height      = height,
+      Collapsible = collapsible,
+      Collapsed   = collapsed,
     } );
     ShiftLineByFraction( height, RowHeight ); // buttons after this start below the heading
   }
@@ -224,10 +226,6 @@ internal abstract class TabModel
     string hk = hotkey ?? "";
     string d  = desc   ?? ch;
 
-    // Sends are async now; buttons/hotkeys fire-and-forget (the send serialises
-    // itself and swallows its own errors), so the click returns immediately.
-    Action clickAction = action ?? (() => { _ = TextSender.SendText( TransformSendText( ch ) ); });
-
     var element = new SymbolElement
     {
       Line     = line,
@@ -238,13 +236,19 @@ internal abstract class TabModel
       W        = w,
       H        = h,
       Char     = ch,
+      BaseChar = ch,
       Desc     = d,
       ShowChar = showChar != 0,
       TipChar  = tipChar  != 0,
       Hotkey   = hk,
       Align    = align,
-      ClickAction = clickAction
     };
+    // Sends are async now; buttons/hotkeys fire-and-forget (the send serialises itself and swallows
+    // its own errors), so the click returns immediately. The default action reads element.Char *at
+    // click time* — so retinting an emoji to a skin tone (which swaps Char) changes what it sends
+    // without re-wiring the button.
+    Action clickAction = action ?? ( () => { _ = TextSender.SendText( TransformSendText( element.Char ) ); } );
+    element.ClickAction = clickAction;
     Symbols.Add( element );
 
     HotkeyRegistry.Add( hk, clickAction );
@@ -267,6 +271,14 @@ internal abstract class TabModel
     public int    Width  { get; init; }
     public int    Height { get; init; }
     public string Align  { get; init; } = "left";
+
+    /// <summary>This heading is a collapse toggle (Emojis tab, #26): it shows a ▸/▾ triangle and
+    /// clicking it hides/shows the section's buttons.</summary>
+    public bool Collapsible { get; init; }
+
+    /// <summary>When <see cref="Collapsible"/>, whether the section is currently collapsed (its
+    /// buttons weren't built, so the triangle points right).</summary>
+    public bool Collapsed { get; init; }
 
     /// <summary>The heading/section this was built from (data tabs only), so the right-click
     /// menu can edit / delete it. Null for headers with no editable source.</summary>

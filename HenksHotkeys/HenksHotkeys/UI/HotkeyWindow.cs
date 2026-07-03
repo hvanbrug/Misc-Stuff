@@ -266,80 +266,14 @@ internal sealed class HotkeyWindow : Window
 
     foreach( TabModel model in AppState.Tabs )
     {
-      var canvas = new Canvas
-      {
-        Width       = model.ContentWidth,
-        Height      = model.ContentHeight,
-        Background  = Theme.WindowBackground,
-        // Sit at the top-left so the edge gap is a consistent 2px instead of the
-        // buttons being centred in the (wider) locked-width window.
-        HorizontalAlignment = HorizontalAlignment.Left,
-        VerticalAlignment   = VerticalAlignment.Top,
-      };
-      m_tabCanvases.Add( canvas ); // aligned with AppState.Tabs / m_tabs.Items order
-      // Headings render *under* the buttons: add them first so a button that overlaps a
-      // heading still receives the mouse (stays draggable) and paints on top of it.
-      foreach( TabModel.SectionHeader hdr in model.Headers )
-      {
-        FrameworkElement label = BuildSectionHeader( hdr, model );
-        Canvas.SetLeft( label, hdr.X );
-        Canvas.SetTop( label, hdr.Y );
-        canvas.Children.Add( label );
-
-        // Headings are selectable (Ctrl+click) and move with the block when dragged.
-        if( model is DataTabModel headModel && hdr.Source is { } sdef )
-        {
-          WireHeadingSelect( label, sdef, new Rect( hdr.X, hdr.Y, hdr.Width, hdr.Height ), canvas, headModel );
-        }
-      }
-
-      foreach( SymbolElement sym in model.Symbols )
-      {
-        FrameworkElement btn = BuildButton( sym, model, canvas );
-        Canvas.SetLeft( btn, sym.X );
-        Canvas.SetTop( btn, sym.Y );
-        canvas.Children.Add( btn );
-
-        // Data-tab buttons can be dragged to a new cell.
-        if( model is DataTabModel dragModel && sym.Source is not null )
-        {
-          WireDrag( btn, sym, canvas, dragModel );
-        }
-        else if( model is EmojisTab emo )
-        {
-          WireEmojiButton( btn, sym, canvas, emo ); // favourites: mark / unmark + reorder drag
-        }
-      }
-
-      var sv = new ScrollViewer
-      {
-        VerticalScrollBarVisibility   = ScrollBarVisibility.Auto,
-        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-        Background = Theme.WindowBackground,
-        Focusable  = false,
-        Content    = canvas,
-      };
-      m_scrollers.Add( new SmoothScroller( sv ) );
-
-      if( model is DataTabModel dataModel )
-      {
-        // Every empty cell is a drop target: hovering one shows its outline (over the whole
-        // tab width — including columns past the content — via the ScrollViewer). Right-click
-        // the open area adds a button/heading; buttons keep their own Edit/Delete menu.
-        AttachEmptyCellHover( sv, canvas, dataModel );
-        AttachAddHereMenu( sv, canvas, dataModel );
-
-        // A plain click on the empty area clears the selection (Ctrl+click keeps building it).
-        canvas.MouseLeftButtonDown += ( _, _ ) =>
-        {
-          if( ( Keyboard.Modifiers & ModifierKeys.Control ) == 0 && SelectionCount > 0 ) ClearSelection();
-        };
-      }
+      (Canvas canvas, SmoothScroller scroller, object content) = BuildTabContent( model );
+      m_tabCanvases.Add( canvas );   // aligned with AppState.Tabs / m_tabs.Items order
+      m_scrollers.Add( scroller );
 
       var item = new TabItem
       {
         Header = model.Name,
-        Content = sv,
+        Content = content,
         Style = (Style)Application.Current.FindResource( "AppTabItem" )!,
       };
       WireTabHeader( item, model );
@@ -348,6 +282,125 @@ internal sealed class HotkeyWindow : Window
 
     m_tabs.SelectedIndex = (targetTab >= 0) && (targetTab < m_tabs.Items.Count) ? targetTab : 0;
     m_suppressTabPersist = false;
+  }
+
+  // Build one tab's content (canvas of buttons/headers, its scroller, and the outer content — the
+  // Emojis tab wraps in a Grid with the pinned tone picker). Kept separate from the aligned
+  // m_tabCanvases/m_scrollers/m_tabs.Items bookkeeping so a single tab can be rebuilt (see
+  // RebuildEmojiTab) without touching the others.
+  private (Canvas canvas, SmoothScroller scroller, object content) BuildTabContent( TabModel model )
+  {
+    var canvas = new Canvas
+    {
+      Width       = model.ContentWidth,
+      Height      = model.ContentHeight,
+      Background  = Theme.WindowBackground,
+      // Sit at the top-left so the edge gap is a consistent 2px instead of the
+      // buttons being centred in the (wider) locked-width window.
+      HorizontalAlignment = HorizontalAlignment.Left,
+      VerticalAlignment   = VerticalAlignment.Top,
+    };
+    // Headings render *under* the buttons: add them first so a button that overlaps a
+    // heading still receives the mouse (stays draggable) and paints on top of it.
+    foreach( TabModel.SectionHeader hdr in model.Headers )
+    {
+      FrameworkElement label = BuildSectionHeader( hdr, model );
+      Canvas.SetLeft( label, hdr.X );
+      Canvas.SetTop( label, hdr.Y );
+      canvas.Children.Add( label );
+
+      // Headings are selectable (Ctrl+click) and move with the block when dragged.
+      if( model is DataTabModel headModel && hdr.Source is { } sdef )
+      {
+        WireHeadingSelect( label, sdef, new Rect( hdr.X, hdr.Y, hdr.Width, hdr.Height ), canvas, headModel );
+      }
+    }
+
+    foreach( SymbolElement sym in model.Symbols )
+    {
+      FrameworkElement btn = BuildButton( sym, model, canvas );
+      Canvas.SetLeft( btn, sym.X );
+      Canvas.SetTop( btn, sym.Y );
+      canvas.Children.Add( btn );
+
+      // Data-tab buttons can be dragged to a new cell.
+      if( model is DataTabModel dragModel && sym.Source is not null )
+      {
+        WireDrag( btn, sym, canvas, dragModel );
+      }
+      else if( model is EmojisTab emo )
+      {
+        WireEmojiButton( btn, sym, canvas, emo ); // favourites: mark / unmark + reorder drag
+      }
+    }
+
+    var sv = new ScrollViewer
+    {
+      VerticalScrollBarVisibility   = ScrollBarVisibility.Auto,
+      HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+      Background = Theme.WindowBackground,
+      Focusable  = false,
+      Content    = canvas,
+    };
+    var scroller = new SmoothScroller( sv );
+
+    if( model is DataTabModel dataModel )
+    {
+      // Every empty cell is a drop target: hovering one shows its outline (over the whole
+      // tab width — including columns past the content — via the ScrollViewer). Right-click
+      // the open area adds a button/heading; buttons keep their own Edit/Delete menu.
+      AttachEmptyCellHover( sv, canvas, dataModel );
+      AttachAddHereMenu( sv, canvas, dataModel );
+
+      // A plain click on the empty area clears the selection (Ctrl+click keeps building it).
+      canvas.MouseLeftButtonDown += ( _, _ ) =>
+      {
+        if( ( Keyboard.Modifiers & ModifierKeys.Control ) == 0 && SelectionCount > 0 ) ClearSelection();
+      };
+    }
+
+    // The Emojis tab gets a pinned skin-tone picker in its top-right corner (#27).
+    object content = sv;
+    if( model is EmojisTab tonedModel )
+    {
+      var stack = new Grid();
+      stack.Children.Add( sv );
+      stack.Children.Add( BuildTonePicker( tonedModel ) );
+      content = stack;
+    }
+    return ( canvas, scroller, content );
+  }
+
+  /// <summary>Apply the current skin tone to the Emojis tab **in place** (#27) — swap the image and
+  /// sent char on the existing buttons, without rebuilding the tab. Rebuilding re-measures all
+  /// ~1,200 emoji buttons (~2 s); this only re-decodes the toneable ones and reuses everything else,
+  /// so a tone change is near-instant. The click reads the symbol's live Char, so no re-wiring.</summary>
+  public void RetintEmojiInPlace()
+  {
+    if( AppState.Tabs.FirstOrDefault( t => t is EmojisTab ) is not EmojisTab model )
+    {
+      return;
+    }
+    string tone = AppState.SkinTone;
+    int    px   = (int)Math.Round( model.SymBtnSizeX * Layout.SymbolScale );
+    foreach( SymbolElement sym in model.Symbols )
+    {
+      if( sym.IsFavourite )
+      {
+        continue; // favourites keep whatever the user stored
+      }
+      string want = EmojiSkin.Apply( sym.BaseChar, tone );
+      if( want == sym.Char )
+      {
+        continue; // not toneable, or already this tone
+      }
+      sym.Char = want; // the dynamic click action sends this
+      if( sym.Ctrl is Button btn && btn.Content is Image img && EmojiImageProvider.Get( want, px ).Image is { } src )
+      {
+        img.Source = src;
+      }
+    }
+    RefreshTonePicker();
   }
 
   // The tab strip is editable (#11) and reorderable (#15): every header carries a right-click menu
@@ -1340,9 +1393,11 @@ internal sealed class HotkeyWindow : Window
   // just the line (a plain divider). On a data tab it gets a right-click Edit/Delete menu.
   private FrameworkElement BuildSectionHeader( TabModel.SectionHeader hdr, TabModel model )
   {
+    // A collapse triangle (Emojis tab, #26): ▾ open, ▸ collapsed, to the left of the label.
+    string label = ( hdr.Collapsible ? ( hdr.Collapsed ? "▸ " : "▾ " ) : "" ) + UiText.NormalizeDisplayText( hdr.Name );
     var text = new TextBlock
     {
-      Text                = UiText.NormalizeDisplayText( hdr.Name ),
+      Text                = label,
       // A heading is a label, not a button — a fixed, readable size, independent of the tab's
       // button font (which is huge on the Emojis tab). The family stays the tab's for consistency.
       FontFamily          = new FontFamily( model.FontName ),
@@ -1368,6 +1423,18 @@ internal sealed class HotkeyWindow : Window
       Child           = text,
     };
 
+    // A collapsible heading toggles its section on click (the whole bar is the hit target).
+    if( hdr.Collapsible )
+    {
+      border.Cursor = System.Windows.Input.Cursors.Hand;
+      border.MouseLeftButtonUp += ( _, e ) =>
+      {
+        EmojiSectionStore.Toggle( hdr.Name );
+        AppState.RequestReload?.Invoke(); // rebuild — collapsed sections skip their buttons
+        e.Handled = true;
+      };
+    }
+
     if( model is DataTabModel dataModel && hdr.Source is { } def )
     {
       var menu = new ContextMenu();
@@ -1385,6 +1452,66 @@ internal sealed class HotkeyWindow : Window
 
   private const double HeadingUnderlineLift = 2;  // px the heading separator sits above the next row
   private const double HeadingFontPt        = 12.0; // fixed heading text size (points), any tab
+
+  private readonly List<(Border swatch, string hex)> m_toneSwatches = new(); // for the active outline
+
+  // The skin-tone picker (#27): six ✋ swatches pinned to the Emojis tab's top-right corner. The
+  // active tone is outlined; clicking one persists it and re-tints the tab in place.
+  private FrameworkElement BuildTonePicker( EmojisTab model )
+  {
+    const int px = 22;
+    m_toneSwatches.Clear();
+    var swatches = new StackPanel { Orientation = Orientation.Horizontal };
+    foreach( (string hex, string label) in EmojiSkin.Tones )
+    {
+      string glyph = EmojiSkin.Swatch( hex );
+      var    img   = EmojiImageProvider.Get( glyph, px );
+
+      var swatch = new Border
+      {
+        Width           = px + 8,
+        Height          = px + 8,
+        Margin          = new Thickness( 3, 0, 0, 0 ),
+        CornerRadius    = new CornerRadius( 4 ),
+        Cursor          = System.Windows.Input.Cursors.Hand,
+        ToolTip         = new TextBlock { Text = "Skin tone: " + label },
+        Child = img.Image is not null
+          ? new Image { Source = img.Image, Width = px, Height = px, Stretch = Stretch.Uniform }
+          : new TextBlock { Text = glyph, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+      };
+      swatch.MouseLeftButtonUp += ( _, e ) => { SkinToneCommands.Set( hex ); e.Handled = true; };
+      swatches.Children.Add( swatch );
+      m_toneSwatches.Add( ( swatch, hex ) );
+    }
+    RefreshTonePicker(); // set the active outline
+
+    // A subtle panel so the swatches read cleanly over whatever emoji sit behind them.
+    return new Border
+    {
+      HorizontalAlignment = HorizontalAlignment.Right,
+      VerticalAlignment   = VerticalAlignment.Top,
+      Margin              = new Thickness( 0, Layout.TabEdgeGap, Layout.TabEdgeGap + 14, 0 ), // clear the scrollbar
+      Padding             = new Thickness( 4 ),
+      CornerRadius        = new CornerRadius( 6 ),
+      Background          = Theme.WindowBackground,
+      BorderBrush         = Palette.Brush( "AccentBarBorder" ),
+      BorderThickness     = new Thickness( 1 ),
+      Child               = swatches,
+    };
+  }
+
+  // Outline the swatch for the active tone (called after an in-place re-tint, which doesn't rebuild
+  // the picker).
+  private void RefreshTonePicker()
+  {
+    foreach( (Border swatch, string hex) in m_toneSwatches )
+    {
+      bool active = AppState.SkinTone == hex;
+      swatch.Background      = active ? Translucent( Palette.Colour( "SwitchOn" ), 0.25 ) : Brushes.Transparent;
+      swatch.BorderBrush     = active ? Palette.Brush( "SwitchOn" ) : Palette.Brush( "ControlBorder" );
+      swatch.BorderThickness = new Thickness( active ? 2 : 1 );
+    }
+  }
 
   private static string Append( string tip, string line )
   {

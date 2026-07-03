@@ -16,8 +16,34 @@ internal static class EmojiImageProvider
 {
   private static readonly Assembly s_asm = Assembly.GetExecutingAssembly();
   private static readonly Dictionary<string, (ImageSource? Img, string Stem)> s_cache = new( StringComparer.Ordinal );
+  private static HashSet<string>? s_stems; // available Twemoji stems (from the embedded resource names)
 
   public readonly record struct Result( ImageSource? Image, string Stem );
+
+  /// <summary>The set of Twemoji stems we actually ship an image for (parsed once from the
+  /// embedded resource names "twemoji.{stem}.png").</summary>
+  private static HashSet<string> Stems()
+  {
+    if( s_stems is null )
+    {
+      s_stems = new HashSet<string>( StringComparer.Ordinal );
+      foreach( string name in s_asm.GetManifestResourceNames() )
+      {
+        if( name.StartsWith( "twemoji.", StringComparison.Ordinal ) && name.EndsWith( ".png", StringComparison.Ordinal ) )
+        {
+          s_stems.Add( name[8..^4] ); // strip "twemoji." and ".png"
+        }
+      }
+    }
+    return s_stems;
+  }
+
+  /// <summary>True when a Twemoji image exists for <paramref name="stem"/> — used to decide whether
+  /// a skin-toned variant is real before applying it.</summary>
+  public static bool HasImage( string stem ) => stem.Length > 0 && Stems().Contains( stem );
+
+  /// <summary>True when the emoji string <paramref name="ch"/> has a Twemoji image.</summary>
+  public static bool HasImageFor( string ch ) => HasImage( ToTwemojiStem( ch ) );
 
   /// <summary>
   /// Twemoji filename stem for an emoji string (e.g. "😀" → "1f600",

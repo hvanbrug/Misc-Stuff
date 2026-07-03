@@ -14,6 +14,11 @@ internal sealed class SymbolElement
   public int    W;
   public int    H;
   public string Char     = "";
+
+  /// <summary>The un-toned emoji this element was registered with (Emojis tab). <see cref="Char"/>
+  /// may be swapped to a skin-toned variant at runtime; this keeps the identity to re-tint from.</summary>
+  public string BaseChar = "";
+
   public string Desc     = "";
   public bool   ShowChar;
   public bool   TipChar;

@@ -13,6 +13,10 @@ internal static class AppState
 {
   public static bool   UseClipSend     { get; set; }
   public static bool   StripSendEmojis { get; set; }
+
+  /// <summary>Active emoji skin-tone modifier codepoint ("" = default/yellow). Mirrors the
+  /// persisted setting; the Emojis tab re-tints toneable emoji to it (#27).</summary>
+  public static string SkinTone        { get; set; } = "";
   public static IntPtr ActiveWindow    { get; set; } = IntPtr.Zero;
 
   public static SettingsStore Settings { get; private set; } = null!;
