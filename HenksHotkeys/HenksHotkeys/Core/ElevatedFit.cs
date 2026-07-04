@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
-using HenksHotkeys.Native;
 
 namespace HenksHotkeys.Core;
 
@@ -174,12 +173,13 @@ internal static class ElevatedFit
         && int.TryParse(  t[5], out int h ) )
     {
       var hwnd = new IntPtr( hl );
-      if( !NativeMethods.IsWindow( hwnd ) )
+      IWindowFit fit = AppState.WindowFit;
+      if( !fit.IsWindow( hwnd ) )
       {
         return "ERR";
       }
-      NativeMethods.ShowWindow( hwnd, NativeMethods.SW_RESTORE );
-      bool ok = NativeMethods.ApplyBounds( hwnd, x, y, w, h );
+      fit.Restore( hwnd );
+      bool ok = fit.ApplyBounds( hwnd, x, y, w, h, out _ );
       return ok ? "OK" : "ERR";
     }
     return "ERR";

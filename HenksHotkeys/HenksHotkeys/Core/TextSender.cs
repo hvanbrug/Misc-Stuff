@@ -1,7 +1,5 @@
 using System.Windows;
-using HenksHotkeys.Native;
-using static HenksHotkeys.Native.NativeMethods;
-using SysMarshal = System.Runtime.InteropServices.Marshal;
+using static PInvoke.Win32;
 
 namespace HenksHotkeys.Core;
 
@@ -71,7 +69,7 @@ internal static class TextSender
     try
     {
       Clipboard.Clear();
-      SendKeyVk( 0x43, NativeMethods.MOD_CONTROL ); // Ctrl+C
+      SendKeyVk( 0x43, MOD_CONTROL ); // Ctrl+C
       await Task.Delay( 150 );
       return SafeGetClipboardText();
     }
@@ -90,9 +88,9 @@ internal static class TextSender
   private static async Task ActivateTarget()
   {
     IntPtr target = AppState.ActiveWindow;
-    if( target != IntPtr.Zero && IsWindow( target ) )
+    if( target != IntPtr.Zero && AppState.Foreground.IsWindow( target ) )
     {
-      SetForegroundWindow( target );
+      AppState.Foreground.Activate( target );
       await Task.Delay( 100 );
     }
   }
@@ -102,7 +100,7 @@ internal static class TextSender
     string backup = SafeGetClipboardText();
     await TrySetClipboardText( rawText );
     await ActivateTarget();
-    SendKeyVk( 0x56, NativeMethods.MOD_CONTROL ); // Ctrl+V
+    SendKeyVk( 0x56, MOD_CONTROL ); // Ctrl+V
     await Task.Delay( 150 );
     if( backup.Length > 0 )
     {
@@ -166,8 +164,7 @@ internal static class TextSender
       }
     }
 
-    INPUT[] arr = inputs.ToArray();
-    SendInput( (uint)arr.Length, arr, SysMarshal.SizeOf<INPUT>() );
+    SendInput( inputs.ToArray() );
   }
 
   // Pure: turn an AHK-flavoured send string into a sequence of keystrokes.
@@ -254,21 +251,20 @@ internal static class TextSender
     var inputs = new List<INPUT>();
     const ushort VK_CONTROL = 0x11, VK_SHIFT = 0x10, VK_MENU = 0x12, VK_LWIN = 0x5B;
 
-    if( ( modifierMask & NativeMethods.MOD_CONTROL ) != 0 ) inputs.Add( MakeKey( VK_CONTROL, 0, NativeMethods.KEYEVENTF_KEYDOWN ) );
-    if( ( modifierMask & NativeMethods.MOD_SHIFT )   != 0 ) inputs.Add( MakeKey( VK_SHIFT,   0, NativeMethods.KEYEVENTF_KEYDOWN ) );
-    if( ( modifierMask & NativeMethods.MOD_ALT )     != 0 ) inputs.Add( MakeKey( VK_MENU,    0, NativeMethods.KEYEVENTF_KEYDOWN ) );
-    if( ( modifierMask & NativeMethods.MOD_WIN )     != 0 ) inputs.Add( MakeKey( VK_LWIN,    0, NativeMethods.KEYEVENTF_KEYDOWN ) );
+    if( ( modifierMask & MOD_CONTROL ) != 0 ) inputs.Add( MakeKey( VK_CONTROL, 0, KEYEVENTF_KEYDN ) );
+    if( ( modifierMask & MOD_SHIFT )   != 0 ) inputs.Add( MakeKey( VK_SHIFT,   0, KEYEVENTF_KEYDN ) );
+    if( ( modifierMask & MOD_ALT )     != 0 ) inputs.Add( MakeKey( VK_MENU,    0, KEYEVENTF_KEYDN ) );
+    if( ( modifierMask & MOD_WIN )     != 0 ) inputs.Add( MakeKey( VK_LWIN,    0, KEYEVENTF_KEYDN ) );
 
     inputs.Add( MakeKey( vk, 0, 0 ) );
     inputs.Add( MakeKey( vk, 0, KEYEVENTF_KEYUP ) );
 
-    if( ( modifierMask & NativeMethods.MOD_WIN )     != 0 ) inputs.Add( MakeKey( VK_LWIN,    0, NativeMethods.KEYEVENTF_KEYUP ) );
-    if( ( modifierMask & NativeMethods.MOD_ALT )     != 0 ) inputs.Add( MakeKey( VK_MENU,    0, NativeMethods.KEYEVENTF_KEYUP ) );
-    if( ( modifierMask & NativeMethods.MOD_SHIFT )   != 0 ) inputs.Add( MakeKey( VK_SHIFT,   0, NativeMethods.KEYEVENTF_KEYUP ) );
-    if( ( modifierMask & NativeMethods.MOD_CONTROL ) != 0 ) inputs.Add( MakeKey( VK_CONTROL, 0, NativeMethods.KEYEVENTF_KEYUP ) );
+    if( ( modifierMask & MOD_WIN )     != 0 ) inputs.Add( MakeKey( VK_LWIN,    0, KEYEVENTF_KEYUP ) );
+    if( ( modifierMask & MOD_ALT )     != 0 ) inputs.Add( MakeKey( VK_MENU,    0, KEYEVENTF_KEYUP ) );
+    if( ( modifierMask & MOD_SHIFT )   != 0 ) inputs.Add( MakeKey( VK_SHIFT,   0, KEYEVENTF_KEYUP ) );
+    if( ( modifierMask & MOD_CONTROL ) != 0 ) inputs.Add( MakeKey( VK_CONTROL, 0, KEYEVENTF_KEYUP ) );
 
-    INPUT[] arr2 = inputs.ToArray();
-    SendInput( (uint)arr2.Length, arr2, SysMarshal.SizeOf<INPUT>() );
+    SendInput( inputs.ToArray() );
   }
 
   private static INPUT MakeKey( ushort vk, ushort scan, uint flags )
@@ -276,7 +272,7 @@ internal static class TextSender
     return new INPUT
     {
       type = INPUT_KEYBOARD,
-      u = new InputUnion
+      U = new InputUnion
       {
         ki = new KEYBDINPUT
         {

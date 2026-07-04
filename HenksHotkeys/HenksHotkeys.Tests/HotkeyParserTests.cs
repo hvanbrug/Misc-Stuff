@@ -1,5 +1,5 @@
 using HenksHotkeys.Core;
-using HenksHotkeys.Native;
+using PInvoke;
 using Xunit;
 
 namespace HenksHotkeys.Tests;
@@ -11,7 +11,7 @@ public class HotkeyParserTests
   {
     HotkeyParser.Parsed? p = HotkeyParser.Parse( "^+a" );
     Assert.NotNull( p );
-    Assert.Equal( NativeMethods.MOD_CONTROL | NativeMethods.MOD_SHIFT, p!.Value.Modifiers );
+    Assert.Equal( Win32.MOD_CONTROL | Win32.MOD_SHIFT, p!.Value.Modifiers );
     Assert.Equal( (uint)0x41, p.Value.VirtualKey ); // 'A'
   }
 
@@ -20,7 +20,7 @@ public class HotkeyParserTests
   {
     HotkeyParser.Parsed? p = HotkeyParser.Parse( "!+1" );
     Assert.NotNull( p );
-    Assert.Equal( NativeMethods.MOD_ALT | NativeMethods.MOD_SHIFT, p!.Value.Modifiers );
+    Assert.Equal( Win32.MOD_ALT | Win32.MOD_SHIFT, p!.Value.Modifiers );
     Assert.Equal( (uint)0x31, p.Value.VirtualKey ); // '1'
   }
 
@@ -29,7 +29,7 @@ public class HotkeyParserTests
   {
     HotkeyParser.Parsed? p = HotkeyParser.Parse( "#!1" );
     Assert.NotNull( p );
-    Assert.Equal( NativeMethods.MOD_WIN | NativeMethods.MOD_ALT, p!.Value.Modifiers );
+    Assert.Equal( Win32.MOD_WIN | Win32.MOD_ALT, p!.Value.Modifiers );
     Assert.Equal( (uint)0x31, p.Value.VirtualKey );
   }
 
@@ -38,7 +38,7 @@ public class HotkeyParserTests
   {
     HotkeyParser.Parsed? p = HotkeyParser.Parse( "^+#F9" );
     Assert.NotNull( p );
-    Assert.Equal( NativeMethods.MOD_CONTROL | NativeMethods.MOD_SHIFT | NativeMethods.MOD_WIN, p!.Value.Modifiers );
+    Assert.Equal( Win32.MOD_CONTROL | Win32.MOD_SHIFT | Win32.MOD_WIN, p!.Value.Modifiers );
     Assert.Equal( (uint)0x78, p.Value.VirtualKey ); // VK_F9 = 0x70 + 8
   }
 
@@ -47,7 +47,7 @@ public class HotkeyParserTests
   {
     HotkeyParser.Parsed? p = HotkeyParser.Parse( "^!v" );
     Assert.NotNull( p );
-    Assert.Equal( NativeMethods.MOD_CONTROL | NativeMethods.MOD_ALT, p!.Value.Modifiers );
+    Assert.Equal( Win32.MOD_CONTROL | Win32.MOD_ALT, p!.Value.Modifiers );
     Assert.Equal( (uint)0x56, p.Value.VirtualKey ); // 'V'
   }
 

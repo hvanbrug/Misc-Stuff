@@ -1,4 +1,4 @@
-using HenksHotkeys.Native;
+using PInvoke;
 
 namespace HenksHotkeys.Core;
 
@@ -24,10 +24,10 @@ internal static class HotkeyParser
     while( i < hotkey.Length )
     {
       char c = hotkey[i];
-      if( c == '^' ) { mods |= NativeMethods.MOD_CONTROL; ++i; continue; }
-      if( c == '+' ) { mods |= NativeMethods.MOD_SHIFT;   ++i; continue; }
-      if( c == '#' ) { mods |= NativeMethods.MOD_WIN;     ++i; continue; }
-      if( c == '!' ) { mods |= NativeMethods.MOD_ALT;     ++i; continue; }
+      if( c == '^' ) { mods |= Win32.MOD_CONTROL; ++i; continue; }
+      if( c == '+' ) { mods |= Win32.MOD_SHIFT;   ++i; continue; }
+      if( c == '#' ) { mods |= Win32.MOD_WIN;     ++i; continue; }
+      if( c == '!' ) { mods |= Win32.MOD_ALT;     ++i; continue; }
       break;
     }
 

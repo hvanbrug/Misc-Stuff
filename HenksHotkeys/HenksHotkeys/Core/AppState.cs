@@ -21,6 +21,13 @@ internal static class AppState
 
   public static SettingsStore Settings { get; private set; } = null!;
 
+  /// <summary>Foreground-window OS integration behind an interface (#6). A shared default for now;
+  /// swappable/injectable once #3 (DI) lands.</summary>
+  public static IForegroundWindow Foreground { get; } = new ForegroundWindow();
+
+  /// <summary>Window snap/fit OS integration behind an interface (#6). Shared default for now.</summary>
+  public static IWindowFit WindowFit { get; } = new WindowFit();
+
   public static HotkeyWindow Window { get; set; } = null!;
 
   /// <summary>Rebuild the tabs/buttons/hotkeys from the (possibly just-edited) config.

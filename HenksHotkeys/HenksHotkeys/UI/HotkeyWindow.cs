@@ -8,8 +8,8 @@ using System.Windows.Shell;
 using System.Windows.Threading;
 using HenksHotkeys.Core;
 using HenksHotkeys.Emoji;
-using HenksHotkeys.Native;
 using HenksHotkeys.Tabs;
+using PInvoke;
 
 namespace HenksHotkeys.UI;
 
@@ -116,7 +116,7 @@ internal sealed class HotkeyWindow : Window
   private readonly DispatcherTimer m_activeWinTimer = new() { Interval = TimeSpan.FromMilliseconds( 200 ) };
 
   private IntPtr m_wheelHook;
-  private NativeMethods.LowLevelMouseProc? m_wheelProc;
+  private Win32.HookProc? m_wheelProc;
 
   public HotkeyWindow()
   {
@@ -1783,7 +1783,7 @@ internal sealed class HotkeyWindow : Window
   // saved collapsed state); Summon brings it forward and expands it.
   public void ShowUi()
   {
-    AppState.ActiveWindow = NativeMethods.GetForegroundWindow();
+    AppState.ActiveWindow = AppState.Foreground.Current();
 
     if( !IsVisible )
     {
@@ -1815,10 +1815,8 @@ internal sealed class HotkeyWindow : Window
 
   private void BringToFront()
   {
-    NativeMethods.SetWindowPos( m_hwnd, new IntPtr( -1 ), 0, 0, 0, 0,
-                                NativeMethods.SWP_NOMOVE |
-                                NativeMethods.SWP_NOSIZE |
-                                NativeMethods.SWP_NOACTIVATE );
+    Win32.SetWindowPos( m_hwnd, Win32.HWND_TOPMOST, 0, 0, 0, 0,
+                        Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE );
   }
 
   private void RestoreSavedPosition()
@@ -1837,18 +1835,16 @@ internal sealed class HotkeyWindow : Window
 
     // No saved position: centre on the primary work area (physical px) instead of
     // landing at (0, 0), which sits in the top-of-screen snap zone.
-    NativeMethods.RECT area = NativeMethods.GetPrimaryWorkArea();
-    NativeMethods.GetWindowRect( m_hwnd, out NativeMethods.RECT rc );
+    Win32.RECT area = Win32.GetPrimaryWorkArea();
+    Win32.GetWindowRect( m_hwnd, out Win32.RECT rc );
     MoveTo( area.Left + (area.Width  - rc.Width)  / 2,
             area.Top  + (area.Height - rc.Height) / 2 );
   }
 
   private void MoveTo( int x, int y )
   {
-    NativeMethods.SetWindowPos( m_hwnd, IntPtr.Zero, x, y, 0, 0,
-                                NativeMethods.SWP_NOSIZE   |
-                                NativeMethods.SWP_NOZORDER |
-                                NativeMethods.SWP_NOACTIVATE );
+    Win32.SetWindowPos( m_hwnd, IntPtr.Zero, x, y, 0, 0,
+                        Win32.SWP_NOSIZE | Win32.SWP_NOZORDER | Win32.SWP_NOACTIVATE );
   }
 
   // ── Collapse / expand ────────────────────────────────────────────
@@ -1928,10 +1924,8 @@ internal sealed class HotkeyWindow : Window
 
   private void ForceRepaint()
   {
-    NativeMethods.SetWindowPos( m_hwnd, new IntPtr( -1 ), 0, 0, 0, 0,
-                                NativeMethods.SWP_NOMOVE |
-                                NativeMethods.SWP_NOSIZE |
-                                NativeMethods.SWP_NOACTIVATE );
+    Win32.SetWindowPos( m_hwnd, Win32.HWND_TOPMOST, 0, 0, 0, 0,
+                        Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE );
     InvalidateVisual();
   }
 
@@ -1942,7 +1936,7 @@ internal sealed class HotkeyWindow : Window
     {
       return;
     }
-    NativeMethods.GetWindowRect( m_hwnd, out NativeMethods.RECT rc );
+    Win32.GetWindowRect( m_hwnd, out Win32.RECT rc );
     m_favX = rc.Left;
     m_favY = rc.Top;
     AppState.Settings.SetFav( rc.Left, rc.Top );
@@ -1977,7 +1971,7 @@ internal sealed class HotkeyWindow : Window
   // ── Active-window tracking ───────────────────────────────────────
   private void TrackActiveWindow()
   {
-    nint h = NativeMethods.GetForegroundWindow();
+    nint h = AppState.Foreground.Current();
     if( h == nint.Zero ||
         h == m_hwnd )
     {
@@ -1994,9 +1988,7 @@ internal sealed class HotkeyWindow : Window
 
     // Make the window no-activate + tool-window so it never steals focus and
     // stays out of the taskbar / alt-tab.
-    IntPtr ex = NativeMethods.GetWindowLongPtr( m_hwnd, NativeMethods.GWL_EXSTYLE );
-    long exNew = ex.ToInt64() | NativeMethods.WS_EX_NOACTIVATE | NativeMethods.WS_EX_TOOLWINDOW;
-    NativeMethods.SetWindowLongPtr( m_hwnd, NativeMethods.GWL_EXSTYLE, new IntPtr( exNew ) );
+    Win32.AddExStyle( m_hwnd, Win32.WS_EX_NOACTIVATE | Win32.WS_EX_TOOLWINDOW );
 
     DisableMaximize();
     Theme.ApplyDarkFrame( m_hwnd );
@@ -2017,9 +2009,7 @@ internal sealed class HotkeyWindow : Window
     {
       return;
     }
-    const long WS_MAXIMIZEBOX = 0x00010000;
-    long style = NativeMethods.GetWindowLongPtr( m_hwnd, NativeMethods.GWL_STYLE ).ToInt64();
-    NativeMethods.SetWindowLongPtr( m_hwnd, NativeMethods.GWL_STYLE, new IntPtr( style & ~WS_MAXIMIZEBOX ) );
+    Win32.RemoveStyle( m_hwnd, Win32.WS_MAXIMIZEBOX );
   }
 
   private void EnsureHwnd()
@@ -2038,7 +2028,7 @@ internal sealed class HotkeyWindow : Window
     {
       PersistPositionAndSize();
     }
-    else if( msg == NativeMethods.WM_GETMINMAXINFO && !m_collapsed && m_hwnd != IntPtr.Zero )
+    else if( msg == (int)Win32.WM_GETMINMAXINFO && !m_collapsed && m_hwnd != IntPtr.Zero )
     {
       ClampMinMax( lParam );
       handled = true;
@@ -2054,22 +2044,22 @@ internal sealed class HotkeyWindow : Window
   {
     const int margin = 32;
 
-    var mmi = Marshal.PtrToStructure<NativeMethods.MINMAXINFO>( lParam );
-    NativeMethods.RECT work = NativeMethods.GetWorkAreaForWindow( m_hwnd );
+    var mmi = Marshal.PtrToStructure<Win32.MINMAXINFO>( lParam );
+    Win32.RECT work = Win32.GetWorkArea( m_hwnd );
 
     // Lock to the intended full width (physical px), NOT the current window width:
     // during a collapse→expand this message can fire while the window is still at
     // the collapsed width, and clamping to that would trap the expand at the
     // narrow size.
-    double scale = NativeMethods.GetDpiForWindow( m_hwnd ) / 96.0;
+    double scale = Win32.GetDpiForWindow( m_hwnd ) / 96.0;
     int width = (int)Math.Round( m_fullWidth * scale );
     int minH  = (int)Math.Round( Layout.WindowMinHeight * scale );
     int maxH  = Math.Max( minH, work.Height - margin );
 
-    mmi.ptMaxPosition  = new NativeMethods.POINT { X = work.Left, Y = work.Top };
-    mmi.ptMaxSize      = new NativeMethods.POINT { X = width,     Y = maxH };
-    mmi.ptMinTrackSize = new NativeMethods.POINT { X = width,     Y = minH };
-    mmi.ptMaxTrackSize = new NativeMethods.POINT { X = width,     Y = maxH };
+    mmi.ptMaxPosition  = new Win32.POINT { X = work.Left, Y = work.Top };
+    mmi.ptMaxSize      = new Win32.POINT { X = width,     Y = maxH };
+    mmi.ptMinTrackSize = new Win32.POINT { X = width,     Y = minH };
+    mmi.ptMaxTrackSize = new Win32.POINT { X = width,     Y = maxH };
 
     Marshal.StructureToPtr( mmi, lParam, false );
   }
@@ -2087,8 +2077,8 @@ internal sealed class HotkeyWindow : Window
   private void BeginWindowDrag()
   {
     EnsureHwnd();
-    NativeMethods.GetCursorPos( out NativeMethods.POINT cur );
-    NativeMethods.GetWindowRect( m_hwnd, out NativeMethods.RECT rc );
+    Win32.GetCursorPos( out Win32.POINT cur );
+    Win32.GetWindowRect( m_hwnd, out Win32.RECT rc );
     m_dragOffsetX  = cur.X - rc.Left;
     m_dragOffsetY  = cur.Y - rc.Top;
     m_snappedToTop = false;
@@ -2105,13 +2095,11 @@ internal sealed class HotkeyWindow : Window
       return;
     }
 
-    NativeMethods.GetCursorPos( out NativeMethods.POINT cur );
+    Win32.GetCursorPos( out Win32.POINT cur );
     ( int left, int top ) = ApplyDragSnap( cur.X - m_dragOffsetX, cur.Y - m_dragOffsetY );
-    NativeMethods.SetWindowPos( m_hwnd, IntPtr.Zero,
-                                left, top, 0, 0,
-                                NativeMethods.SWP_NOSIZE   |
-                                NativeMethods.SWP_NOZORDER |
-                                NativeMethods.SWP_NOACTIVATE );
+    Win32.SetWindowPos( m_hwnd, IntPtr.Zero,
+                        left, top, 0, 0,
+                        Win32.SWP_NOSIZE | Win32.SWP_NOZORDER | Win32.SWP_NOACTIVATE );
   }
 
   protected override void OnMouseLeftButtonUp( MouseButtonEventArgs e )
@@ -2193,13 +2181,13 @@ internal sealed class HotkeyWindow : Window
   // window move (mirrors the DragDetect handling in UI.ahk).
   private void MakeDragOrClick( UIElement el, Action onClick )
   {
-    NativeMethods.POINT start = default;
+    Win32.POINT start = default;
     bool armed = false;
     bool dragged = false;
 
     el.PreviewMouseLeftButtonDown += ( _, e ) =>
     {
-      NativeMethods.GetCursorPos( out start );
+      Win32.GetCursorPos( out start );
       armed   = true;
       dragged = false;
       el.CaptureMouse();
@@ -2212,7 +2200,7 @@ internal sealed class HotkeyWindow : Window
       {
         return;
       }
-      NativeMethods.GetCursorPos( out NativeMethods.POINT cur );
+      Win32.GetCursorPos( out Win32.POINT cur );
       if( Math.Abs( cur.X - start.X ) >= 4 ||
           Math.Abs( cur.Y - start.Y ) >= 4 )
       {
@@ -2295,7 +2283,7 @@ internal sealed class HotkeyWindow : Window
   {
     if( m_hwnd != IntPtr.Zero )
     {
-      NativeMethods.GetWindowRect( m_hwnd, out NativeMethods.RECT rc );
+      Win32.GetWindowRect( m_hwnd, out Win32.RECT rc );
       AppState.Settings.SetWndPos( rc.Left, rc.Top );
     }
 
@@ -2314,15 +2302,15 @@ internal sealed class HotkeyWindow : Window
       return;
     }
     m_wheelProc = WheelHookProc;
-    m_wheelHook = NativeMethods.SetWindowsHookEx( NativeMethods.WH_MOUSE_LL, m_wheelProc,
-                                                  NativeMethods.GetModuleHandle( null ), 0 );
+    m_wheelHook = Win32.SetWindowsHookEx( Win32.WH_MOUSE_LL, m_wheelProc,
+                                          Win32.GetModuleHandle( null ), 0 );
   }
 
   private void RemoveWheelHook()
   {
     if( m_wheelHook != IntPtr.Zero )
     {
-      NativeMethods.UnhookWindowsHookEx( m_wheelHook );
+      Win32.UnhookWindowsHookEx( m_wheelHook );
       m_wheelHook = IntPtr.Zero;
     }
     m_wheelProc = null;
@@ -2331,12 +2319,12 @@ internal sealed class HotkeyWindow : Window
   private nint WheelHookProc( int nCode, nint wParam, nint lParam )
   {
     if( (nCode >= 0) &&
-        (wParam == (nint)NativeMethods.WM_MOUSEWHEEL) &&
+        (wParam == (nint)Win32.WM_MOUSEWHEEL) &&
         IsVisible &&
         !m_collapsed )
     {
-      var data = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>( lParam );
-      if( NativeMethods.GetWindowRect( m_hwnd, out NativeMethods.RECT rc ) &&
+      var data = Marshal.PtrToStructure<Win32.MSLLHOOKSTRUCT>( lParam );
+      if( Win32.GetWindowRect( m_hwnd, out Win32.RECT rc ) &&
           (data.pt.X >= rc.Left) && (data.pt.X < rc.Right)  &&
           (data.pt.Y >= rc.Top)  && (data.pt.Y < rc.Bottom) )
       {
@@ -2349,7 +2337,7 @@ internal sealed class HotkeyWindow : Window
         return new nint( 1 ); // swallow so the focused window doesn't also scroll
       }
     }
-    return NativeMethods.CallNextHookEx( IntPtr.Zero, nCode, wParam, lParam );
+    return Win32.CallNextHookEx( IntPtr.Zero, nCode, wParam, lParam );
   }
 
   protected override void OnClosed( EventArgs e )

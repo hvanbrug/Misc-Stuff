@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
-using HenksHotkeys.Native;
+using PInvoke;
 
 namespace HenksHotkeys.UI;
 
@@ -29,7 +29,7 @@ internal sealed class TrayIcon : IDisposable
   private readonly IntPtr      m_icon;
   private readonly bool        m_ownIcon;
 
-  private NativeMethods.NOTIFYICONDATAW m_data;
+  private Win32.NOTIFYICONDATAW m_data;
   private bool m_disposed;
 
   public TrayIcon( ContextMenu menu, Action onDoubleClick, string tooltip )
@@ -50,17 +50,17 @@ internal sealed class TrayIcon : IDisposable
 
     ( m_icon, m_ownIcon ) = LoadIcon();
 
-    m_data = new NativeMethods.NOTIFYICONDATAW
+    m_data = new Win32.NOTIFYICONDATAW
     {
-      cbSize           = Marshal.SizeOf<NativeMethods.NOTIFYICONDATAW>(),
+      cbSize           = Marshal.SizeOf<Win32.NOTIFYICONDATAW>(),
       hWnd             = m_source.Handle,
       uID              = 1,
-      uFlags           = NativeMethods.NIF_MESSAGE | NativeMethods.NIF_ICON | NativeMethods.NIF_TIP,
+      uFlags           = Win32.NIF_MESSAGE | Win32.NIF_ICON | Win32.NIF_TIP,
       uCallbackMessage = WM_TrayCallback,
       hIcon            = m_icon,
       szTip            = tooltip,
     };
-    NativeMethods.Shell_NotifyIconW( NativeMethods.NIM_ADD, ref m_data );
+    Win32.Shell_NotifyIcon( Win32.NIM_ADD, ref m_data );
   }
 
   // The tray icon is the application's own exe icon (set via ApplicationIcon),
@@ -71,12 +71,12 @@ internal sealed class TrayIcon : IDisposable
     if( exe is not null )
     {
       var small = new IntPtr[1];
-      if( NativeMethods.ExtractIconExW( exe, 0, null, small, 1 ) > 0 && small[0] != IntPtr.Zero )
+      if( Win32.ExtractIconEx( exe, 0, null, small, 1 ) > 0 && small[0] != IntPtr.Zero )
       {
         return ( small[0], true );
       }
     }
-    return ( NativeMethods.LoadIconW( IntPtr.Zero, NativeMethods.IDI_APPLICATION ), false );
+    return ( Win32.LoadIcon( IntPtr.Zero, Win32.IDI_APPLICATION ), false );
   }
 
   private IntPtr WndProc( IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled )
@@ -105,7 +105,7 @@ internal sealed class TrayIcon : IDisposable
   {
     // Foreground the (hidden) message window so the WPF popup dismisses cleanly
     // when the user clicks elsewhere, then open the menu at the cursor.
-    NativeMethods.SetForegroundWindow( m_source.Handle );
+    Core.AppState.Foreground.Activate( m_source.Handle );
     m_menu.Placement = PlacementMode.MousePoint;
     m_menu.IsOpen    = true;
   }
@@ -118,10 +118,10 @@ internal sealed class TrayIcon : IDisposable
     }
     m_disposed = true;
 
-    NativeMethods.Shell_NotifyIconW( NativeMethods.NIM_DELETE, ref m_data );
+    Win32.Shell_NotifyIcon( Win32.NIM_DELETE, ref m_data );
     if( m_ownIcon && m_icon != IntPtr.Zero )
     {
-      NativeMethods.DestroyIcon( m_icon );
+      Win32.DestroyIcon( m_icon );
     }
     m_source.RemoveHook( WndProc );
     m_source.Dispose();

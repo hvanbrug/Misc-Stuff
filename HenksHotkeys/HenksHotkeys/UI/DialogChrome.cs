@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
-using HenksHotkeys.Native;
+using HenksHotkeys.Core;
 
 namespace HenksHotkeys.UI;
 
@@ -41,24 +41,8 @@ internal static class DialogChrome
   /// the foreground lock by briefly attaching to the current foreground thread's input queue.</summary>
   public static void ForceForeground( Window win )
   {
-    IntPtr hwnd = new WindowInteropHelper( win ).Handle;
-    if( hwnd == IntPtr.Zero ) return;
-
-    IntPtr fg = NativeMethods.GetForegroundWindow();
-    uint   fgThread   = fg == IntPtr.Zero ? 0 : NativeMethods.GetWindowThreadProcessId( fg, out _ );
-    uint   thisThread = NativeMethods.GetCurrentThreadId();
-    bool   attached   = fgThread != 0 && fgThread != thisThread &&
-                        NativeMethods.AttachThreadInput( thisThread, fgThread, true );
-    try
-    {
-      NativeMethods.BringWindowToTop( hwnd );
-      NativeMethods.SetForegroundWindow( hwnd );
-      win.Activate();
-    }
-    finally
-    {
-      if( attached ) NativeMethods.AttachThreadInput( thisThread, fgThread, false );
-    }
+    AppState.Foreground.ForceForeground( new WindowInteropHelper( win ).Handle ); // Win32 dance (#6)
+    win.Activate();                                                               // WPF activation
   }
 
   public static Brush Brush( Window win, string key ) => (Brush)win.FindResource( key );

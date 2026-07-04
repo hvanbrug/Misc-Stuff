@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
-using HenksHotkeys.Native;
 using Microsoft.Win32;
+using PInvoke;
 
 namespace HenksHotkeys.UI;
 
@@ -78,11 +78,11 @@ internal static class Theme
     }
 
     int enable = 1;
-    try { NativeMethods.DwmSetWindowAttribute( hwnd, NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE, ref enable, sizeof( int ) ); }
+    try { Win32.DwmSetWindowAttribute( hwnd, Win32.DWMWA_USE_IMMERSIVE_DARK_MODE, ref enable, sizeof( int ) ); }
     catch { /* unsupported on older Windows */ }
 
     int border = 0x201E1E; // COLORREF (0x00BBGGRR) for #1E1E20 — matches DarkBackground
-    try { NativeMethods.DwmSetWindowAttribute( hwnd, NativeMethods.DWMWA_BORDER_COLOR, ref border, sizeof( int ) ); }
+    try { Win32.DwmSetWindowAttribute( hwnd, Win32.DWMWA_BORDER_COLOR, ref border, sizeof( int ) ); }
     catch { /* Win11 only */ }
   }
 
@@ -93,8 +93,8 @@ internal static class Theme
     {
       return;
     }
-    int pref = NativeMethods.DWMWCP_ROUND;
-    try { NativeMethods.DwmSetWindowAttribute( hwnd, NativeMethods.DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, sizeof( int ) ); }
+    int pref = Win32.DWMWCP_ROUND;
+    try { Win32.DwmSetWindowAttribute( hwnd, Win32.DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, sizeof( int ) ); }
     catch { /* Win11 only */ }
   }
 }

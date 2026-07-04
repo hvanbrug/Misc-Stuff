@@ -1,11 +1,9 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
-using System.Windows.Interop;
-using HenksHotkeys.Native;
 using HenksHotkeys.UI;
+using PInvoke;
 
 namespace HenksHotkeys.Core;
 
@@ -37,14 +35,15 @@ internal static class AppActions
   // bounds to the elevated helper, which performs the move.
   public static void MoveWindowToWorkArea()
   {
-    IntPtr target = NativeMethods.GetAncestor( AppState.ActiveWindow, NativeMethods.GA_ROOT );
-    if( target == IntPtr.Zero || !NativeMethods.IsWindow( target ) )
+    IWindowFit fit = AppState.WindowFit;
+    IntPtr target = fit.Root( AppState.ActiveWindow );
+    if( target == IntPtr.Zero || !fit.IsWindow( target ) )
     {
       return;
     }
 
-    NativeMethods.ShowWindow( target, NativeMethods.SW_RESTORE );
-    NativeMethods.RECT area = NativeMethods.GetWorkAreaForWindow( target );
+    fit.Restore( target );
+    Win32.RECT area = fit.WorkArea( target );
 
     if( !TryFillWorkArea( target, area, out (int X, int Y, int W, int H) rect, out _ ) )
     {
@@ -52,24 +51,21 @@ internal static class AppActions
     }
   }
 
-  private static bool TryFillWorkArea( IntPtr target, NativeMethods.RECT area )
-    => TryFillWorkArea( target, area, out _, out _ );
-
   // Size/position the window so its visible (DWM) bounds fill the work area.
   // Outputs the computed target bounds (so a fallback can reuse them) and the
   // Win32 error from SetWindowPos (5 = ACCESS_DENIED → elevated window). Returns
   // false if the window clamped itself / couldn't be moved.
-  private static bool TryFillWorkArea( IntPtr target, NativeMethods.RECT area,
+  private static bool TryFillWorkArea( IntPtr target, Win32.RECT area,
                                        out (int X, int Y, int W, int H) rect, out int setPosError )
   {
+    IWindowFit fit = AppState.WindowFit;
     rect = default;
     setPosError = 0;
-    if( !NativeMethods.GetWindowRect( target, out NativeMethods.RECT win ) )
+    if( !fit.GetWindowRect( target, out Win32.RECT win ) )
     {
       return false;
     }
-    NativeMethods.DwmGetWindowAttribute( target, NativeMethods.DWMWA_EXTENDED_FRAME_BOUNDS,
-                                         out NativeMethods.RECT frame, 16 );
+    Win32.RECT frame = fit.ExtendedFrameBounds( target );
 
     int borderL = frame.Left  - win.Left;
     int borderT = frame.Top   - win.Top + 1;
@@ -82,10 +78,9 @@ internal static class AppActions
     int h = area.Height + borderT + borderB;
     rect = ( x, y, w, h );
 
-    bool ok = NativeMethods.ApplyBounds( target, x, y, w, h );
-    setPosError = ok ? 0 : Marshal.GetLastWin32Error();
+    fit.ApplyBounds( target, x, y, w, h, out setPosError );
 
-    if( !NativeMethods.GetWindowRect( target, out NativeMethods.RECT after ) )
+    if( !fit.GetWindowRect( target, out Win32.RECT after ) )
     {
       return false;
     }
@@ -111,26 +106,26 @@ internal static class AppActions
   // Run it with the problem window focused.
   public static void TestFunction()
   {
+    IWindowFit fit = AppState.WindowFit;
     var sb = new StringBuilder();
     IntPtr raw  = AppState.ActiveWindow;
-    IntPtr root = NativeMethods.GetAncestor( raw, NativeMethods.GA_ROOT );
+    IntPtr root = fit.Root( raw );
     IntPtr target = root != IntPtr.Zero ? root : raw;
 
-    if( target == IntPtr.Zero || !NativeMethods.IsWindow( target ) )
+    if( target == IntPtr.Zero || !fit.IsWindow( target ) )
     {
       MessageBox.Show( "No active target window captured.", "Fit diagnostics" );
       return;
     }
 
-    var cls = new StringBuilder( 256 );
-    NativeMethods.GetClassName( target, cls, cls.Capacity );
-    NativeMethods.GetWindowThreadProcessId( target, out uint pid );
+    string cls = fit.ClassName( target );
+    uint   pid = fit.ProcessId( target );
     string proc = "?";
     try   { proc = Process.GetProcessById( (int)pid ).ProcessName; }
     catch { /* process gone */ }
 
-    NativeMethods.GetWindowRect( target, out NativeMethods.RECT win );
-    NativeMethods.RECT area = NativeMethods.GetWorkAreaForWindow( target );
+    fit.GetWindowRect( target, out Win32.RECT win );
+    Win32.RECT area = fit.WorkArea( target );
 
     sb.AppendLine( $"Target : {proc}.exe  (class {cls})" );
     sb.AppendLine( $"Root == foreground: {root == raw}" );
@@ -138,10 +133,10 @@ internal static class AppActions
     sb.AppendLine( $"WorkArea: {area.Width} x {area.Height}  at ({area.Left}, {area.Top})" );
 
     // Attempt the move directly and capture whether the OS permitted it.
-    NativeMethods.ShowWindow( target, NativeMethods.SW_RESTORE );
+    fit.Restore( target );
     bool filled = TryFillWorkArea( target, area, out (int X, int Y, int W, int H) rect, out int err );
 
-    NativeMethods.GetWindowRect( target, out NativeMethods.RECT after );
+    fit.GetWindowRect( target, out Win32.RECT after );
     sb.AppendLine( $"After  : {after.Width} x {after.Height}  at ({after.Left}, {after.Top})" );
     sb.AppendLine( $"Direct : filled={filled}  SetWindowPos error={err}" +
                    ( err == 5 ? "  (ACCESS DENIED — elevated window)" : "" ) );

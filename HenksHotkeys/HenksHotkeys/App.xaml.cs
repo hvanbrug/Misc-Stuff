@@ -14,9 +14,9 @@ public partial class App
 {
   private const string MutexName = "HenksHotkeys_SingleInstance_2A6F";
 
-  private Mutex?               m_mutex;
-  private GlobalHotkeyManager? m_hotkeys;
-  private TrayIcon?            m_tray;
+  private Mutex?         m_mutex;
+  private IGlobalHotkeys? m_hotkeys; // Win32 hotkey registration behind an interface (#6)
+  private TrayIcon?      m_tray;
   private HotkeyWindow?        m_window;
 
   protected override void OnStartup( StartupEventArgs e )

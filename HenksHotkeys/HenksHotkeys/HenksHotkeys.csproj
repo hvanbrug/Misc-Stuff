@@ -27,6 +27,9 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <!-- DPAPI (ProtectedData) for encrypting sensitive tab values at rest. -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+    <!-- Shared P/Invoke library (separate CSharp-Tools repo, cloned side-by-side). The raw Win32
+         calls are migrating here from Native/NativeMethods, behind small interfaces (#6). -->
+    <ProjectReference Include="..\..\..\CSharp-Tools\PInvoke\PInvoke.csproj" />
   </ItemGroup>
 
   <!-- Twemoji PNGs and the tray icon are embedded into the assembly manifest, so

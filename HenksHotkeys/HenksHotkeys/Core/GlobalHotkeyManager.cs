@@ -1,5 +1,5 @@
 using System.Windows.Interop;
-using HenksHotkeys.Native;
+using PInvoke;
 
 namespace HenksHotkeys.Core;
 
@@ -9,7 +9,7 @@ namespace HenksHotkeys.Core;
 /// Hotkey() registrations (the per-symbol bindings collected in
 /// <see cref="HotkeyRegistry"/> plus the app-level ones such as ^+x and ^+a).
 /// </summary>
-internal sealed class GlobalHotkeyManager : IDisposable
+internal sealed class GlobalHotkeyManager : IGlobalHotkeys
 {
   private static readonly IntPtr HWND_MESSAGE = new( -3 );
 
@@ -37,9 +37,9 @@ internal sealed class GlobalHotkeyManager : IDisposable
     }
 
     int id = m_nextId++;
-    if( !NativeMethods.RegisterHotKey( m_source.Handle, id,
-                                       parsed.Value.Modifiers | NativeMethods.MOD_NOREPEAT,
-                                       parsed.Value.VirtualKey ) )
+    if( !Win32.RegisterHotKey( m_source.Handle, id,
+                               parsed.Value.Modifiers | Win32.MOD_NOREPEAT,
+                               parsed.Value.VirtualKey ) )
     {
       return false;
     }
@@ -59,7 +59,7 @@ internal sealed class GlobalHotkeyManager : IDisposable
 
   private IntPtr WndProc( IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled )
   {
-    if( msg == NativeMethods.WM_HOTKEY )
+    if( msg == Win32.WM_HOTKEY )
     {
       Dispatch( (int)wParam );
       handled = true;
@@ -79,7 +79,7 @@ internal sealed class GlobalHotkeyManager : IDisposable
   {
     foreach( int id in m_actions.Keys )
     {
-      NativeMethods.UnregisterHotKey( m_source.Handle, id );
+      Win32.UnregisterHotKey( m_source.Handle, id );
     }
     m_actions.Clear();
     m_source.RemoveHook( WndProc );
